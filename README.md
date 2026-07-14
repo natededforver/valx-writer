@@ -65,7 +65,7 @@ Select any text and mark it as written by **you**, by **AI**, or sourced from **
 - Obsidian-style tables and file-chip attachments read and write correctly round-trip.
 
 ### Themes & appearance
-- Dark mode by default, full light mode, with a themes panel in Settings.
+- Dark mode by default, full light mode by toggle.
 - Frameless, custom title bar with native-feeling window controls.
 
 <!-- SCREENSHOT: settings panel / theme picker -->

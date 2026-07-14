@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Valx dev harness — tables, media, round-trip</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; background: #f6f7f8; color: #0a0a0a; }
+  header { padding: 14px 20px; background: #0a0a0a; color: #fff; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: .02em; }
+  header .lime { color: #32cd32; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid #d5d5d5; background: #fff; cursor: pointer; }
+  button:hover { border-color: #32cd32; }
+  .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 20px; align-items: start; }
+  .panel { background: #fff; border: 1px solid #e6e6e6; border-radius: 12px; overflow: hidden; }
+  .panel h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: #8a8a8a; margin: 0; padding: 10px 14px; border-bottom: 1px solid #f0f0f0; }
+  .editor { position: relative; }
+  #editor { min-height: 320px; padding: 18px; outline: none; font-size: 16px; line-height: 1.6; white-space: pre-wrap; }
+  #editor:empty::before { content: attr(data-ph); color: #bbb; }
+  pre { margin: 0; padding: 14px; font: 12px/1.5 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 340px; overflow: auto; }
+  .status { padding: 8px 14px; font-size: 12px; border-top: 1px solid #f0f0f0; }
+  .ok { color: #1a9d1a; } .bad { color: #d11; }
+  /* mirror src/index.css table styles */
+  #editor table, #editor .vx-table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .95em; table-layout: fixed; }
+  #editor th, #editor td { border: 1px solid rgba(120,120,120,.32); padding: 8px 12px; text-align: left; vertical-align: top; min-width: 3ch; word-break: break-word; }
+  #editor th { background: rgba(120,120,120,.08); font-weight: 700; }
+  #editor td:focus, #editor th:focus { outline: 2px solid rgba(50,205,50,.5); outline-offset: -2px; }
+  /* floating table tools */
+  #tools { position: absolute; z-index: 30; display: none; gap: 2px; align-items: center; background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.12); padding: 3px; font-size: 12px; }
+  #tools button { padding: 3px 7px; border: none; }
+  #tools .del { color: #d11; }
+  .mono { font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; }
+  .media-row { padding: 12px 14px; display: grid; gap: 6px; }
+  .media-row input { width: 100%; padding: 6px 8px; font: 12px monospace; border: 1px solid #ddd; border-radius: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>VALX<span class="lime">·</span>HARNESS</h1>
+  <div class="bar">
+    <button id="btn-table">Insert 3×3 table</button>
+    <button id="btn-img">Insert media (path)</button>
+    <button id="btn-clear">Clear</button>
+    <span style="font-size:12px;color:#aaa;align-self:center">Ctrl+Shift+T = table · Tab = next cell · Backspace on empty table = delete</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel editor">
+    <h2>Editor (contentEditable — same table logic as the app)</h2>
+    <div id="editor" contenteditable="true" data-ph="Type here. Insert a table, edit cells, then delete it with the toolbar or Backspace."></div>
+    <div id="tools">
+      <button data-op="row+">＋Row</button>
+      <button data-op="col+">＋Col</button>
+      <button data-op="row-">－Row</button>
+      <button data-op="col-">－Col</button>
+      <button class="del" data-op="del">🗑 Table</button>
+    </div>
+    <div class="status" id="live-status"></div>
+  </div>
+
+  <div class="panel">
+    <h2>htmlToMarkdown(editor) → on disk</h2>
+    <pre id="md"></pre>
+    <h2>round-trip: markdownToHtml(md) stable?</h2>
+    <div class="status" id="rt-status"></div>
+    <div class="media-row">
+      <span class="mono" style="color:#8a8a8a">media path rewrite (depth 0):</span>
+      <input id="media-in" value='<img src="/__media/.attachments/pic.png">' />
+      <span class="mono">toDisk → <b id="media-disk"></b></span>
+      <span class="mono">fromDisk → <b id="media-app"></b></span>
+    </div>
+  </div>
+</div>
+
+<script src="./harness-bundle.js"></script>
+<script>
+  const F = window.VXFormat, T = window.VXTable;
+  const editor = document.getElementById('editor');
+  const tools = document.getElementById('tools');
+  const md = document.getElementById('md');
+  const liveStatus = document.getElementById('live-status');
+  const rtStatus = document.getElementById('rt-status');
+  const onChange = () => refresh();
+
+  function refresh() {
+    const html = editor.innerHTML;
+    const markdown = F.rewriteMediaToDisk(F.htmlToMarkdown(html), 0);
+    md.textContent = markdown || '(empty)';
+    // round-trip check: md -> html -> md should be stable
+    const back = F.htmlToMarkdown(F.contentFromDisk('note.md', markdown));
+    const stable = back.trim() === F.htmlToMarkdown(html).trim();
+    rtStatus.innerHTML = stable ? '<span class="ok">✓ markdown round-trips stably</span>' : '<span class="bad">✗ round-trip drift</span>';
+    const tableCount = editor.querySelectorAll('table').length;
+    liveStatus.textContent = `${tableCount} table(s) · ${html.length} chars`;
+  }
+
+  document.getElementById('btn-table').onclick = () => { editor.focus(); document.execCommand('insertHTML', false, T.buildTableHtml(3, 3)); refresh(); };
+  document.getElementById('btn-img').onclick = () => { editor.focus(); document.execCommand('insertHTML', false, '<img src="/__media/.attachments/pic.png" alt="pic" style="max-width:100%">'); refresh(); };
+  document.getElementById('btn-clear').onclick = () => { editor.innerHTML = ''; refresh(); };
+
+  editor.addEventListener('input', refresh);
+
+  editor.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') {
+      e.preventDefault(); editor.focus(); document.execCommand('insertHTML', false, T.buildTableHtml(3, 3)); refresh(); return;
+    }
+    const cell = T.getCellFromSelection(editor);
+    if (cell) {
+      if (e.key === 'Tab') { e.preventDefault(); T.moveCell(cell, e.shiftKey, onChange); return; }
+      if ((e.key === 'Backspace' || e.key === 'Delete')) {
+        const table = cell.closest('table');
+        if (table && T.isTableEmpty(table)) { e.preventDefault(); T.deleteTable(table, editor, onChange); return; }
+      }
+    }
+  });
+
+  // floating table tools
+  document.addEventListener('selectionchange', () => {
+    const cell = T.getCellFromSelection(editor);
+    if (!cell) { tools.style.display = 'none'; return; }
+    const table = cell.closest('table');
+    tools.style.display = 'flex';
+    tools.style.top = Math.max(0, table.offsetTop - 32) + 'px';
+    tools.style.left = table.offsetLeft + 'px';
+  });
+  tools.addEventListener('mousedown', (e) => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    e.preventDefault();
+    const cell = T.getCellFromSelection(editor); if (!cell) return;
+    const op = btn.dataset.op;
+    if (op === 'row+') T.addRow(cell, true, onChange);
+    else if (op === 'col+') T.addColumn(cell, true, onChange);
+    else if (op === 'row-') T.deleteRow(cell, editor, onChange);
+    else if (op === 'col-') T.deleteColumn(cell, editor, onChange);
+    else if (op === 'del') { const t = cell.closest('table'); if (t) T.deleteTable(t, editor, onChange); }
+  });
+
+  // media rewrite demo
+  const mIn = document.getElementById('media-in');
+  const upd = () => {
+    document.getElementById('media-disk').textContent = F.rewriteMediaToDisk(mIn.value, 0);
+    document.getElementById('media-app').textContent = F.rewriteMediaFromDisk(F.rewriteMediaToDisk(mIn.value, 0));
+  };
+  mIn.addEventListener('input', upd); upd();
+
+  refresh();
+</script>
+</body>
+</html>

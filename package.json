@@ -1,0 +1,63 @@
+{
+  "name": "valx-prose-writer",
+  "private": true,
+  "version": "0.2.1",
+  "type": "module",
+  "author": "tchkrv",
+  "license": "SEE LICENSE IN LICENSE",
+  "description": "minimalist writing app",
+  "scripts": {
+    "dev": "vite --port=3000",
+    "dev:lan": "vite --port=3000 --host=0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit",
+    "harness": "esbuild dev/harness-entry.ts --bundle --format=iife --outfile=dev/harness-bundle.js && node dev/serve.mjs",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-fs": "^2.5.1",
+    "@tauri-apps/plugin-opener": "^2.5.4",
+    "@vitejs/plugin-react": "^5.0.4",
+    "file-saver": "^2.0.5",
+    "html-docx-js-typescript": "^0.1.5",
+    "html2pdf.js": "^0.14.0",
+    "idb-keyval": "^6.2.6",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.546.0",
+    "mammoth": "^1.12.0",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3"
+  },
+  "allowScripts": {
+    "core-js@3.49.0": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true,
+    "protobufjs@7.6.4": true
+  },
+  "lavamoat": {
+    "allowScripts": {
+      "esbuild#0.25.12": true,
+      "html2pdf.js>jspdf>core-js#3.49.0": false,
+      "tsx>esbuild#0.28.1": true
+    }
+  }
+}

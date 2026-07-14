@@ -1,0 +1,48 @@
+[package]
+name = "valx-prose-writer"
+version = "0.2.1"
+description = "minimalist writing app"
+authors = ["tchkrv"]
+edition = "2021"
+
+[lib]
+name = "valx_prose_writer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# protocol-asset serves workspace media (images/audio/video) back to the
+# renderer with HTTP Range support — replaces the Electron localhost server.
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# OneDrive sync (src/onedrive.rs): blocking reqwest avoids pulling in a tokio
+# runtime — the OAuth loopback server is plain std::net on its own thread, and
+# every Graph call is one-shot from a tauri::command. sha2/getrandom/base64
+# are for PKCE (code_verifier/code_challenge) — hand-rolling that crypto is
+# exactly the kind of "simplification" that isn't worth the risk.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+url = "2"
+sha2 = "0.10"
+getrandom = "0.2"
+base64 = "0.22"
+
+[target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
+tauri-plugin-single-instance = "2"
+
+# Native "Mark as" context-menu merge (Windows/WebView2 only): hooks
+# ICoreWebView2's ContextMenuRequested COM event to splice a custom submenu
+# into the OS's own right-click menu, alongside its native spellcheck
+# suggestions. Versions pinned to what wry already pulls in (see Cargo.lock)
+# so the COM interface types are the same crate instance tauri hands back
+# from WebviewWindow::with_webview.
+[target."cfg(windows)".dependencies]
+webview2-com = "0.38"
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com"] }

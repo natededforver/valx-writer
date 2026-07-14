@@ -1,0 +1,577 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* SF Pro Text ships inside the app (src/assets/fonts) so the default look is
+   identical on machines that don't have it installed. */
+@font-face {
+  font-family: 'SF Pro';
+  src: url('./assets/fonts/SF-Pro-Text-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SF Pro';
+  src: url('./assets/fonts/SF-Pro-Text-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SF Pro';
+  src: url('./assets/fonts/SF-Pro-Text-RegularItalic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* App-wide font. --vx-font is set from Settings (persisted in localStorage,
+   re-applied on boot in App.tsx); unset -> bundled SF Pro.
+   Overriding Tailwind's --font-sans is what makes it stick: the app root has
+   the `font-sans` utility, which would otherwise pin every descendant (editor
+   included) to Tailwind's default stack regardless of what `body` says. */
+:root {
+  --font-sans: var(--vx-font, 'SF Pro'), 'SF Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --vx-surface: #ffffff;
+  --vx-hair: #e5e7eb;
+}
+.dark {
+  --vx-surface: #0a0a0a;
+  --vx-hair: #262626;
+}
+
+/* --- Glass design language --- */
+.vx-glass {
+  background: color-mix(in srgb, var(--vx-surface) 35%, transparent);
+  backdrop-filter: blur(28px) saturate(1.8);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  border: 1px solid color-mix(in srgb, var(--vx-hair) 50%, transparent);
+}
+.vx-glass-soft {
+  background: color-mix(in srgb, var(--vx-surface) 25%, transparent);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+}
+.vx-glass-strong {
+  background: color-mix(in srgb, var(--vx-surface) 90%, transparent);
+  backdrop-filter: blur(64px) saturate(1.8);
+  -webkit-backdrop-filter: blur(64px) saturate(1.8);
+  border: 1px solid color-mix(in srgb, var(--vx-hair) 50%, transparent);
+}
+
+body {
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(50,205,50,0.04), transparent 60%),
+    radial-gradient(ellipse at 80% 80%, rgba(50,205,50,0.02), transparent 50%),
+    transparent;
+}
+.dark body {
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(50,205,50,0.03), transparent 60%),
+    transparent;
+}
+
+/* Ensure editor area stays opaque even when the window is transparent. */
+.vx-editor-opaque {
+  background-color: #ffffff;
+}
+.dark .vx-editor-opaque {
+  background-color: #000000;
+}
+
+/* iOS-style bulging glass effect for slash menu */
+.vx-menu-bulge {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4), 
+              0 8px 32px rgba(0, 0, 0, 0.12),
+              0 16px 48px rgba(0, 0, 0, 0.08);
+}
+.dark .vx-menu-bulge {
+  background: rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3), 
+              0 8px 32px rgba(0, 0, 0, 0.3),
+              0 16px 48px rgba(0, 0, 0, 0.2);
+}
+
+/* Settings panel slide entrance */
+@keyframes vx-slide-in {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+/* Settings panel slide exit */
+@keyframes vx-slide-out {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(-100%); opacity: 0; }
+}
+
+/* OneDrive sync result toast — bottom-center, auto-dismissed from App.tsx */
+.vx-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 50;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: white;
+  background: rgba(20, 20, 20, 0.9);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  animation: vx-toast-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes vx-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+::selection {
+  background-color: #32cd32;
+  color: white;
+}
+::-moz-selection {
+  background-color: #32cd32;
+  color: white;
+}
+
+.rich-editor {
+  caret-color: transparent; /* native caret hidden; .vx-caret overlay draws the custom asset */
+}
+
+/* Custom text caret — the asset positioned at the insertion point, blinking
+   on the browser's default cadence (solid while typing, blinks when idle). */
+.vx-caret {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+  background: url('../i-beam cursor.png') center / contain no-repeat;
+  animation: vx-caret-blink 1.06s steps(1) infinite;
+  /* Dimensions set in JS from editor base line-height — not selection rect. */
+}
+@keyframes vx-caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+.forced-black-text, .forced-black-text * {
+  color: black !important;
+}
+
+/* Scrollbars are hidden app-wide (wheel/keyboard scrolling still works) — the
+   editor's writing surface is the ONE place a scrollbar remains, reskinned
+   minimal: thin, trackless, rounded thumb that only tints in on hover. */
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+.vx-editor-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 120, 120, 0.35) transparent;
+}
+.vx-editor-scroll::-webkit-scrollbar {
+  display: block;
+  width: 8px;
+  height: 8px;
+}
+.vx-editor-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.vx-editor-scroll::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.28);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.vx-editor-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 120, 0.5);
+  background-clip: padding-box;
+}
+.vx-editor-scroll::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Links in notes — internal note links and external URLs alike (including the
+   ones World Mode's Link Lasso appends) read as lime + bold, click-to-open. */
+.rich-editor a:not(.vx-attach) {
+  color: #32cd32;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: rgba(50, 205, 50, 0.45);
+  cursor: pointer;
+}
+
+/* Slop detector — words pasted from outside (or marked AI / Other Websites)
+   carry the red/blue gradient texture. Static background + static glow only:
+   no animation, so thousands of marked words cost nothing per frame. */
+.rich-editor mark.vx-slop {
+  background: url('../sd-texture.png') 0 0 / 480px auto fixed;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  padding: 2px 0;
+}
+
+.rich-editor mark.vx-slop:first-of-type {
+  border-radius: 3px 0 0 3px;
+  padding-left: 2px;
+}
+
+.rich-editor mark.vx-slop:last-of-type {
+  border-radius: 0 3px 3px 0;
+  padding-right: 2px;
+}
+
+/* Word under the caret: texture off, plain text, with the surviving original
+   characters painted red by the vx-slop-orig highlight (see RichTextEditor). */
+.rich-editor mark.vx-slop.vx-slop-edit {
+  background: none;
+  background-clip: border-box;
+  -webkit-background-clip: border-box;
+  color: inherit;
+}
+/* Glow effect on marked paragraphs */
+.rich-editor p:has(mark.vx-slop) {
+  filter: drop-shadow(0 0 8px rgba(255, 40, 90, 0.4)) drop-shadow(0 0 16px rgba(60, 80, 255, 0.25));
+}
+
+
+/* Markdown headings typed into the editor (real h1–h6 so .md round-trips) */
+.rich-editor h1, .rich-editor h2, .rich-editor h3,
+.rich-editor h4, .rich-editor h5, .rich-editor h6 {
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0.4em 0 0.25em;
+}
+.rich-editor h1 { font-size: 2.2em; }
+.rich-editor h2 { font-size: 1.9em; }
+.rich-editor h3 { font-size: 1.6em; }
+.rich-editor h4 { font-size: 1.35em; }
+.rich-editor h5 { font-size: 1.15em; }
+.rich-editor h6 { font-size: 1em; }
+
+/* Markdown blocks rendered from .md files (code, quotes, rules, checklists) */
+.rich-editor code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: rgba(120, 120, 120, 0.12);
+  border: 1px solid rgba(120, 120, 120, 0.2);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.rich-editor pre {
+  background: rgba(120, 120, 120, 0.08);
+  border: 1px solid rgba(120, 120, 120, 0.22);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0.6em 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+.rich-editor pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.88em;
+}
+.rich-editor blockquote {
+  border-left: 3px solid #32cd32;
+  margin: 0.5em 0;
+  padding: 0.15em 0 0.15em 0.9em;
+  color: rgba(120, 120, 120, 0.95);
+}
+.rich-editor hr {
+  border: none;
+  border-top: 1px solid rgba(120, 120, 120, 0.35);
+  margin: 1em 0;
+}
+.rich-editor input[type='checkbox'] {
+  accent-color: #32cd32;
+  margin-right: 0.45em;
+  vertical-align: middle;
+}
+
+/* Tables (inserted via the toolbar; round-trip to markdown pipe tables) */
+.rich-editor table, .rich-editor .vx-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.95em;
+  table-layout: fixed;
+}
+.rich-editor th, .rich-editor td {
+  border: 1px solid rgba(120, 120, 120, 0.32);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+  min-width: 3ch;
+  word-break: break-word;
+}
+.rich-editor th {
+  background: rgba(120, 120, 120, 0.08);
+  font-weight: 700;
+}
+.rich-editor td:focus, .rich-editor th:focus {
+  outline: 2px solid rgba(50, 205, 50, 0.5);
+  outline-offset: -2px;
+}
+
+/* Ctrl+S feedback: the writing surface flashes a lime glow along its borders */
+.save-glow {
+  border-radius: 12px;
+  animation: save-border-glow 1.5s ease-out forwards;
+}
+@keyframes save-border-glow {
+  0% {
+    box-shadow: inset 0 0 0 2px rgba(50, 205, 50, 0), 0 0 0 rgba(50, 205, 50, 0);
+  }
+  15% {
+    box-shadow: inset 0 0 0 2px rgba(50, 205, 50, 0.9), inset 0 0 26px rgba(50, 205, 50, 0.22),
+      0 0 20px rgba(50, 205, 50, 0.35);
+  }
+  55% {
+    box-shadow: inset 0 0 0 2px rgba(50, 205, 50, 0.65), inset 0 0 18px rgba(50, 205, 50, 0.15),
+      0 0 12px rgba(50, 205, 50, 0.22);
+  }
+  100% {
+    box-shadow: inset 0 0 0 2px rgba(50, 205, 50, 0), inset 0 0 0 rgba(50, 205, 50, 0),
+      0 0 0 rgba(50, 205, 50, 0);
+  }
+}
+
+/* Ctrl+S feedback: tiny "Saved!" pill in the center of the app */
+.saved-pop {
+  animation: saved-pop 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes saved-pop {
+  0% { opacity: 0; transform: scale(0.7) translateY(10px); }
+  14% { opacity: 1; transform: scale(1.05) translateY(0); }
+  22% { transform: scale(1); }
+  72% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.95) translateY(-8px); }
+}
+
+/* Search result -> editor: pulse over the jumped-to occurrence. Selection
+   alone vanishes on the next focus change, so this overlay keeps the hit
+   visible for a moment even after the user clicks elsewhere. */
+.vx-search-hit {
+  animation: vx-hit-pulse 1.4s ease-out forwards;
+}
+@keyframes vx-hit-pulse {
+  0% {
+    background: rgba(50, 205, 50, 0.45);
+    box-shadow: 0 0 0 4px rgba(50, 205, 50, 0.25);
+  }
+  60% {
+    background: rgba(50, 205, 50, 0.28);
+    box-shadow: 0 0 0 2px rgba(50, 205, 50, 0.12);
+  }
+  100% {
+    background: rgba(50, 205, 50, 0);
+    box-shadow: 0 0 0 0 rgba(50, 205, 50, 0);
+  }
+}
+
+/* Right-click menu entrance */
+.context-pop {
+  transform-origin: top left;
+  animation: context-pop 0.12s ease-out;
+}
+@keyframes context-pop {
+  from { opacity: 0; transform: scale(0.96) translateY(-2px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* macOS-style menu/popover entrance — used by the '/' menu, toolbar dropdowns
+   and other transient panels. Springy scale+fade on the app's easing curve. */
+.vx-menu-pop {
+  transform-origin: top left;
+  animation: vx-menu-pop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes vx-menu-pop {
+  from { opacity: 0; transform: scale(0.94) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Onboarding slideshow slide transition */
+.slide-in {
+  animation: slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* World Mode: linked-node glow (colour set via inline --glow var so a node
+   glows in its own/wire's colour, not just lime). */
+.vx-node-glow {
+  box-shadow: 0 0 0 1px var(--glow, #32CD32), 0 0 14px -2px var(--glow, #32CD32);
+}
+
+/* World Mode: a node that just lost its last wire shudders once, then stops glowing. */
+.vx-shudder {
+  animation: vx-shudder 0.45s ease-in-out;
+}
+@keyframes vx-shudder {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px) rotate(-0.5deg); }
+  40% { transform: translateX(3px) rotate(0.5deg); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+/* World Mode: spawned/imported nodes pop in instead of appearing instantly. */
+.vx-pop {
+  animation: vx-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes vx-pop {
+  0% { opacity: 0; transform: scale(0.8); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* World Mode: Scissor tool — the cut wire visibly breaks apart before fading. */
+.vx-wire-break {
+  animation: vx-wire-break 0.36s ease-in forwards;
+}
+@keyframes vx-wire-break {
+  0% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: -24; opacity: 0; }
+}
+
+/* World Mode: highlights the group a dragged node is currently hovering over
+   (attach affordance) — geometry alone decides membership, this is just the cue. */
+.vx-group-hot {
+  box-shadow: inset 0 0 0 2px #32CD32;
+}
+
+/* World Mode: note/card bodies scroll on overflow but stay clean visually —
+   mousewheel still works, the scrollbar itself is just hidden. */
+.vx-no-scrollbar {
+  scrollbar-width: none;
+}
+.vx-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* macOS-feel button press — instant, subtle. Skips buttons whose idle state
+   already carries a transform (toggle knobs are spans, but stay safe). */
+button:not([class*='translate-']):not([class*='rotate-']):not([class*='scale-']):active {
+  transform: scale(0.96);
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area, .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  .print-area * {
+    color: black !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Code editor: a transparent <textarea> over a highlighted <pre> backdrop.
+   Both share .vx-code so the caret sits exactly on the colored glyphs — any
+   metric that differs (font, size, line-height, padding, white-space) drifts
+   the caret off the text. Change them together.
+--------------------------------------------------------------------------- */
+.vx-code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  tab-size: 2;
+  white-space: pre;
+  padding: 12px 16px;
+  margin: 0;
+  border: 0;
+}
+.vx-code-hl {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: #24292e;
+}
+.vx-code-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  overflow: auto;
+  background: transparent;
+  color: transparent;
+  caret-color: #24292e;
+  outline: none;
+}
+.dark .vx-code-hl { color: #d4d4d4; }
+.dark .vx-code-input { caret-color: #d4d4d4; }
+
+/* Line counter: a gutter to the right of the code, outside the editable area.
+   Content is translated to track the textarea's vertical scroll. */
+.vx-code-gutter {
+  flex: 0 0 auto;
+  overflow: hidden;
+  text-align: right;
+  color: #b0b6bd;
+  border-right: 1px solid rgb(226 232 240);
+  user-select: none;
+}
+.dark .vx-code-gutter { color: #5a6370; border-right-color: rgb(38 38 38); }
+.vx-code-gutter .vx-code { padding-left: 12px; padding-right: 8px; }
+
+/* Markdown source view (Editor's source toggle for .md notes). Both layers
+   wrap identically (pre-wrap + same metrics) so the transparent textarea's
+   caret stays on the glyphs; the <pre> is in normal flow and sets the height. */
+.vx-code--wrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.vx-code--wrap.vx-code-input {
+  overflow: hidden;
+}
+.vx-mdsrc .vx-code {
+  font-size: 15px;
+  line-height: 26px;
+}
+.vx-mdsrc-hl {
+  min-height: 60vh;
+}
+/* Markdown tokens: syntax marks fade, content keeps meaning. Color/weight
+   only — glyph metrics must match the base font (caret alignment). */
+.tok-mdsyn  { color: rgba(120, 120, 120, 0.48); }
+.tok-mdhead { font-weight: 700; }
+.tok-mdcode { color: #032f62; }
+.tok-mdlink { color: #32cd32; font-weight: 700; }
+.tok-mdurl  { color: rgba(120, 120, 120, 0.48); }
+.dark .tok-mdcode { color: #ce9178; }
+
+/* VSCode-ish token palette (light default, dark override). */
+.tok-comment { color: #6a737d; font-style: italic; }
+.tok-string  { color: #032f62; }
+.tok-keyword { color: #d73a49; }
+.tok-tag     { color: #22863a; }
+.tok-attr    { color: #6f42c1; }
+.tok-number  { color: #005cc5; }
+.tok-entity  { color: #e36209; }
+.tok-fn      { color: #6f42c1; }
+.dark .tok-comment { color: #6a9955; }
+.dark .tok-string  { color: #ce9178; }
+.dark .tok-keyword { color: #569cd6; }
+.dark .tok-tag     { color: #4ec9b0; }
+.dark .tok-attr    { color: #9cdcfe; }
+.dark .tok-number  { color: #b5cea8; }
+.dark .tok-entity  { color: #d7ba7d; }
+.dark .tok-fn      { color: #dcdcaa; }

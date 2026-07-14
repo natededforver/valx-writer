@@ -1,0 +1,12 @@
+node_modules/
+build/
+dist/
+dist-electron/
+out/
+out*/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+.claude/

@@ -1,0 +1,403 @@
+/* ---------------------------------------------------------------------------
+   Valx Writer — landing site
+   Open-space design: monumental type, engineered whitespace, quoted labels.
+   No external assets; system type stack keeps it fast and native.
+   Echoes the app UI: lime selection, rounded surfaces, lime glow on hover.
+--------------------------------------------------------------------------- */
+
+:root {
+  --ink: #0a0a0a;
+  --paper: #ffffff;
+  --muted: #8a8a8a;
+  --hairline: #e8e8e8;
+  --lime: #32cd32;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+/* Selecting text turns lime — same as selecting prose inside the app. */
+::selection { background: var(--lime); color: #fff; }
+::-moz-selection { background: var(--lime); color: #fff; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+a { color: inherit; text-decoration: none; }
+
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 clamp(20px, 5vw, 64px); }
+
+/* label — the Abloh-style all-caps micro tag */
+.label {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.label--ink { color: var(--ink); }
+
+/* nav */
+.nav {
+  position: sticky;
+  top: 0;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--hairline);
+  z-index: 10;
+}
+.nav .wrap {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.nav .brand { display: flex; align-items: center; }
+.brand-logo { height: 38px; width: auto; display: block; }
+.nav nav { display: flex; gap: 28px; align-items: center; }
+.nav nav a {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--muted);
+  transition: color 0.15s;
+}
+.nav nav a:hover { color: var(--ink); }
+.nav nav a.cta {
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  padding: 8px 18px;
+  transition: all 0.15s;
+}
+.nav nav a.cta:hover { background: var(--ink); color: #fff; }
+
+/* hero */
+.hero { padding: clamp(90px, 16vh, 200px) 0 clamp(60px, 10vh, 140px); }
+.hero h1 {
+  font-size: clamp(64px, 13vw, 190px);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.hero h1 .q { color: var(--muted); font-weight: 300; }
+.hero h1 .lime { color: var(--lime); }
+.hero .sub {
+  margin-top: 40px;
+  max-width: 460px;
+  font-size: 17px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.hero .actions { margin-top: 56px; display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+
+/* centered hero variant (annotated "center it") */
+.hero--center { text-align: center; }
+.hero--center .sub { margin-left: auto; margin-right: auto; }
+.hero--center .actions { justify-content: center; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 34px;
+  border: 1.5px solid var(--ink);
+  border-radius: 12px;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 700;
+  transition: all 0.15s;
+}
+/* Hover = the app's Ctrl+S "wink of green" glow. */
+.btn--solid { background: var(--ink); color: #fff; }
+.btn--solid:hover {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--ink);
+  box-shadow: 0 0 22px rgba(50, 205, 50, 0.35);
+}
+.btn--ghost:hover {
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 0 22px rgba(50, 205, 50, 0.28);
+}
+
+/* spec strip — engineering-notes row */
+.spec {
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  padding: 22px 0;
+}
+.spec .wrap {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+/* features */
+.features { padding: clamp(80px, 12vh, 160px) 0; }
+.feature-showcase {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(80px, 15vh, 160px);
+  margin-top: 100px;
+}
+.feature-block {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 80px;
+  align-items: center;
+}
+.feature-block.reverse {
+  direction: rtl;
+}
+.feature-block.reverse > * {
+  direction: ltr;
+}
+@media (max-width: 900px) {
+  .feature-block {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .feature-block.reverse {
+    direction: ltr;
+  }
+}
+.feature-text .num {
+  font-size: 12px;
+  color: var(--lime);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+}
+.feature-text h3 {
+  margin-top: 14px;
+  font-size: clamp(28px, 4vw, 42px);
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.feature-text p { 
+  margin-top: 18px; 
+  color: var(--muted); 
+  font-size: 17px; 
+  line-height: 1.7; 
+  max-width: 480px;
+}
+.feature-text p code {
+  background: var(--hairline);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.9em;
+  color: var(--ink);
+}
+.screenshot-placeholder {
+  aspect-ratio: 16 / 10;
+  background: #f8f8f8;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.03);
+  transition: transform 0.3s ease;
+  width: 100%;
+}
+.screenshot-placeholder:hover {
+  transform: translateY(-4px);
+}
+.placeholder-text {
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.h-giant {
+  font-size: clamp(40px, 7vw, 96px);
+  letter-spacing: -0.035em;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.h-giant .q { color: var(--muted); font-weight: 300; }
+
+/* support — centered "free forever / donate to Ko-fi" block */
+.support {
+  border-top: 1px solid var(--hairline);
+  padding: clamp(80px, 12vh, 160px) 0;
+  text-align: center;
+}
+.support .label { display: block; }
+.support .h-giant { display: inline-block; }
+.support-note {
+  margin: 28px auto 0;
+  font-size: 15px;
+  color: var(--muted);
+  line-height: 1.8;
+  max-width: 560px;
+}
+.support-actions { justify-content: center; margin-top: 8px; }
+
+/* Ko-fi support banner — recreated in-markup (inline SVG) so it stays crisp and
+   blends with the site: rounded card + the signature lime hard-shadow on hover. */
+.kofi-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 26px;
+  max-width: 560px;
+  margin: 44px auto 0;
+  padding: 26px 34px;
+  background: #f3ede3;
+  border: 1.5px solid #e6dccb;
+  border-radius: 18px;
+  text-align: left;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.kofi-banner:hover {
+  transform: translate(-3px, -3px);
+  box-shadow: 10px 10px 0 var(--lime);
+}
+.kofi-copy { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.kofi-title {
+  font-size: clamp(23px, 3.6vw, 33px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: #171310;
+}
+.kofi-url {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #171310;
+}
+.kofi-mini { width: 22px; height: auto; display: block; }
+.kofi-cup { width: clamp(96px, 19vw, 130px); height: auto; flex-shrink: 0; }
+
+@media (max-width: 540px) {
+  .kofi-banner { flex-direction: column-reverse; text-align: center; gap: 14px; padding: 28px 24px; }
+  .kofi-copy { align-items: center; }
+  .kofi-url { justify-content: center; }
+}
+
+/* big banner */
+.banner {
+  border-top: 1px solid var(--hairline);
+  padding: clamp(80px, 14vh, 180px) 0;
+  text-align: center;
+}
+.banner .label { display: block; margin-bottom: 28px; }
+.banner-sub {
+  margin-top: 18px;
+  font-size: clamp(26px, 4.5vw, 52px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.banner-sub .lime { color: var(--lime); }
+
+/* download page */
+.dl { padding: clamp(70px, 10vh, 130px) 0; }
+.dl-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 28px;
+  margin-top: 64px;
+}
+.dl-card {
+  border: 1.5px solid var(--ink);
+  border-radius: 16px;
+  padding: 44px 38px 38px;
+  display: flex;
+  flex-direction: column;
+  min-height: 380px;
+  position: relative;
+  transition: box-shadow 0.2s;
+}
+.dl-card:hover { box-shadow: 10px 10px 0 var(--lime); }
+.dl-card .label { margin-bottom: 22px; }
+.dl-card h2 { font-size: 40px; letter-spacing: -0.03em; font-weight: 800; text-transform: uppercase; }
+.dl-card .desc { margin-top: 16px; color: var(--muted); font-size: 15px; line-height: 1.7; flex: 1; }
+.dl-card ul { list-style: none; margin-top: 18px; }
+.dl-card ul li {
+  font-size: 13px;
+  color: var(--ink);
+  padding: 7px 0;
+  border-top: 1px solid var(--hairline);
+}
+.dl-card ul li::before { content: "→  "; color: var(--lime); font-weight: 700; }
+.dl-card .btn { margin-top: 30px; justify-content: center; }
+
+.dl-note {
+  margin-top: 42px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.8;
+  max-width: 640px;
+}
+.dl-note code {
+  background: #f4f4f4;
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 12px;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+.dl-note a { text-decoration: underline; text-underline-offset: 3px; }
+.dl-note a:hover { color: var(--ink); }
+
+/* legal pages */
+.legal { padding: clamp(60px, 9vh, 110px) 0 100px; max-width: 780px; }
+.legal h1 {
+  font-size: clamp(40px, 6vw, 72px);
+  letter-spacing: -0.03em;
+  font-weight: 800;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.legal .effective { margin-top: 16px; }
+.legal section { margin-top: 44px; }
+.legal h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+.legal p { margin-top: 12px; color: #4a4a4a; font-size: 15px; line-height: 1.8; }
+.legal-tabs { display: flex; gap: 22px; margin-top: 34px; flex-wrap: wrap; }
+.legal-tabs a {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted);
+  padding-bottom: 4px;
+}
+.legal-tabs a.active { color: var(--ink); border-bottom: 2px solid var(--lime); }
+.legal-tabs a:hover { color: var(--ink); }
+
+/* footer */
+footer {
+  border-top: 1px solid var(--hairline);
+  padding: 46px 0 60px;
+}
+footer .wrap {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+footer .links { display: flex; gap: 26px; flex-wrap: wrap; }
+footer a { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+footer a:hover { color: var(--ink); }

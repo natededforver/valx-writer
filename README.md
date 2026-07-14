@@ -5,7 +5,7 @@
 
   **A minimalist, local-first writing app. Your words, your disk.**
 
-  No accounts. No subscriptions. No cloud backend. Every note is a real
+  No accounts. No subscriptions. Every note is a real
   file, in a folder you choose, on your machine.
 
   [Download for Windows](#download) · [Features](#features) · [Building from source](#building-from-source)
@@ -54,7 +54,7 @@ A visual canvas for planning: drag out nodes, connect them, arrange your story/p
 
 <!-- SCREENSHOT: World Mode canvas with a few connected nodes -->
 
-### Provenance ("Mark as")
+### Slop detector ("Mark as")
 Select any text and mark it as written by **you**, by **AI**, or sourced from **another website** (with an auto-appended reference line) — so a note can honestly show what's yours and what isn't. On Windows this lives right inside the native right-click menu, next to spellcheck suggestions.
 
 <!-- SCREENSHOT: native context menu showing the Mark as submenu -->

@@ -2,8 +2,8 @@
 // A slop mark is `<mark class="vx-slop" data-slop="paste|ai|web">` wrapping ONE
 // word. Marks ride through .md files verbatim as inline HTML (same precedent
 // as audio/video tags in format.ts), so provenance survives reloads with no
-// side-channel storage. Per-word granularity is what makes "editing a word
-// clears its highlight" a single unwrap in the editor.
+// side-channel storage. Marks persist through any amount of editing — the
+// only way to remove one is the "Mark as me" unwrap in the editor.
 // ponytail: ~40 bytes of markup per marked word on disk; compact token syntax
 // only if huge pastes make file size a real complaint.
 
@@ -12,8 +12,10 @@ export type SlopType = 'paste' | 'ai' | 'web';
 const escText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** Matches one slop mark (marks never nest). Shared by format.ts stashing. */
-export const SLOP_MARK_RE = /<mark class="vx-slop"[^>]*>[\s\S]*?<\/mark>/gi;
+/** Matches one slop mark (marks never nest). Shared by format.ts stashing.
+ *  Tolerates extra classes (e.g. mid-edit state) after "vx-slop" so a stray
+ *  class never breaks the stash and gets the mark stripped by autosave. */
+export const SLOP_MARK_RE = /<mark class="vx-slop[^"]*"[^>]*>[\s\S]*?<\/mark>/gi;
 
 /** Non-whitespace token spans within text, as [start, end) offsets. */
 export function wordSpans(text: string): { start: number; end: number }[] {
@@ -22,23 +24,6 @@ export function wordSpans(text: string): { start: number; end: number }[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) out.push({ start: m.index, end: m.index + m[0].length });
   return out;
-}
-
-/** Which characters of `cur` are still the original `orig` word: the unchanged
- *  prefix and the unchanged suffix, as [start, end) offsets into `cur`. Returns
- *  [] once the user has replaced the word outright — the mark is then spent. */
-export function survivingSpans(orig: string, cur: string): { start: number; end: number }[] {
-  const max = Math.min(orig.length, cur.length);
-  let p = 0;
-  while (p < max && orig[p] === cur[p]) p++;
-  let s = 0;
-  while (s < max - p && orig[orig.length - 1 - s] === cur[cur.length - 1 - s]) s++;
-  const out: { start: number; end: number }[] = [];
-  if (p) out.push({ start: 0, end: p });
-  if (s) out.push({ start: cur.length - s, end: cur.length });
-  // A mark spans `word + trailing space`; a surviving space alone is not the
-  // original word, so it must not keep the mark alive after a full retype.
-  return out.filter((sp) => /\S/.test(cur.slice(sp.start, sp.end)));
 }
 
 export const slopMarkHtml = (type: SlopType, word: string): string =>

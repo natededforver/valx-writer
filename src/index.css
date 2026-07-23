@@ -53,6 +53,14 @@
   backdrop-filter: blur(20px) saturate(1.6);
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
 }
+/* Settings > Transparency toggle: forces glass surfaces fully opaque. */
+.vx-opaque .vx-glass,
+.vx-opaque .vx-glass-soft,
+.vx-opaque .vx-glass-strong {
+  background: var(--vx-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 .vx-glass-strong {
   background: color-mix(in srgb, var(--vx-surface) 90%, transparent);
   backdrop-filter: blur(64px) saturate(1.8);
@@ -207,7 +215,11 @@ body {
    carry the red/blue gradient texture. Static background + static glow only:
    no animation, so thousands of marked words cost nothing per frame. */
 .rich-editor mark.vx-slop {
-  background: url('../sd-texture.png') 0 0 / 480px auto fixed;
+  /* No background-attachment: fixed — a fixed background clipped to text
+     (background-clip: text + transparent color) fails to paint in WebView2
+     when the mark is inserted via innerHTML on note load, leaving the words
+     invisible until a repaint. Default (scroll) attachment paints reliably. */
+  background: url('../sd-texture.png') 0 0 / 480px auto;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -224,17 +236,20 @@ body {
   padding-right: 2px;
 }
 
-/* Word under the caret: texture off, plain text, with the surviving original
-   characters painted red by the vx-slop-orig highlight (see RichTextEditor). */
-.rich-editor mark.vx-slop.vx-slop-edit {
-  background: none;
-  background-clip: border-box;
-  -webkit-background-clip: border-box;
-  color: inherit;
-}
 /* Glow effect on marked paragraphs */
 .rich-editor p:has(mark.vx-slop) {
   filter: drop-shadow(0 0 8px rgba(255, 40, 90, 0.4)) drop-shadow(0 0 16px rgba(60, 80, 255, 0.25));
+}
+
+/* Authors menu — hiding a provenance type reverts those marks to plain text
+   (the texture highlight is removed; the words themselves stay). */
+.vx-hide-paste .rich-editor mark.vx-slop[data-slop="paste"],
+.vx-hide-ai .rich-editor mark.vx-slop[data-slop="ai"],
+.vx-hide-web .rich-editor mark.vx-slop[data-slop="web"] {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: inherit;
 }
 
 
@@ -291,6 +306,7 @@ body {
   accent-color: #32cd32;
   margin-right: 0.45em;
   vertical-align: middle;
+  cursor: pointer;
 }
 
 /* Tables (inserted via the toolbar; round-trip to markdown pipe tables) */

@@ -6,7 +6,7 @@ import {
 import { Plus, Minus, Trash2 } from 'lucide-react';
 import { JumpTarget } from '../types';
 import { parseTrailingMdLink } from '../lib/noteLinks';
-import { slopWrapText, webReferenceHtml, wordSpans, survivingSpans, SlopType } from '../lib/slop';
+import { slopWrapText, webReferenceHtml, wordSpans, SlopType } from '../lib/slop';
 import { mediaDisplaySrc, mediaDisplayHtml, mediaCanonicalHtml, onNativeMarkAs } from '../lib/desktop';
 import { SlashMenu, SlashItem, SlashSyntaxItem, SlashMediaItem } from './SlashMenu';
 import { AttachmentItem } from '../hooks/useFileSystem';
@@ -274,6 +274,32 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     else registry.delete('vx-tag');
   };
 
+  // Checked task items: strike through the line's text (checkbox itself is a
+  // real interactive control now — see handleClick). Same zero-DOM-mutation
+  // Highlight API pattern as paintTagHighlights above, so typing right after
+  // a checkbox never has to fight a wrapper element for the caret. A "line"
+  // is everything between the checkbox and the next <br> sibling (or the end
+  // of its parent, when nothing follows).
+  const paintTaskHighlights = () => {
+    const H = (window as any).Highlight;
+    const registry = (CSS as any).highlights;
+    const editor = editorRef.current;
+    if (!H || !registry || !editor) return;
+    const ranges: Range[] = [];
+    editor.querySelectorAll('input[type="checkbox"]:checked').forEach((cb) => {
+      let last: ChildNode | null = null;
+      let cur = cb.nextSibling;
+      while (cur && cur.nodeName !== 'BR') { last = cur; cur = cur.nextSibling; }
+      if (!last) return;
+      const r = document.createRange();
+      r.setStartAfter(cb);
+      r.setEndAfter(last);
+      ranges.push(r);
+    });
+    if (ranges.length) registry.set('vx-task-done', new H(...ranges));
+    else registry.delete('vx-task-done');
+  };
+
   const paintMultiHighlight = () => {
     const H = (window as any).Highlight;
     const registry = (CSS as any).highlights;
@@ -324,15 +350,8 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   // that as the user editing the word.
   const suppressUnwrapRef = useRef(false);
 
-  // Editing a marked word: the mark is NOT touched while you type. The word the
-  // caret entered is remembered, and the surviving original characters are
-  // painted red with the CSS Custom Highlight API — zero DOM mutation, so the
-  // native undo stack keeps restoring the marked text and the caret never moves
-  // (both were broken by the old unwrap-on-first-keystroke pass). The mark is
-  // only unwrapped once nothing of the original word is left.
-  const slopOrigRef = useRef(new WeakMap<Element, string>());
-  const slopEditRef = useRef<HTMLElement | null>(null);
-
+  // Editing a marked word: the mark is NOT touched while you type, and is never
+  // removed by editing — only "Mark as me" unwraps it (see unwrapSlopInRange).
   const slopMarkAtCaret = (): HTMLElement | null => {
     const sel = window.getSelection();
     if (!sel || !sel.isCollapsed || !sel.anchorNode) return null;
@@ -342,99 +361,22 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     return mark && editorRef.current?.contains(mark) ? mark : null;
   };
 
-  /** [start,end) character offsets within a mark -> a Range across its text nodes. */
-  const rangeInMark = (mark: Element, start: number, end: number): Range | null => {
-    const walker = document.createTreeWalker(mark, NodeFilter.SHOW_TEXT);
-    const range = document.createRange();
-    let pos = 0, started = false, node: Node | null;
-    while ((node = walker.nextNode())) {
-      const len = (node as Text).length;
-      if (!started && start <= pos + len) { range.setStart(node, start - pos); started = true; }
-      if (started && end <= pos + len) { range.setEnd(node, end - pos); return range; }
-      pos += len;
-    }
-    return null;
-  };
-
-  const paintSlopHighlight = (ranges: Range[]) => {
-    const H = (window as any).Highlight;
-    const registry = (CSS as any).highlights;
-    if (!H || !registry) return; // ponytail: no fallback rendering — Electron 42 always has the API
-    if (ranges.length) registry.set('vx-slop-orig', new H(...ranges));
-    else registry.delete('vx-slop-orig');
-  };
-
   const updateSlopEdit = () => {
     if (suppressUnwrapRef.current) return;
     const mark = slopMarkAtCaret();
-    const prev = slopEditRef.current;
-    if (prev && prev !== mark) prev.classList.remove('vx-slop-edit');
-    slopEditRef.current = mark;
-
     // A word backspaced to nothing leaves an empty mark; drop the stale ones,
     // but never the one holding the caret (removing it would kill the caret).
     editorRef.current?.querySelectorAll('mark.vx-slop:empty').forEach((mk) => { if (mk !== mark) mk.remove(); });
-
-    if (!mark) return paintSlopHighlight([]);
-    const cur = mark.textContent || '';
-    const origs = slopOrigRef.current;
-    if (!origs.has(mark)) origs.set(mark, cur);
-    const spans = survivingSpans(origs.get(mark)!, cur);
-
-    if (!spans.length && cur) {
-      // Word fully replaced: unwrap for real. replaceWith MOVES the text nodes,
-      // so re-anchoring the caret to the same node+offset restores it exactly.
-      // ponytail: this one mutation drops the mark from the native undo stack —
-      // undoing back past a full replacement restores the text, not the mark.
-      const sel = window.getSelection();
-      const node = sel?.anchorNode, offset = sel?.anchorOffset ?? 0;
-      mark.replaceWith(...Array.from(mark.childNodes));
-      if (sel && node?.isConnected) sel.setBaseAndExtent(node, offset, node, offset);
-      return paintSlopHighlight([]);
-    }
-    mark.classList.add('vx-slop-edit');
-    paintSlopHighlight(spans.map((s) => rangeInMark(mark, s.start, s.end)).filter(Boolean) as Range[]);
   };
 
-  /** Remember the untouched text of every mark the pending edit will change.
-   *  Runs on keydown + 'beforeinput' — the last moments a selected word is still
-   *  original; by 'input' it has already been overtyped. (Both: execCommand
-   *  fires 'input' without 'beforeinput', keydown misses drag-drop and paste.) */
-  const seedSlopOrig = () => {
-    if (suppressUnwrapRef.current) return;
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || !editorRef.current) return;
-    const range = sel.getRangeAt(0);
-    if (!editorRef.current.contains(range.commonAncestorContainer)) return;
-    const origs = slopOrigRef.current;
-    const seed = (mk: Element) => { if (!origs.has(mk)) origs.set(mk, mk.textContent || ''); };
-    const anchor = slopMarkAtCaret();
-    if (anchor) return seed(anchor);
-    const root = range.commonAncestorContainer;
-    const scope = (root.nodeType === Node.ELEMENT_NODE ? root : root.parentElement) as Element | null;
-    if (!scope) return;
-    // A selection inside one word makes that mark the scope itself, not a descendant.
-    const own = scope.closest('mark.vx-slop');
-    if (own) seed(own);
-    scope.querySelectorAll('mark.vx-slop').forEach((mk) => { if (range.intersectsNode(mk)) seed(mk); });
-  };
-
-  // Caret moves (click, arrows) arm the overlay before the first keystroke lands.
-  // Refs, not closures: these listeners register once (CLAUDE.md ref-mirroring).
+  // Caret moves (click, arrows) trigger the empty-mark cleanup.
+  // Refs, not closures: this listener registers once (CLAUDE.md ref-mirroring).
   const updateSlopEditRef = useRef(updateSlopEdit);
   updateSlopEditRef.current = updateSlopEdit;
-  const seedSlopOrigRef = useRef(seedSlopOrig);
-  seedSlopOrigRef.current = seedSlopOrig;
   useEffect(() => {
-    const editor = editorRef.current;
     const onSel = () => updateSlopEditRef.current();
-    const onBefore = () => seedSlopOrigRef.current();
     document.addEventListener('selectionchange', onSel);
-    editor?.addEventListener('beforeinput', onBefore);
-    return () => {
-      document.removeEventListener('selectionchange', onSel);
-      editor?.removeEventListener('beforeinput', onBefore);
-    };
+    return () => document.removeEventListener('selectionchange', onSel);
   }, []);
 
   const unwrapSlopInRange = (range: Range) => {
@@ -535,6 +477,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
       closeSlash();
     }
     paintTagHighlights();
+    paintTaskHighlights();
   }, [value]);
 
   // Search-result navigation: select + scroll to the occurrence-th match of
@@ -704,6 +647,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
 
       onChange(mediaCanonicalHtml(editorRef.current.innerHTML));
       paintTagHighlights();
+      paintTaskHighlights();
     }
   }, [onChange]);
 
@@ -827,7 +771,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
       if (item.id[0] === 'h') document.execCommand('formatBlock', false, item.id);
       else if (item.id === 'bullet') document.execCommand('insertText', false, '- ');
       else if (item.id === 'numbered') document.execCommand('insertText', false, '1. ');
-      else if (item.id === 'checked') insertHtmlAtCaret('<input type="checkbox" disabled>&nbsp;');
+      else if (item.id === 'checked') insertHtmlAtCaret('<input type="checkbox">&nbsp;');
       else if (item.id === 'quote') document.execCommand('formatBlock', false, 'blockquote');
       else if (item.id === 'code') document.execCommand('formatBlock', false, 'pre');
       else if (item.id === 'icode') insertHtmlAtCaret('<code>&nbsp;</code>');
@@ -863,6 +807,15 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   const handleClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (!e.ctrlKey && !e.metaKey) clearMultiSelection();
+    // Task checkbox: the native click already flipped `.checked` by the time
+    // this handler runs — mirror it onto the `checked` attribute (innerHTML
+    // only serializes attributes) so the toggle is saved and the strikethrough
+    // in paintTaskHighlights (driven by handleInput below) picks it up.
+    if (target instanceof HTMLInputElement && target.type === 'checkbox') {
+      target.toggleAttribute('checked', target.checked);
+      handleInput();
+      return;
+    }
     // Refresh the media remove button for whatever was clicked (clears it when
     // clicking plain text/away from media).
     if (target.closest('img, audio, video, a.vx-attach')) showMediaTool(target);
@@ -910,6 +863,21 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     };
     window.addEventListener('valx-insert-table', onInsertTable);
     return () => window.removeEventListener('valx-insert-table', onInsertTable);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleInput, disabled]);
+
+  // Toolbar (Editor.tsx) formatting buttons — same window-event bridge as tables.
+  useEffect(() => {
+    const onFormat = (e: Event) => {
+      if (disabled) return;
+      const cmd = (e as CustomEvent).detail as string;
+      editorRef.current?.focus();
+      if (cmd === 'checkbox') { insertHtmlAtCaret('<input type="checkbox">&nbsp;'); handleInput(); return; }
+      if (!applyToMultiRanges(() => document.execCommand(cmd, false))) document.execCommand(cmd, false);
+      handleInput();
+    };
+    window.addEventListener('valx-format', onFormat);
+    return () => window.removeEventListener('valx-format', onFormat);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleInput, disabled]);
 
@@ -1029,10 +997,37 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     return true;
   };
 
+  // Capitalize the standalone pronoun "i" -> "I" once the word is closed by a
+  // boundary key (space, apostrophe for "I'm"/"I'll", punctuation, Enter). The
+  // "i" is already in the document; we select it and re-insert so undo history
+  // and the caret stay natural, then let the boundary char type normally.
+  const maybeCapitalizeI = (e: React.KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (localStorage.getItem('valx-autocap') === 'false') return;
+    const isBoundary = e.key === 'Enter' || (e.key.length === 1 && !/[a-zA-Z0-9]/.test(e.key));
+    if (!isBoundary) return;
+
+    const editor = editorRef.current;
+    const sel = window.getSelection() as (Selection & { modify?: (a: string, b: string, c: string) => void }) | null;
+    if (!editor || !sel || sel.rangeCount === 0 || !sel.modify) return;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed || !editor.contains(range.startContainer)) return;
+
+    const pre = range.cloneRange();
+    pre.selectNodeContents(editor);
+    pre.setEnd(range.startContainer, range.startOffset);
+    if (!/(^|\s)i$/.test(pre.toString())) return; // only a lone "i", not "hi"
+
+    // Select the "i" just before the caret and re-insert as "I"; restore the
+    // caret if the extend grabbed something unexpected.
+    sel.modify('extend', 'backward', 'character');
+    if (sel.toString() === 'i') document.execCommand('insertText', false, 'I');
+    else sel.collapseToEnd();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Any keyboard activity dismisses the media remove button.
     hideMediaTool();
-    seedSlopOrig();
     // '/' menu owns navigation keys while open.
     if (slashPos) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -1085,6 +1080,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
       }
     }
     if (maybeAutoCapitalize(e)) return;
+    maybeCapitalizeI(e);
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'x') {
       e.preventDefault();
       if (!applyToMultiRanges(() => document.execCommand('strikeThrough', false))) document.execCommand('strikeThrough', false);
@@ -1212,12 +1208,8 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
         // Trailing break with nothing after it needs a second \n to render a line (same placeholder Chromium inserts natively).
         const nl = document.createTextNode(hasTail || slopMark.nextSibling ? '\n' : '\n\n');
         slopMark.after(nl);
-        if (hasTail) {
-          nl.after(tail!);
-          slopOrigRef.current.set(tail!, tail!.textContent!);
-        }
+        if (hasTail) nl.after(tail!);
         if (!slopMark.textContent) slopMark.remove();
-        else slopOrigRef.current.set(slopMark, slopMark.textContent);
         if (hasTail) sel.setBaseAndExtent(tail!.firstChild!, 0, tail!.firstChild!, 0);
         else sel.setBaseAndExtent(nl, 1, nl, 1);
         handleInput();

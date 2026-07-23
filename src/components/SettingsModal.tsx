@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Settings as SettingsIcon, SpellCheck, Type, Check, Info, Hash, History, Cloud } from 'lucide-react';
+import { X, Settings as SettingsIcon, SpellCheck, Type, Check, Info, Hash, History, Cloud, Layers, Target } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Settings dialog (opened from the sidebar gear). Two knobs today:
@@ -19,9 +19,21 @@ export const DEFAULT_FONT = 'SF Pro';
 export const LS_LINE_COUNTER = 'valx-line-counter';
 // Fired on toggle so the open editor updates its gutter without a reload.
 export const LINE_COUNTER_EVENT = 'valx-line-counter-changed';
+// Word-count widget (corner pill) + optional writing goal. On by default.
+export const LS_WORDCOUNT = 'valx-wordcount-widget';
+export const LS_WORDCOUNT_GOAL = 'valx-wordcount-goal';
+export const WORDCOUNT_EVENT = 'valx-wordcount-changed';
 export const LS_HISTORY_INTERVAL = 'valx-history-interval';
 export const HISTORY_INTERVAL_EVENT = 'valx-history-interval-changed';
 export const DEFAULT_HISTORY_INTERVAL = 10;
+export const LS_TRANSPARENCY = 'valx-transparency';
+
+/** Toggles the .vx-opaque class (index.css) that flattens the sidebar and
+ *  window titlebar's glass effect to a solid background. Exported so App.tsx
+ *  re-applies the saved choice on boot. */
+export function applyTransparency(enabled: boolean) {
+  document.documentElement.classList.toggle('vx-opaque', !enabled);
+}
 
 
 /** Sets the app-wide font (index.css: body reads --vx-font). Exported so
@@ -69,6 +81,15 @@ export function SettingsModal({ isOpen, onClose, oneDriveConnected, oneDriveAcco
   const api = (window as any).electronAPI;
   const oneDriveSectionRef = useRef<HTMLElement>(null);
 
+  // Mount the (heavy) panel body only while open — plus a 300ms grace window so
+  // the slide-out animation still plays. A closed Settings then costs no DOM.
+  const [mounted, setMounted] = useState(isOpen);
+  useEffect(() => {
+    if (isOpen) { setMounted(true); return; }
+    const t = setTimeout(() => setMounted(false), 300);
+    return () => clearTimeout(t);
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen || !highlightOneDrive) return;
     // Next tick — the panel's own slide-in transition needs a frame before
@@ -80,6 +101,9 @@ export function SettingsModal({ isOpen, onClose, oneDriveConnected, oneDriveAcco
   const [lang, setLang] = useState<string>(() => localStorage.getItem(LS_SPELL_LANG) || '');
   const [autoCap, setAutoCap] = useState<boolean>(() => localStorage.getItem(LS_AUTOCAP) !== 'false');
   const [lineCounter, setLineCounter] = useState<boolean>(() => localStorage.getItem(LS_LINE_COUNTER) === 'true');
+  const [wordCountOn, setWordCountOn] = useState<boolean>(() => localStorage.getItem(LS_WORDCOUNT) !== 'false');
+  const [wordGoal, setWordGoal] = useState<number>(() => parseInt(localStorage.getItem(LS_WORDCOUNT_GOAL) || '0', 10) || 0);
+  const [transparency, setTransparency] = useState<boolean>(() => localStorage.getItem(LS_TRANSPARENCY) !== 'false');
   const [historyInterval, setHistoryInterval] = useState<number>(() => {
     const v = parseInt(localStorage.getItem(LS_HISTORY_INTERVAL) || '', 10);
     return Number.isFinite(v) && v > 0 ? v : DEFAULT_HISTORY_INTERVAL;
@@ -150,11 +174,33 @@ export function SettingsModal({ isOpen, onClose, oneDriveConnected, oneDriveAcco
     localStorage.setItem(LS_AUTOCAP, String(next));
   };
 
+  const toggleTransparency = () => {
+    const next = !transparency;
+    setTransparency(next);
+    localStorage.setItem(LS_TRANSPARENCY, String(next));
+    applyTransparency(next);
+  };
+
   const toggleLineCounter = () => {
     const next = !lineCounter;
     setLineCounter(next);
     localStorage.setItem(LS_LINE_COUNTER, String(next));
     window.dispatchEvent(new CustomEvent(LINE_COUNTER_EVENT, { detail: next }));
+  };
+
+  const emitWordCount = (on: boolean, goal: number) =>
+    window.dispatchEvent(new CustomEvent(WORDCOUNT_EVENT, { detail: { enabled: on, goal } }));
+  const toggleWordCount = () => {
+    const next = !wordCountOn;
+    setWordCountOn(next);
+    localStorage.setItem(LS_WORDCOUNT, String(next));
+    emitWordCount(next, wordGoal);
+  };
+  const changeWordGoal = (g: number) => {
+    const v = Math.max(0, Math.round(g) || 0);
+    setWordGoal(v);
+    localStorage.setItem(LS_WORDCOUNT_GOAL, String(v));
+    emitWordCount(wordCountOn, v);
   };
 
   const changeHistoryInterval = (mins: number) => {
@@ -165,6 +211,8 @@ export function SettingsModal({ isOpen, onClose, oneDriveConnected, oneDriveAcco
   };
 
   const spellSupported = !!api?.getSpellCheckerInfo;
+
+  if (!mounted) return null;
 
   return (
     <div className={`fixed inset-0 z-[60] ${isOpen ? '' : 'pointer-events-none'}`} aria-hidden={!isOpen}>
@@ -263,7 +311,7 @@ export function SettingsModal({ isOpen, onClose, oneDriveConnected, oneDriveAcco
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Auto-capitalize</h3>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Capitalize the first letter of each sentence — at the start of a note and after a period.
+                  Capitalize the first letter of each sentence — at the start of a note and after a period — and the standalone pronoun “I”.
                 </p>
               </div>
               <button
@@ -277,6 +325,34 @@ export function SettingsModal({ isOpen, onClose, oneDriveConnected, oneDriveAcco
                   className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform flex items-center justify-center ${autoCap ? 'translate-x-5' : 'translate-x-0'}`}
                 >
                   {autoCap && <Check size={12} className="text-[#32CD32]" />}
+                </span>
+              </button>
+            </div>
+          </section>
+
+          {/* Transparency (sidebar + window titlebar glass effect) */}
+          <section>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Layers size={15} className="text-[#32CD32]" />
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Transparency</h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Frosted-glass sidebar and window titlebar. Turn off for a solid background.
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={transparency}
+                onClick={toggleTransparency}
+                className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${transparency ? 'bg-[#32CD32]' : 'bg-slate-200 dark:bg-neutral-700'}`}
+                title={transparency ? 'On' : 'Off'}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform flex items-center justify-center ${transparency ? 'translate-x-5' : 'translate-x-0'}`}
+                >
+                  {transparency && <Check size={12} className="text-[#32CD32]" />}
                 </span>
               </button>
             </div>
@@ -308,6 +384,47 @@ export function SettingsModal({ isOpen, onClose, oneDriveConnected, oneDriveAcco
                 </span>
               </button>
             </div>
+          </section>
+
+          {/* Word count widget + goal */}
+          <section>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Target size={15} className="text-[#32CD32]" />
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Word count</h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Show a live word-count widget in the corner of the editor. Set a goal to track progress toward a target.
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={wordCountOn}
+                onClick={toggleWordCount}
+                className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${wordCountOn ? 'bg-[#32CD32]' : 'bg-slate-200 dark:bg-neutral-700'}`}
+                title={wordCountOn ? 'On' : 'Off'}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform flex items-center justify-center ${wordCountOn ? 'translate-x-5' : 'translate-x-0'}`}>
+                  {wordCountOn && <Check size={12} className="text-[#32CD32]" />}
+                </span>
+              </button>
+            </div>
+            {wordCountOn && (
+              <div className="flex items-center gap-2 mt-3">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Goal</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={wordGoal || ''}
+                  placeholder="0"
+                  onChange={(e) => changeWordGoal(parseInt(e.target.value, 10) || 0)}
+                  className="w-24 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-lg px-2 py-1.5 text-sm text-center text-slate-900 dark:text-white outline-none focus:border-[#32CD32] transition-colors"
+                />
+                <span className="text-xs text-slate-500 dark:text-slate-400">words (0 = no goal)</span>
+              </div>
+            )}
           </section>
 
           {/* Version history */}

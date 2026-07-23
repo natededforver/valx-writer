@@ -4,14 +4,14 @@
    on every build. Plain stylesheets skip that pass. Fold this back into
    index.css once lightningcss ships ::highlight() support. */
 
-/* Slop detector: the untouched original characters of the word being edited. */
-::highlight(vx-slop-orig) {
-  background-color: rgba(255, 40, 90, 0.42);
-  color: inherit;
-}
-
 /* #tag highlighting in the editor. */
 ::highlight(vx-tag) {
   color: #32CD32;
   font-weight: 600;
+}
+
+/* Checked task-list items: strike through the line's text (see
+   paintTaskHighlights in RichTextEditor). */
+::highlight(vx-task-done) {
+  text-decoration: line-through;
 }

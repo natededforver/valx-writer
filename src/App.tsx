@@ -1,16 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNotes } from './hooks/useNotes';
-import { useWorlds } from './hooks/useWorlds';
 import { useOneDrive } from './hooks/useOneDrive';
 import { isTauri } from './lib/desktop';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
-import { WorldCanvas } from './components/WorldCanvas';
-import { buildMediaHtml } from './components/RichTextEditor';
 import { FormatConverter } from './components/FormatConverter';
-import { SettingsModal, LS_SPELL_LANG, LS_FONT, applyFont } from './components/SettingsModal';
+import { SettingsModal, LS_SPELL_LANG, LS_FONT, LS_TRANSPARENCY, applyFont, applyTransparency } from './components/SettingsModal';
 import { OnboardingSlideshow } from './components/OnboardingSlideshow';
-import { WindowControls } from './components/WindowControls';
 import { FilterState, JumpTarget } from './types';
 import { SearchHit } from './lib/search';
 import { linkHrefForNote } from './lib/noteLinks';
@@ -20,7 +16,6 @@ import { ChevronLeft } from 'lucide-react';
 // the two panes). Only two mobile states remain — 'list' (sidebar visible) and
 // 'editor' (sidebar hidden, editor full-screen) — since the sidebar IS the list.
 type ViewState = 'list' | 'editor';
-type AppView = { type: 'notes' } | { type: 'world'; worldId: string };
 
 export default function App() {
   const { notes, folders, addNote, addNoteWithContent, updateNote, moveToTrash, restoreFromTrash, deleteNotePerm, tags, addFolder, deleteFolder, renameFolder, moveNotesToFolder, moveNotesToTrash, workspaceHandle, isWorkspaceRestored, selectWorkspace, fileFormat, saveNoteNow, convertWorkspaceFormat, convertNoteFormat, noteExtensions, bookmarkedIds, toggleBookmark, listAttachments, serializeDisk, rescanWorkspace } = useNotes();
@@ -46,23 +41,7 @@ export default function App() {
     const t = setTimeout(() => setSyncToast(null), 3000);
     return () => clearTimeout(t);
   }, [syncToast]);
-  const {
-    worlds, activeWorldId, activeDoc, activeView, restoredWorldId, cardTags, createWorld, deleteWorld, openWorld, closeWorld,
-    applyWorldCommand, onViewChange, undo: undoWorld, redo: redoWorld, canUndo: canUndoWorld, canRedo: canRedoWorld,
-    importSpaces,
-  } = useWorlds(notes, workspaceHandle, isWorkspaceRestored, { updateNote, moveNotesToFolder, addFolder, renameFolder, folders, noteExtensions, moveNotesToTrash, restoreFromTrash });
-  // World Mode tag cards are first-class tags, not just note-content mirrors — merge
-  // them with the note-derived list so the sidebar shows a tag as soon as it's created.
-  const allTags = React.useMemo(
-    () => Array.from(new Set([...tags, ...cardTags])).sort(),
-    [tags, cardTags]
-  );
-  const [appView, setAppView] = useState<AppView>({ type: 'notes' });
-  // Restores the world that was open at last reload (useWorlds re-opens it internally;
-  // this just switches the view to match once it does).
-  useEffect(() => {
-    if (restoredWorldId) setAppView({ type: 'world', worldId: restoredWorldId });
-  }, [restoredWorldId]);
+  const allTags = React.useMemo(() => [...tags].sort(), [tags]);
   const [filter, setFilter] = useState<FilterState>({ type: 'all' });
   // NoteList used to be a separate rail with its own show/hide toggle. After
   // the merge it lives inside the Sidebar, so its visibility is bound to
@@ -161,6 +140,7 @@ export default function App() {
       api.setSpellCheckerLanguages([saved]);
     }
     applyFont(localStorage.getItem(LS_FONT) || '');
+    applyTransparency(localStorage.getItem(LS_TRANSPARENCY) !== 'false');
   }, []);
 
   // Sync active note logic
@@ -197,18 +177,10 @@ export default function App() {
   };
 
   const handleSetFilter = (f: FilterState) => {
-    const wasWorld = appView.type === 'world';
-    if (wasWorld) { closeWorld(); setAppView({ type: 'notes' }); }
     setFilter(f);
     setSelectedNoteIds([]);
     setMobileView('list');
     setIsFullscreen(false);
-  };
-
-  const handleOpenWorld = (id: string) => {
-    openWorld(id);
-    setAppView({ type: 'world', worldId: id });
-    setSelectedNoteIds([]);
   };
 
   // Fullscreen unmounts the sidebar (which now contains the note list too),
@@ -221,24 +193,6 @@ export default function App() {
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
   };
-
-  // World Mode fullscreen (Item 9): F11 hides the sidebar (which now contains
-  // the note list), keeping only the world canvas (its own header, with the
-  // back button, stays visible). Reuses the same `isFullscreen` flag the
-  // Editor's F11 binding drives — that listener only exists while Editor is
-  // mounted (i.e. appView.type === 'notes'), so the two never fire at once.
-  // Same F11 press exits.
-  useEffect(() => {
-    if (appView.type !== 'world') return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F11') {
-        e.preventDefault();
-        setIsFullscreen((v) => !v);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [appView.type]);
 
   // Ctrl/Cmd+, opens Settings from anywhere — the sidebar's Settings button is
   // unreachable while the sidebar is hidden/collapsed.
@@ -254,8 +208,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className={`relative flex h-screen w-full overflow-hidden pt-8 text-slate-800 dark:text-slate-200 font-sans ${isDarkMode ? 'dark' : ''} ${dragging ? 'select-none cursor-col-resize' : ''}`}>
-      <WindowControls />
+    <div className={`relative flex h-screen w-full overflow-hidden text-slate-800 dark:text-slate-200 font-sans ${isDarkMode ? 'dark' : ''} ${dragging ? 'select-none cursor-col-resize' : ''}`}>
       {/* Mobile Header (visible only on small screens). The sidebar and the
           note list are the same panel now, so the only switch is between the
           sidebar/list view and the editor view. The 'list' view shows the
@@ -301,15 +254,6 @@ export default function App() {
           fileFormat={fileFormat}
           onOpenFormatConverter={() => setIsFormatOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
-          worlds={worlds}
-          activeWorldId={activeWorldId}
-          inWorldMode={appView.type === 'world'}
-          onOpenWorld={handleOpenWorld}
-          onAddWorld={(name) => { const w = createWorld(name); handleOpenWorld(w.id); }}
-          onDeleteWorld={(id) => {
-            if (appView.type === 'world' && appView.worldId === id) { closeWorld(); setAppView({ type: 'notes' }); }
-            deleteWorld(id);
-          }}
           // NoteList props — used to belong to a separate rail that lived to
           // the right of this sidebar; now they all go through the sidebar.
           notes={notes}
@@ -331,35 +275,7 @@ export default function App() {
       )}
       {!isFullscreen && showSidebarEff && <ResizeHandle onMouseDown={startDrag('sidebar', sidebarW)} />}
 
-      {appView.type === 'world' ? (
-        <WorldCanvas
-          key={activeWorldId}
-          doc={activeDoc}
-          notes={notes}
-          folders={folders}
-          worldName={worlds.find(w => w.id === activeWorldId)?.name || 'World'}
-          isDarkMode={isDarkMode}
-          initialView={activeView}
-          onViewChange={onViewChange}
-          onApplyCommand={applyWorldCommand}
-          onUndo={undoWorld}
-          onRedo={redoWorld}
-          canUndo={canUndoWorld}
-          canRedo={canRedoWorld}
-          onBackToNotes={() => { closeWorld(); setAppView({ type: 'notes' }); }}
-          onRequestNoteList={() => setMobileView('list')}
-          onCreateMediaNote={({ name, src, kind }) => {
-            const title = name.replace(/\.[^.]+$/, '') || 'Media';
-            const note = addNoteWithContent(title, buildMediaHtml(kind, src, name));
-            return note.id;
-          }}
-          onImportSpaces={importSpaces}
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={toggleFullscreen}
-          className="flex w-full flex-1 pt-14 md:pt-0"
-        />
-      ) : (
-        <Editor
+      <Editor
             note={activeNote}
             updateNote={updateNote}
             moveToTrash={moveToTrash}
@@ -419,7 +335,6 @@ export default function App() {
           onToggleSidebar={() => setShowSidebar((v) => !v)}
           className={`${editorVisible ? 'flex' : 'hidden'} md:flex w-full md:flex-1 min-w-0 pt-14 md:pt-0`}
         />
-      )}
 
       {/* Smart file-format converter */}
       <FormatConverter

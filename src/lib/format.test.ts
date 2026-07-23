@@ -54,8 +54,8 @@ test('table separator line is not eaten by the hr rule', () => {
 test('task list round-trips checked and unchecked', () => {
   const md = '- [ ] open item\n- [x] done item';
   const html = markdownToHtml(md);
-  assert.match(html, /<input type="checkbox" disabled> open item/);
-  assert.match(html, /<input type="checkbox" checked disabled> done item/);
+  assert.match(html, /<input type="checkbox"> open item/);
+  assert.match(html, /<input type="checkbox" checked> done item/);
   assert.equal(roundTrip(md).trim(), md);
 });
 
@@ -78,6 +78,11 @@ test('slop provenance marks ride through the round-trip verbatim', () => {
   // legacy raw HTML — markdown around the marks still converts.
   assert.doesNotMatch(back, /&lt;mark/);
   assert.match(back, /<b>md<\/b>/);
+});
+
+test('slop mark round-trips byte-identical through md -> html -> md', () => {
+  const md = 'mine <mark class="vx-slop" data-slop="ai">pasted</mark> text';
+  assert.equal(roundTrip(md), md);
 });
 
 test('regression: entities stay encoded through the round-trip', () => {

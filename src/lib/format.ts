@@ -271,10 +271,10 @@ export function markdownToHtml(raw: string): string {
   text = text.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
   text = text.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<i>$2</i>');
   text = text.replace(/~~([^~\n]+)~~/g, '<s>$1</s>');
-  // Task lists (Obsidian style). `disabled` keeps contentEditable from
-  // fighting the control — toggling state is a text edit, not a click.
+  // Task lists (Obsidian style). Interactive: clicking the box toggles it
+  // (see RichTextEditor's handleClick), which is why there's no `disabled`.
   text = text.replace(/^- \[([ xX])\][ \t]+(.*)$/gm, (_m, mark, body) =>
-    `<input type="checkbox"${mark.trim() ? ' checked' : ''} disabled> ${body}`);
+    `<input type="checkbox"${mark.trim() ? ' checked' : ''}> ${body}`);
   // Blockquote runs (consecutive `> ` lines, already &gt;-escaped) fold into
   // one <blockquote> with <br> line breaks inside.
   text = text.replace(/^&gt;[ \t]?.*(?:\n&gt;[ \t]?.*)*/gm, (block) =>

@@ -1,17 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { wordSpans, slopWrapText, webReferenceHtml, survivingSpans, SLOP_MARK_RE } from './slop';
+import { wordSpans, slopWrapText, webReferenceHtml, SLOP_MARK_RE } from './slop';
 
-test('survivingSpans shrinks to the untouched original characters', () => {
-  assert.deepEqual(survivingSpans('world', 'world'), [{ start: 0, end: 5 }]); // untouched
-  assert.deepEqual(survivingSpans('world', 'wxrld'), [{ start: 0, end: 1 }, { start: 2, end: 5 }]);
-  assert.deepEqual(survivingSpans('world', 'wor'), [{ start: 0, end: 3 }]); // backspaced
-  assert.deepEqual(survivingSpans('world', 'worldly'), [{ start: 0, end: 5 }]); // appended
-  assert.deepEqual(survivingSpans('a', 'ba'), [{ start: 1, end: 2 }]); // prepended
-  assert.deepEqual(survivingSpans('aa', 'a'), [{ start: 0, end: 1 }]); // no double-count
-  assert.deepEqual(survivingSpans('world', 'hello'), []); // spent -> unmark
-  assert.deepEqual(survivingSpans('world', ''), []);
-  assert.deepEqual(survivingSpans('world ', 'planet '), []); // surviving space alone is spent
+test('SLOP_MARK_RE matches a mark carrying extra classes (autosave mid-edit)', () => {
+  const html = '<mark class="vx-slop vx-slop-edit" data-slop="paste">word </mark>';
+  assert.equal(html.match(SLOP_MARK_RE)?.length, 1);
 });
 
 test('wordSpans finds non-whitespace tokens with offsets', () => {
@@ -24,8 +17,8 @@ test('wordSpans finds non-whitespace tokens with offsets', () => {
 
 test('slopWrapText wraps each word, keeps spacing, escapes HTML, <br>s newlines', () => {
   const html = slopWrapText('a <b>\nc', 'paste');
-  // A mark spans `word + trailing space` (see survivingSpans in slop.ts) so
-  // deleting a marked word takes its spacing with it.
+  // A mark spans `word + trailing space`, so deleting a marked word takes its
+  // spacing with it.
   assert.equal(
     html,
     '<mark class="vx-slop" data-slop="paste">a </mark><mark class="vx-slop" data-slop="paste">&lt;b&gt;</mark><br><mark class="vx-slop" data-slop="paste">c</mark>'

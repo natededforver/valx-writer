@@ -3,8 +3,16 @@ import { Note, FilterState } from '../types';
 import { Bookmark, ChevronDown, ChevronRight } from 'lucide-react';
 import { wordCount } from '../lib/format';
 
-/** Filter notes for a sidebar container (All Notes, group, tag, trash). */
-export function filterNotesForContainer(notes: Note[], filter: FilterState): Note[] {
+export type NoteSort = 'modified' | 'oldest' | 'title';
+
+export interface NoteListOpts {
+  sort?: NoteSort;
+  bookmarkedOnly?: boolean;
+  bookmarkedIds?: string[];
+}
+
+/** Filter + sort notes for a sidebar container (All Notes, folder, tag, trash). */
+export function filterNotesForContainer(notes: Note[], filter: FilterState, opts: NoteListOpts = {}): Note[] {
   let filtered = notes;
   if (filter.type === 'trash') {
     filtered = notes.filter(n => n.isTrash);
@@ -12,7 +20,7 @@ export function filterNotesForContainer(notes: Note[], filter: FilterState): Not
     filtered = notes.filter(n => !n.isTrash);
     if (filter.type === 'all') {
       filtered = filtered.filter(n => !n.folderId);
-    // Tag filter intentionally spans all folders — not restricted to current group.
+    // Tag filter intentionally spans all folders — not restricted to current folder.
     } else if (filter.type === 'tag') {
       filtered = filtered.filter(n => n.tags.includes(filter.tag));
     } else if (filter.type === 'folder') {
@@ -21,7 +29,19 @@ export function filterNotesForContainer(notes: Note[], filter: FilterState): Not
       );
     }
   }
-  return filtered.sort((a, b) => b.updatedAt - a.updatedAt);
+  if (opts.bookmarkedOnly) {
+    const set = new Set(opts.bookmarkedIds ?? []);
+    filtered = filtered.filter(n => set.has(n.id));
+  }
+  const sorted = [...filtered];
+  if (opts.sort === 'title') {
+    sorted.sort((a, b) => (a.title || 'Untitled Note').localeCompare(b.title || 'Untitled Note'));
+  } else if (opts.sort === 'oldest') {
+    sorted.sort((a, b) => a.updatedAt - b.updatedAt);
+  } else {
+    sorted.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+  return sorted;
 }
 
 interface NoteDropdownListProps {

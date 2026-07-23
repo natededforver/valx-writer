@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Note, JumpTarget } from '../types';
 import { plainText } from '../lib/search';
-import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Share2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, CodeXml, ArrowLeft, ArrowRight, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
+import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Share2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, CodeXml, ArrowLeft, ArrowRight, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Strikethrough, CheckSquare, Type, MoreHorizontal, Minus, Square, Play, ChevronRight } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isTauri } from '../lib/desktop';
 import { RichTextEditor } from './RichTextEditor';
 import { formatKind, htmlToMarkdown, markdownToHtml, wordCount } from '../lib/format';
 import { codeLangFromExt, highlightCode, buildPreviewDoc, PREVIEWABLE } from '../lib/codeHighlight';
 import { mediaDisplayHtml, previewMediaBase } from '../lib/desktop';
-import { LS_LINE_COUNTER, LINE_COUNTER_EVENT, LS_HISTORY_INTERVAL, HISTORY_INTERVAL_EVENT, DEFAULT_HISTORY_INTERVAL } from './SettingsModal';
+import { LS_LINE_COUNTER, LINE_COUNTER_EVENT, LS_HISTORY_INTERVAL, HISTORY_INTERVAL_EVENT, DEFAULT_HISTORY_INTERVAL, LS_WORDCOUNT, LS_WORDCOUNT_GOAL, WORDCOUNT_EVENT } from './SettingsModal';
 import { Snapshot, pushSnapshot, loadHistory, saveHistory } from '../lib/history';
 import html2pdf from 'html2pdf.js';
 import { asBlob } from 'html-docx-js-typescript';
@@ -73,6 +75,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [tableMenu, setTableMenu] = useState(false);
+  const [formatMenu, setFormatMenu] = useState(false);
   const [tHover, setTHover] = useState({ r: 0, c: 0 });
 
   // Code notes (html/css/js/ts/py) edit as raw source with syntax colors and an
@@ -89,6 +92,15 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     const onChange = (e: any) => setLineCounter(!!e.detail);
     window.addEventListener(LINE_COUNTER_EVENT, onChange);
     return () => window.removeEventListener(LINE_COUNTER_EVENT, onChange);
+  }, []);
+
+  // Word-count widget (corner pill) + optional goal — live-updated from Settings.
+  const [wcOn, setWcOn] = useState(() => localStorage.getItem(LS_WORDCOUNT) !== 'false');
+  const [wcGoal, setWcGoal] = useState(() => parseInt(localStorage.getItem(LS_WORDCOUNT_GOAL) || '0', 10) || 0);
+  useEffect(() => {
+    const onChange = (e: any) => { setWcOn(!!e.detail?.enabled); setWcGoal(e.detail?.goal || 0); };
+    window.addEventListener(WORDCOUNT_EVENT, onChange);
+    return () => window.removeEventListener(WORDCOUNT_EVENT, onChange);
   }, []);
 
   // In-app preview: a sandboxed iframe rendered over the editor. srcDoc is
@@ -122,6 +134,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // markdownToHtml round trip on every change, exactly like a disk load.
   const isMdNote = !isCodeNote && formatKind(noteExt || '.md') === 'md';
   const [mdSource, setMdSource] = useState(false);
+  const [syntaxViewer, setSyntaxViewer] = useState(true);
   const [mdText, setMdText] = useState('');
   // The last HTML this surface committed — external content changes (history
   // revert, workspace rescan) are anything different, and re-derive the text.
@@ -164,8 +177,8 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // Memoized: re-tokenizing the whole document belongs to text changes only,
   // not to every cosmetic re-render (save flash, menu toggles, preview timer).
   const codeHl = useMemo(
-    () => (isCodeNote && note ? highlightCode(note.content, codeLang!) : ''),
-    [isCodeNote, note?.content, codeLang]
+    () => (isCodeNote && note && syntaxViewer ? highlightCode(note.content, codeLang!) : ''),
+    [isCodeNote, note?.content, codeLang, syntaxViewer]
   );
 
   // Version history: snapshot the open note every `historyIntervalMin` minutes
@@ -248,17 +261,41 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   };
   useEffect(() => { setFindJump(null); lastFound.current = ''; setFindIdx(0); }, [note?.id]);
 
-  // Fullscreen auto-hide header: slides away after 5s of not being used, and
-  // slides back when the pointer reaches the top edge. Any open menu, an open
-  // find bar, or the pointer resting on the bar keeps it alive.
-  const [headerHidden, setHeaderHidden] = useState(false);
-  const [headerHover, setHeaderHover] = useState(false);
-  useEffect(() => {
-    if (!isFullscreen) { setHeaderHidden(false); return; }
-    if (headerHidden || headerHover || isShareOpen || tableMenu || isFindVisible) return;
-    const t = setTimeout(() => setHeaderHidden(true), 5000);
-    return () => clearTimeout(t);
-  }, [isFullscreen, headerHidden, headerHover, isShareOpen, tableMenu, isFindVisible]);
+  // The window-chrome strip (window controls + Menu/Style dropdowns) is nested
+  // in the editor and hidden by default — the writing surface stays clean.
+  // It reveals only when the pointer reaches the top edge, when the sidebar is
+  // open, or while one of its own menus/panels is open. No timer, no reveal on
+  // typing (deliberately — the user asked for hover/sidebar only).
+  const [topHover, setTopHover] = useState(false);
+  // Which top menu (File/Edit/Format/View/Authors) is open, if any.
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  // File-menu flyout (Export as / Send to), and the author's own display name.
+  const [fileSub, setFileSub] = useState<'export' | 'send' | null>(null);
+  const [authorName, setAuthorName] = useState(() => localStorage.getItem('valx-author-me') || '');
+  useEffect(() => { if (openMenu !== 'file') setFileSub(null); }, [openMenu]);
+  // Author highlighting — which provenance marks are dimmed (hidden). Human
+  // (unmarked) text is never marked, so only ai/web/paste are toggleable.
+  const [hiddenAuthors, setHiddenAuthors] = useState<Set<'paste' | 'ai' | 'web'>>(new Set());
+  const toggleAuthor = (a: 'paste' | 'ai' | 'web') =>
+    setHiddenAuthors((prev) => { const n = new Set(prev); n.has(a) ? n.delete(a) : n.add(a); return n; });
+  const anyChromeMenuOpen = tableMenu || openMenu !== null || historyOpen || isFindVisible || showPreview;
+  // Windowed: the iA-Writer chrome is persistent. Fullscreen: it auto-hides for
+  // distraction-free writing, revealing on top-edge hover or while a menu is open.
+  const chromeVisible = topHover || anyChromeMenuOpen;
+  const chromeShown = !isFullscreen || chromeVisible;
+
+  // Shared class strings for the menu bar dropdowns.
+  const menuBtnCls = (id: string) => `px-2.5 flex items-center text-[13px] rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors ${openMenu === id ? 'bg-black/5 dark:bg-white/10 text-slate-900 dark:text-white' : ''}`;
+  const menuPopCls = 'vx-menu-pop absolute top-8 left-0 z-50 min-w-52 bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1';
+  const itemCls = 'w-full text-left px-3 py-1.5 text-sm hover:bg-slate-100 dark:hover:bg-neutral-900 flex items-center gap-2 text-slate-700 dark:text-slate-200 transition-colors';
+  const sectionCls = 'px-3 pt-1.5 pb-0.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest';
+  const dividerCls = 'my-1 border-t border-slate-100 dark:border-neutral-800';
+  const shortcutCls = 'ml-auto text-[10px] text-slate-400 dark:text-slate-500 tabular-nums pl-4';
+
+  // Window controls (Tauri). No-ops in the browser preview (isTauri false).
+  const winMinimize = () => { if (isTauri) getCurrentWindow().minimize(); };
+  const winMaximize = () => { if (isTauri) getCurrentWindow().toggleMaximize(); };
+  const winClose = () => { if (isTauri) getCurrentWindow().close(); };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -358,15 +395,26 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {onToggleSidebar && (
-          <button
-            onClick={onToggleSidebar}
-            className="hidden md:flex absolute top-3 left-3 p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors rounded-md hover:bg-slate-50 dark:hover:bg-neutral-900"
-            title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-          >
-            {sidebarOpen ? <ArrowLeft size={18} /> : <ArrowRight size={18} />}
-          </button>
-        )}
+        {/* Slim chrome strip so the window stays draggable/closable with no note open. */}
+        <div className="hidden md:flex absolute top-0 inset-x-0 h-10 items-center px-3 z-40 vx-glass-strong">
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors rounded-md hover:bg-slate-50 dark:hover:bg-neutral-900"
+              title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            >
+              {sidebarOpen ? <ArrowLeft size={18} /> : <ArrowRight size={18} />}
+            </button>
+          )}
+          <div data-tauri-drag-region className="flex-1 h-full" />
+          {isTauri && (
+            <div className="flex items-center -mr-2 shrink-0">
+              <button onClick={winMinimize} aria-label="Minimize" className="w-10 h-10 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"><Minus size={15} /></button>
+              <button onClick={winMaximize} aria-label="Maximize" className="w-10 h-10 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"><Square size={12} /></button>
+              <button onClick={winClose} aria-label="Close" className="w-10 h-10 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-[#e81123] hover:text-white transition-colors"><X size={15} /></button>
+            </div>
+          )}
+        </div>
         Select or create a note to start writing.
         {isDragOver && (
           <div className="absolute inset-0 bg-[#32CD32]/10 border-4 border-dashed border-[#32CD32] z-50 flex items-center justify-center pointer-events-none transition-all">
@@ -381,11 +429,10 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   }
 
   // Per-note body alignment (not a global setting) — center is the default;
-  // the one toolbar icon cycles center -> left -> right -> center.
-  const align = note.align ?? 'center';
-  const alignClass = align === 'left' ? 'text-left' : align === 'right' ? 'text-right' : 'text-center';
-  const cycleAlign = () =>
-    updateNote(note.id, { align: align === 'center' ? 'left' : align === 'left' ? 'right' : undefined });
+  // set from the Format menu's Left/Center/Right controls.
+  // Left is the default now (undefined === left), matching the iA-Writer look.
+  const align = note.align ?? 'left';
+  const alignClass = align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
 
   const handlePrint = () => {
     setIsShareOpen(false);
@@ -625,7 +672,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
 
   return (
     <div 
-      className={`flex-1 bg-white dark:bg-black vx-editor-opaque flex flex-col h-full overflow-hidden relative ${className}`}
+      className={`flex-1 bg-white dark:bg-black vx-editor-opaque flex flex-col h-full overflow-hidden relative ${[...hiddenAuthors].map((a) => 'vx-hide-' + a).join(' ')} ${className}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -647,274 +694,263 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         </div>
       )}
 
-      {/* Pointer target that pulls the auto-hidden fullscreen header back down. */}
-      {isFullscreen && headerHidden && (
-        <div className="absolute top-0 inset-x-0 h-2 z-40" onMouseEnter={() => setHeaderHidden(false)} />
+      {/* Fullscreen reveal sensor (windowed chrome is always shown). */}
+      {isFullscreen && !chromeShown && (
+        <div className="hidden md:block absolute top-0 inset-x-0 h-2 z-40" onMouseEnter={() => setTopHover(true)} />
       )}
 
-      {/* Toolbar */}
+      {/* iA-Writer-style chrome: title bar + menu bar. Persistent when windowed,
+          auto-hides in fullscreen (reveal on top-edge hover / while a menu is open). */}
       <div
-        onMouseEnter={() => setHeaderHover(true)}
-        onMouseLeave={() => setHeaderHover(false)}
-        className={`h-14 flex items-center justify-between px-8 border-b border-slate-50 dark:border-neutral-900 flex-shrink-0 ${
-          isFullscreen
-            ? `absolute top-0 inset-x-0 z-40 bg-white dark:bg-black transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${headerHidden ? '-translate-y-full' : 'translate-y-0'}`
-            : ''
-        }`}>
-        <div className="flex items-center text-slate-400 dark:text-slate-500 gap-4">
-          {!isFullscreen && onToggleSidebar && (
-            <button
-              onClick={onToggleSidebar}
-              className="hidden md:flex p-2 hover:text-slate-600 dark:hover:text-slate-300 transition-colors rounded-md hover:bg-slate-50 dark:hover:bg-neutral-900"
-              title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-            >
-              {sidebarOpen ? <ArrowLeft size={20} /> : <ArrowRight size={20} />}
+        onMouseLeave={() => setTopHover(false)}
+        className={`absolute top-0 inset-x-0 z-50 vx-glass-strong transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${chromeShown ? 'translate-y-0' : '-translate-y-full'}`}
+      >
+        {/* Title bar — sidebar toggle · centered doc title (drag region) · window controls */}
+        <div className="h-9 flex items-center px-1.5 gap-1 text-slate-400 dark:text-slate-500">
+          {onToggleSidebar && (
+            <button onClick={onToggleSidebar} className="hidden md:flex p-1.5 rounded-md hover:text-slate-600 dark:hover:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors" title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}>
+              {sidebarOpen ? <ArrowLeft size={17} /> : <ArrowRight size={17} />}
             </button>
           )}
-          <button
-            onClick={toggleFullscreen}
-            className="p-2 hover:text-slate-600 dark:hover:text-slate-300 transition-colors rounded-md hover:bg-slate-50 dark:hover:bg-neutral-900"
-            title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen (F11 / Ctrl+Enter)"}
-          >
-            {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
-          </button>
-          <div className="text-xs font-medium tracking-wide">
-            {wordCount(note.content)} words
+          <div data-tauri-drag-region className="flex-1 h-full flex items-center justify-center min-w-0">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate px-2 pointer-events-none">
+              {(note.title || 'Untitled')} — Valx
+            </span>
           </div>
-
-          {canPreview && (
-            <button
-              onClick={() => setShowPreview((v) => !v)}
-              className={`p-2 transition-colors rounded-md ${showPreview ? 'bg-[#32CD32]/10 text-[#32CD32]' : 'hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-neutral-900'}`}
-              title={showPreview ? 'Hide preview' : 'Preview'}
-            >
-              {showPreview ? <EyeOff size={20} /> : <Eye size={20} />}
-            </button>
-          )}
-
-          {!isCodeNote && !note.isTrash && (
-            <button
-              onClick={cycleAlign}
-              className="p-2 transition-colors rounded-md hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-neutral-900"
-              title={`Alignment: ${align} (click to change)`}
-            >
-              {align === 'left' ? <AlignLeft size={20} /> : align === 'right' ? <AlignRight size={20} /> : <AlignCenter size={20} />}
-            </button>
-          )}
-
-          {isMdNote && !note.isTrash && (
-            <button
-              onClick={toggleMdSource}
-              className={`p-2 transition-colors rounded-md ${mdSource ? 'bg-[#32CD32]/10 text-[#32CD32]' : 'hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-neutral-900'}`}
-              title={mdSource ? 'Rich text' : 'Markdown source'}
-            >
-              <CodeXml size={20} />
-            </button>
-          )}
-
-          {!note.isTrash && (
-            <div className="relative">
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={openHistory}
-                className={`p-2 transition-colors rounded-md ${historyOpen ? 'bg-slate-100 dark:bg-neutral-900 text-slate-700 dark:text-slate-200' : 'hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-neutral-900'}`}
-                title="Version history"
-              >
-                <History size={20} />
-              </button>
-              {historyOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onMouseDown={() => setHistoryOpen(false)} />
-                  <div className="vx-menu-pop absolute top-11 left-0 z-50 w-72 max-h-80 overflow-auto bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1">
-                    <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Version history</div>
-                    {versions.length === 0 ? (
-                      <div className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
-                        No earlier versions yet — one is saved every {historyIntervalMin} min while you edit.
-                      </div>
-                    ) : (
-                      versions.map((v) => (
-                        <button
-                          key={v.t}
-                          onClick={() => revertTo(v)}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-neutral-900 transition-colors flex flex-col gap-0.5"
-                          title="Restore this version (current is saved first)"
-                        >
-                          <span className="text-sm text-slate-700 dark:text-slate-200">{versionLabel(v.t)}</span>
-                          <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{versionPreview(v.content)}</span>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </>
-              )}
+          {isTauri && (
+            <div className="flex items-center -mr-1 shrink-0">
+              <button onClick={winMinimize} aria-label="Minimize" className="w-11 h-9 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"><Minus size={15} /></button>
+              <button onClick={winMaximize} aria-label="Maximize" className="w-11 h-9 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"><Square size={12} /></button>
+              <button onClick={winClose} aria-label="Close" className="w-11 h-9 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-[#e81123] hover:text-white transition-colors"><X size={15} /></button>
             </div>
           )}
+        </div>
 
-          {!note.isTrash && (
-            <div className="relative">
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { setTableMenu((v) => !v); setTHover({ r: 0, c: 0 }); }}
-                className={`p-2 transition-colors rounded-md ${tableMenu ? 'bg-slate-100 dark:bg-neutral-900 text-slate-700 dark:text-slate-200' : 'hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-neutral-900'}`}
-                title="Insert table (Ctrl+Shift+T)"
-              >
-                <Table size={20} />
-              </button>
-              {tableMenu && (
-                <>
-                  <div className="fixed inset-0 z-40" onMouseDown={() => setTableMenu(false)} />
-                  <div className="vx-menu-pop absolute top-11 left-0 z-50 bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg p-3">
-                    <div className="grid" style={{ gridTemplateColumns: 'repeat(6, 18px)', gap: '4px' }}>
-                      {Array.from({ length: 6 * 8 }).map((_, i) => {
-                        const c = (i % 6) + 1;
-                        const r = Math.floor(i / 6) + 1;
-                        const active = r <= tHover.r && c <= tHover.c;
-                        return (
-                          <button
-                            key={i}
-                            onMouseDown={(e) => e.preventDefault()}
-                            onMouseEnter={() => setTHover({ r, c })}
-                            onClick={() => {
-                              window.dispatchEvent(new CustomEvent('valx-insert-table', { detail: { rows: r, cols: c } }));
-                              setTableMenu(false);
-                            }}
-                            className={`w-[18px] h-[18px] rounded-sm border transition-colors ${active ? 'bg-[#32CD32] border-[#32CD32]' : 'border-slate-200 dark:border-neutral-700 hover:border-slate-300'}`}
-                          />
-                        );
-                      })}
-                    </div>
-                    <div className="text-xs text-center mt-2 text-slate-500 dark:text-slate-400 font-medium">
-                      {tHover.r > 0 ? `${tHover.r} × ${tHover.c} table` : 'Pick a size'}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+        {/* Menu bar */}
+        <div className="h-8 flex items-stretch px-1 gap-0.5 border-t border-black/5 dark:border-white/10 text-slate-600 dark:text-slate-300 relative">
+          {openMenu && <div className="fixed inset-0 z-40" onMouseDown={() => setOpenMenu(null)} />}
 
-          {/* Find in note — panel opens exactly at the icon */}
-          <div className="relative">
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setIsFindVisible((v) => !v)}
-              className={`p-2 transition-colors rounded-md ${isFindVisible ? 'bg-slate-100 dark:bg-neutral-900 text-slate-700 dark:text-slate-200' : 'hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-neutral-900'}`}
-              title="Find in note (Ctrl+F)"
-            >
-              <Search size={20} />
-            </button>
-            {isFindVisible && (
-              <div className="vx-pop absolute top-11 left-0 z-50 bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg p-2 flex items-center gap-1">
-                <Search size={15} className="text-[#32CD32] shrink-0 ml-1" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); lastFound.current = ''; }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); findEnter(); }
-                    else if (e.key === 'ArrowDown') { e.preventDefault(); gotoMatch(findIdx + 1); }
-                    else if (e.key === 'ArrowUp') { e.preventDefault(); gotoMatch(findIdx - 1); }
-                    else if (e.key === 'Escape') { e.preventDefault(); setIsFindVisible(false); }
-                  }}
-                  placeholder="Find in note…"
-                  spellCheck={false}
-                  className="border-none outline-none text-sm px-2 py-1 bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-neutral-700 w-52"
-                  autoFocus
-                />
-                <span className="text-[11px] font-medium tabular-nums text-slate-400 dark:text-slate-500 w-14 text-right shrink-0">
-                  {searchQuery.trim() ? (matchCount ? `${findIdx + 1}/${matchCount}` : 'none') : ''}
-                </span>
-                <div className="flex items-center border-l border-slate-100 dark:border-neutral-800 pl-1 ml-1">
-                  <button onClick={() => gotoMatch(findIdx - 1)} title="Previous (↑)" className="p-1 rounded hover:bg-slate-100 dark:hover:bg-neutral-900 text-slate-500 dark:text-slate-400 hover:text-[#32CD32]">
-                    <ChevronUp size={16} />
-                  </button>
-                  <button onClick={() => gotoMatch(findIdx + 1)} title="Next (↓)" className="p-1 rounded hover:bg-slate-100 dark:hover:bg-neutral-900 text-slate-500 dark:text-slate-400 hover:text-[#32CD32]">
-                    <ChevronDown size={16} />
-                  </button>
-                  <button onClick={() => setIsFindVisible(false)} title="Close (Esc)" className="p-1 rounded hover:bg-slate-100 dark:hover:bg-neutral-900 text-slate-500 dark:text-slate-400 hover:text-[#32CD32] ml-0.5">
-                    <X size={16} />
-                  </button>
-                </div>
+          {/* FILE */}
+          <div className="relative z-50">
+            <button onClick={() => setOpenMenu((m) => (m === 'file' ? null : 'file'))} onMouseEnter={() => openMenu && setOpenMenu('file')} className={menuBtnCls('file')}>File</button>
+            {openMenu === 'file' && (
+              <div className={menuPopCls}>
+                {!note.isTrash ? (
+                  <>
+                    <button onClick={() => { onSaveNow?.(note.id); setOpenMenu(null); }} className={itemCls}><Check size={15} className="opacity-60" /> Save<span className={shortcutCls}>Ctrl S</span></button>
+                    <div className={dividerCls} />
+                    {/* Export as → flyout */}
+                    <div className="relative" onMouseEnter={() => setFileSub('export')}>
+                      <button onClick={() => setFileSub((s) => (s === 'export' ? null : 'export'))} className={`${itemCls} ${fileSub === 'export' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Download size={15} className="opacity-60" /> Export as<ChevronRight size={14} className="ml-auto opacity-50" /></button>
+                      {fileSub === 'export' && (
+                        <div className="vx-menu-pop absolute left-full top-0 -mt-1 ml-1 z-50 min-w-44 bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1">
+                          {([['pdf', 'PDF Document'], ['docx', 'Word (DOCX)'], ['odt', 'OpenDocument (ODT)'], ['txt', 'TXT File'], ['md', 'Markdown (MD)'], ['html', 'HTML File']] as const).map(([fmt, label]) => (
+                            <button key={fmt} onClick={() => { handlePandocExport(fmt); setOpenMenu(null); }} className={itemCls}><Download size={15} className="opacity-60" /> {label}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* Send to → flyout */}
+                    <div className="relative" onMouseEnter={() => setFileSub('send')}>
+                      <button onClick={() => setFileSub((s) => (s === 'send' ? null : 'send'))} className={`${itemCls} ${fileSub === 'send' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Send size={15} className="opacity-60" /> Send to<ChevronRight size={14} className="ml-auto opacity-50" /></button>
+                      {fileSub === 'send' && (
+                        <div className="vx-menu-pop absolute left-full top-0 -mt-1 ml-1 z-50 min-w-44 max-h-72 overflow-auto bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1">
+                          {SHARE_TARGETS.map((target) => (
+                            <button key={target.id} onClick={() => { handleSendTo(target); setOpenMenu(null); }} className={itemCls} title={`Send to ${target.label}`}>
+                              <TargetIcon target={target} /><span className="truncate">{target.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className={dividerCls} />
+                    <button onClick={() => { handleCopyToClipboard(); setOpenMenu(null); }} className={itemCls}><Copy size={15} className="opacity-60" /> Copy all text</button>
+                    <button onClick={() => { setOpenMenu(null); handlePrint(); }} className={itemCls}><Printer size={15} className="opacity-60" /> Print<span className={shortcutCls}>Ctrl P</span></button>
+                    <div className={dividerCls} />
+                    <button onClick={() => { moveToTrash(note.id); setOpenMenu(null); }} className={itemCls}><Trash2 size={15} className="opacity-60" /> Move to Trash</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => { restoreFromTrash(note.id); setOpenMenu(null); }} className={itemCls}><RotateCcw size={15} className="opacity-60" /> Restore</button>
+                    <button onClick={() => { deleteNotePerm(note.id); setOpenMenu(null); }} className={itemCls}><XCircle size={15} className="opacity-60" /> Delete Permanently</button>
+                  </>
+                )}
               </div>
             )}
           </div>
-        </div>
 
-        {note.isTrash ? (
-          <div className="flex items-center gap-4 text-slate-400 dark:text-slate-500">
-            <button
-              onClick={() => restoreFromTrash(note.id)}
-              className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-              title="Restore note"
-            >
-              <RotateCcw size={16} /> Restore
-            </button>
-            <button
-              onClick={() => deleteNotePerm(note.id)}
-              className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest hover:text-[#32CD32] transition-colors"
-              title="Delete permanently"
-            >
-              <XCircle size={16} /> Delete Permanently
-            </button>
+          {/* EDIT */}
+          <div className="relative z-50">
+            <button onClick={() => setOpenMenu((m) => (m === 'edit' ? null : 'edit'))} onMouseEnter={() => openMenu && setOpenMenu('edit')} className={menuBtnCls('edit')}>Edit</button>
+            {openMenu === 'edit' && (
+              <div className={menuPopCls}>
+                <button onClick={() => { setIsFindVisible(true); setOpenMenu(null); }} className={itemCls}><Search size={15} className="opacity-60" /> Find in note<span className={shortcutCls}>Ctrl F</span></button>
+                <button onClick={() => { handleCopyToClipboard(); setOpenMenu(null); }} className={itemCls}><Copy size={15} className="opacity-60" /> Copy all text</button>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
-            <div className="relative">
-              <button 
-                onClick={() => setIsShareOpen(!isShareOpen)} 
-                className={`p-2 transition-colors rounded-full ${isShareOpen ? 'bg-slate-100 dark:bg-neutral-900 text-slate-700 dark:text-slate-200' : 'hover:text-[#32CD32] hover:bg-slate-50 dark:hover:bg-neutral-900'}`}
-                title="Share"
-              >
-                <Share2 size={20} />
-              </button>
-              
-              {isShareOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setIsShareOpen(false)}></div>
-                  <div className="vx-menu-pop absolute top-12 right-0 bg-white dark:bg-black border border-slate-100 dark:border-neutral-900 shadow-xl rounded-md w-72 py-2 z-50" style={{ transformOrigin: 'top right' }}>
-                     <div className="px-4 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-2"><Send size={12} className="text-[#32CD32]"/> Send to Others</div>
-                     <div className="grid grid-cols-2 gap-1 px-2 pt-1 pb-1">
-                       {SHARE_TARGETS.map((target) => (
-                         <button
-                           key={target.id}
-                           onClick={() => handleSendTo(target)}
-                           className="text-left px-2 py-2 rounded hover:bg-slate-50 dark:hover:bg-neutral-900 text-sm flex items-center gap-2 text-slate-700 dark:text-slate-300"
-                           title={`Send to ${target.label}`}
-                         >
-                           <TargetIcon target={target} />
-                           <span className="truncate">{target.label}</span>
-                         </button>
-                       ))}
-                     </div>
 
-                     <div className="border-t border-slate-50 dark:border-neutral-900 my-2"></div>
-                     <button onClick={handleCopyToClipboard} className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-neutral-900 text-sm flex items-center gap-3 text-slate-700 dark:text-slate-300"><Copy size={16} className="text-slate-400 dark:text-slate-500"/> Copy to Clipboard</button>
-
-                     <div className="border-t border-slate-50 dark:border-neutral-900 my-2"></div>
-                     <div className="px-4 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Export as</div>
-                     <button onClick={() => handlePandocExport('pdf')} className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-neutral-900 text-sm flex items-center gap-3 text-slate-700 dark:text-slate-300"><Download size={16} className="text-slate-400 dark:text-slate-500"/> PDF Document</button>
-                     <button onClick={() => handlePandocExport('docx')} className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-neutral-900 text-sm flex items-center gap-3 text-slate-700 dark:text-slate-300"><Download size={16} className="text-slate-400 dark:text-slate-500"/> Word (DOCX)</button>
-                     <button onClick={() => handlePandocExport('odt')} className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-neutral-900 text-sm flex items-center gap-3 text-slate-700 dark:text-slate-300"><Download size={16} className="text-slate-400 dark:text-slate-500"/> OpenDocument (ODT)</button>
-                     <button onClick={() => handlePandocExport('txt')} className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-neutral-900 text-sm flex items-center gap-3 text-slate-700 dark:text-slate-300"><Download size={16} className="text-slate-400 dark:text-slate-500"/> TXT File</button>
-                     <button onClick={() => handlePandocExport('md')} className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-neutral-900 text-sm flex items-center gap-3 text-slate-700 dark:text-slate-300"><Download size={16} className="text-slate-400 dark:text-slate-500"/> Markdown (MD)</button>
-                     <button onClick={() => handlePandocExport('html')} className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-neutral-900 text-sm flex items-center gap-3 text-slate-700 dark:text-slate-300"><Download size={16} className="text-slate-400 dark:text-slate-500"/> HTML File</button>
-                     
-                     <div className="border-t border-slate-50 dark:border-neutral-900 my-2"></div>
-                     <button onClick={() => { setIsShareOpen(false); handlePrint(); }} className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-neutral-900 text-sm flex items-center gap-3 text-slate-700 dark:text-slate-300"><Printer size={16} className="text-slate-400 dark:text-slate-500"/> Print</button>
-                  </div>
-                </>
+          {/* FORMAT */}
+          {!note.isTrash && (
+            <div className="relative z-50">
+              <button onClick={() => setOpenMenu((m) => (m === 'format' ? null : 'format'))} onMouseEnter={() => openMenu && setOpenMenu('format')} className={menuBtnCls('format')}>Format</button>
+              {openMenu === 'format' && (
+                <div className={menuPopCls}>
+                  {isCodeNote ? (
+                    <button onClick={() => { setSyntaxViewer((v) => !v); setOpenMenu(null); }} className={itemCls}><CodeXml size={15} className="opacity-60" /> Syntax highlighting <span className="ml-auto text-[10px] text-slate-400">{syntaxViewer ? 'On' : 'Off'}</span></button>
+                  ) : (
+                    <>
+                      {!mdSource && (
+                        <>
+                          {([['bold', 'Bold', 'Ctrl B'], ['italic', 'Italic', 'Ctrl I'], ['strikeThrough', 'Strikethrough', 'Ctrl Shift X'], ['checkbox', 'Insert checkbox', '']] as const).map(([cmd, label, sc]) => (
+                            <button key={cmd} onMouseDown={(e) => e.preventDefault()} onClick={() => window.dispatchEvent(new CustomEvent('valx-format', { detail: cmd }))} className={itemCls}>{label}{sc && <span className={shortcutCls}>{sc}</span>}</button>
+                          ))}
+                          <div className={dividerCls} />
+                          <div className={sectionCls}>Alignment</div>
+                          {([[undefined, 'Left'], ['center', 'Center'], ['right', 'Right']] as const).map(([val, label]) => {
+                            const active = (note.align ?? undefined) === val || (val === undefined && !note.align);
+                            return (
+                              <button key={label} onMouseDown={(e) => e.preventDefault()} onClick={() => updateNote(note.id, { align: val })} className={itemCls}><Check size={14} className={active ? 'text-[#32CD32]' : 'opacity-0'} /> {label}</button>
+                            );
+                          })}
+                          <div className={dividerCls} />
+                          <button onMouseDown={(e) => e.preventDefault()} onClick={() => { setTableMenu(true); setTHover({ r: 0, c: 0 }); setOpenMenu(null); }} className={itemCls}><Table size={15} className="opacity-60" /> Insert table…</button>
+                        </>
+                      )}
+                      {isMdNote && (
+                        <button onClick={() => { toggleMdSource(); setOpenMenu(null); }} className={itemCls}><CodeXml size={15} className="opacity-60" /> {mdSource ? 'Rich text view' : 'Markdown source'}</button>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
             </div>
+          )}
 
-            <button
-              onClick={() => moveToTrash(note.id)}
-              className="p-2 hover:text-[#32CD32] transition-colors rounded-full hover:bg-slate-50 dark:hover:bg-neutral-900"
-              title="Move to trash"
-            >
-              <Trash2 size={20} />
-            </button>
+          {/* VIEW */}
+          <div className="relative z-50">
+            <button onClick={() => setOpenMenu((m) => (m === 'view' ? null : 'view'))} onMouseEnter={() => openMenu && setOpenMenu('view')} className={menuBtnCls('view')}>View</button>
+            {openMenu === 'view' && (
+              <div className={menuPopCls}>
+                <button onClick={() => { toggleFullscreen(); setOpenMenu(null); }} className={itemCls}>{isFullscreen ? <Minimize2 size={15} className="opacity-60" /> : <Maximize2 size={15} className="opacity-60" />} {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}<span className={shortcutCls}>F11</span></button>
+                {canPreview && <button onClick={() => { setShowPreview((v) => !v); setOpenMenu(null); }} className={itemCls}><Eye size={15} className="opacity-60" /> {showPreview ? 'Hide preview' : 'Preview'}</button>}
+                {!note.isTrash && <button onClick={() => { openHistory(); setOpenMenu(null); }} className={itemCls}><History size={15} className="opacity-60" /> Version history</button>}
+                {onToggleSidebar && <button onClick={() => { onToggleSidebar(); setOpenMenu(null); }} className={itemCls}><ArrowLeft size={15} className="opacity-60" /> {sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}</button>}
+              </div>
+            )}
           </div>
-        )}
+
+          {/* AUTHORS — dim/show provenance highlights (paste/AI/web). */}
+          <div className="relative z-50">
+            <button onClick={() => setOpenMenu((m) => (m === 'authors' ? null : 'authors'))} onMouseEnter={() => openMenu && setOpenMenu('authors')} className={menuBtnCls('authors')}>Authors</button>
+            {openMenu === 'authors' && (
+              <div className={menuPopCls}>
+                <div className={sectionCls}>Me</div>
+                <div className="px-3 pb-2 pt-0.5">
+                  <input
+                    value={authorName}
+                    onChange={(e) => { setAuthorName(e.target.value); localStorage.setItem('valx-author-me', e.target.value); }}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="Your name"
+                    className="w-full bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-md px-2 py-1 text-sm text-slate-900 dark:text-white outline-none focus:border-[#32CD32] transition-colors"
+                  />
+                </div>
+                <div className={dividerCls} />
+                <div className={sectionCls}>Highlight by author</div>
+                {([['ai', 'AI'], ['web', 'Reference'], ['paste', 'Pasted']] as const).map(([a, label]) => (
+                  <button key={a} onClick={() => toggleAuthor(a)} className={itemCls}><Check size={14} className={!hiddenAuthors.has(a) ? 'text-[#32CD32]' : 'opacity-0'} /> {label}</button>
+                ))}
+                <div className={dividerCls} />
+                <div className="px-3 py-1 text-[11px] text-slate-400 dark:text-slate-500 leading-snug max-w-52">Your own writing is never marked — only pasted, AI, and web-sourced text.</div>
+              </div>
+            )}
+          </div>
+
+          <div data-tauri-drag-region className="flex-1 h-full" />
+
+          {canPreview && (
+            <button onClick={() => setShowPreview((v) => !v)} title={showPreview ? 'Hide preview' : 'Preview'} className={`px-2.5 flex items-center rounded transition-colors ${showPreview ? 'text-[#32CD32]' : 'hover:bg-black/5 dark:hover:bg-white/10'}`}>
+              {showPreview ? <EyeOff size={16} /> : <Play size={16} />}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Find panel — opened from Edit menu / Ctrl+F, floats below the chrome. */}
+      {isFindVisible && (
+        <div className="vx-pop absolute top-[72px] right-4 z-[55] bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg p-2 flex items-center gap-1">
+          <Search size={15} className="text-[#32CD32] shrink-0 ml-1" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); lastFound.current = ''; }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); findEnter(); }
+              else if (e.key === 'ArrowDown') { e.preventDefault(); gotoMatch(findIdx + 1); }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); gotoMatch(findIdx - 1); }
+              else if (e.key === 'Escape') { e.preventDefault(); setIsFindVisible(false); }
+            }}
+            placeholder="Find in note…"
+            spellCheck={false}
+            className="border-none outline-none text-sm px-2 py-1 bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-neutral-700 w-52"
+            autoFocus
+          />
+          <span className="text-[11px] font-medium tabular-nums text-slate-400 dark:text-slate-500 w-14 text-right shrink-0">
+            {searchQuery.trim() ? (matchCount ? `${findIdx + 1}/${matchCount}` : 'none') : ''}
+          </span>
+          <div className="flex items-center border-l border-slate-100 dark:border-neutral-800 pl-1 ml-1">
+            <button onClick={() => gotoMatch(findIdx - 1)} title="Previous (↑)" className="p-1 rounded hover:bg-slate-100 dark:hover:bg-neutral-900 text-slate-500 dark:text-slate-400 hover:text-[#32CD32]"><ChevronUp size={16} /></button>
+            <button onClick={() => gotoMatch(findIdx + 1)} title="Next (↓)" className="p-1 rounded hover:bg-slate-100 dark:hover:bg-neutral-900 text-slate-500 dark:text-slate-400 hover:text-[#32CD32]"><ChevronDown size={16} /></button>
+            <button onClick={() => setIsFindVisible(false)} title="Close (Esc)" className="p-1 rounded hover:bg-slate-100 dark:hover:bg-neutral-900 text-slate-500 dark:text-slate-400 hover:text-[#32CD32] ml-0.5"><X size={16} /></button>
+          </div>
+        </div>
+      )}
+
+      {/* Version history panel */}
+      {historyOpen && (
+        <>
+          <div className="fixed inset-0 z-[54]" onMouseDown={() => setHistoryOpen(false)} />
+          <div className="vx-menu-pop absolute top-[72px] right-4 z-[55] w-72 max-h-80 overflow-auto bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1">
+            <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Version history</div>
+            {versions.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500 leading-relaxed">No earlier versions yet — one is saved every {historyIntervalMin} min while you edit.</div>
+            ) : (
+              versions.map((v) => (
+                <button key={v.t} onClick={() => revertTo(v)} className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-neutral-900 transition-colors flex flex-col gap-0.5" title="Restore this version (current is saved first)">
+                  <span className="text-sm text-slate-700 dark:text-slate-200">{versionLabel(v.t)}</span>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{versionPreview(v.content)}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Table size picker */}
+      {tableMenu && (
+        <>
+          <div className="fixed inset-0 z-[54]" onMouseDown={() => setTableMenu(false)} />
+          <div className="vx-menu-pop absolute top-[72px] left-1/2 -translate-x-1/2 z-[55] bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg p-3">
+            <div className="grid" style={{ gridTemplateColumns: 'repeat(6, 18px)', gap: '4px' }}>
+              {Array.from({ length: 6 * 8 }).map((_, i) => {
+                const c = (i % 6) + 1;
+                const r = Math.floor(i / 6) + 1;
+                const active = r <= tHover.r && c <= tHover.c;
+                return (
+                  <button
+                    key={i}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setTHover({ r, c })}
+                    onClick={() => { window.dispatchEvent(new CustomEvent('valx-insert-table', { detail: { rows: r, cols: c } })); setTableMenu(false); }}
+                    className={`w-[18px] h-[18px] rounded-sm border transition-colors ${active ? 'bg-[#32CD32] border-[#32CD32]' : 'border-slate-200 dark:border-neutral-700 hover:border-slate-300'}`}
+                  />
+                );
+              })}
+            </div>
+            <div className="text-xs text-center mt-2 text-slate-500 dark:text-slate-400 font-medium">{tHover.r > 0 ? `${tHover.r} × ${tHover.c} table` : 'Pick a size'}</div>
+          </div>
+        </>
+      )}
 
       {/* Saved! feedback (Ctrl+S) */}
       {savedFlash !== null && (
@@ -931,7 +967,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       {/* Editor Area — code notes get a full-width source editor; prose notes
           keep the centered rich-text column. */}
       {isCodeNote ? (
-        <div className={`flex-1 min-h-0 flex flex-col ${isFullscreen ? 'pt-14' : ''} ${savedFlash !== null ? 'save-glow' : ''}`}>
+        <div className={`flex-1 min-h-0 flex flex-col ${isFullscreen ? 'pt-10' : 'pt-[76px]'} ${savedFlash !== null ? 'save-glow' : ''}`}>
           <div className="px-6 pt-4 pb-2 flex-shrink-0">
             <textarea
               rows={1}
@@ -957,8 +993,10 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             )}
             <div className="relative flex-1 min-w-0">
               <div className="vx-code-hlwrap">
-                <pre ref={hlRef} aria-hidden className="vx-code vx-code-hl"
-                  dangerouslySetInnerHTML={{ __html: codeHl + '\n' }} />
+                {syntaxViewer && (
+                  <pre ref={hlRef} aria-hidden className="vx-code vx-code-hl"
+                    dangerouslySetInnerHTML={{ __html: codeHl + '\n' }} />
+                )}
               </div>
               <textarea
                 ref={codeRef}
@@ -969,14 +1007,15 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                 disabled={note.isTrash}
                 spellCheck={false}
                 wrap="off"
-                className="vx-code vx-code-input placeholder-slate-400 dark:placeholder-neutral-700 disabled:opacity-50"
+                className={`vx-code vx-code-input placeholder-slate-400 dark:placeholder-neutral-700 disabled:opacity-50 ${syntaxViewer ? 'text-transparent' : 'text-slate-900 dark:text-slate-100'}`}
+                style={!syntaxViewer ? { color: 'inherit', caretColor: 'auto' } : undefined}
               />
             </div>
           </div>
         </div>
       ) : (
-        <div className={`vx-editor-scroll flex-1 min-w-0 overflow-y-auto px-8 sm:px-12 lg:px-24 py-12 print-area transition-colors ${isFullscreen ? 'pt-14' : ''} ${savedFlash !== null ? 'save-glow' : ''}`}>
-          <div className={`mx-auto w-full max-w-2xl transition-all duration-300`}>
+        <div className={`vx-editor-scroll flex-1 min-w-0 overflow-y-auto px-8 sm:px-12 lg:px-24 py-12 print-area transition-colors ${isFullscreen ? 'pt-12' : 'pt-[80px]'} ${savedFlash !== null ? 'save-glow' : ''}`}>
+          <div className={`mx-auto w-full max-w-3xl transition-all duration-300`}>
             {/* Textarea (not input) so a long file name wraps and the field grows
                 to show it in full. field-sizing:content does the growing natively. */}
             <textarea
@@ -988,7 +1027,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               disabled={note.isTrash}
               spellCheck
               style={{ fieldSizing: 'content' } as any}
-              className={`w-full text-center text-4xl font-bold leading-tight resize-none overflow-hidden border-none outline-none mb-6 placeholder-slate-400 dark:placeholder-neutral-800 bg-transparent disabled:opacity-50 text-slate-900 dark:text-white`}
+              className={`w-full ${alignClass} text-4xl font-bold leading-tight resize-none overflow-hidden border-none outline-none mb-6 placeholder-slate-400 dark:placeholder-neutral-800 bg-transparent disabled:opacity-50 text-slate-900 dark:text-white`}
             />
             {isMdNote && mdSource ? (
               <div className="relative vx-mdsrc">
@@ -1026,7 +1065,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       {/* In-app HTML/CSS/JS preview — sandboxed iframe over the editor, with a
           device-size toggle so the page can be checked at phone and desktop widths. */}
       {showPreview && canPreview && (
-        <div className="absolute inset-0 z-40 flex flex-col bg-white dark:bg-black" style={isFullscreen ? undefined : { top: '3.5rem' }}>
+        <div className="absolute inset-0 z-40 flex flex-col bg-white dark:bg-black">
           <div className="h-11 flex items-center justify-between px-4 border-b border-slate-100 dark:border-neutral-900 flex-shrink-0 bg-slate-50/60 dark:bg-neutral-950">
             <span className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Preview</span>
             <div className="flex items-center gap-1">
@@ -1065,6 +1104,13 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               />
             )}
           </div>
+        </div>
+      )}
+
+      {/* Word-count widget — corner pill, current / goal (goal optional). */}
+      {wcOn && !showPreview && (
+        <div className="absolute bottom-3 right-4 z-30 px-2.5 py-1 rounded-md bg-slate-100/85 dark:bg-neutral-900/85 backdrop-blur-sm text-[11px] font-medium text-slate-500 dark:text-slate-400 tabular-nums select-none pointer-events-none shadow-sm">
+          {wordCount(note.content).toLocaleString()}{wcGoal > 0 ? ` / ${wcGoal.toLocaleString()}` : ''} Words
         </div>
       )}
 

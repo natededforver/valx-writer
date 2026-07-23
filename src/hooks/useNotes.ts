@@ -63,7 +63,7 @@ async function decodeDiskContent(fileName: string, raw: string, binary?: boolean
 interface FilemapEntry { key: string; dir: string; file: string }
 type Filemap = Record<string, FilemapEntry>;
 type TrashMap = Record<string, string>; // fileName in .trash -> note id
-interface NoteMeta { updatedAt: number; isTrash: boolean; align?: 'left' | 'right' }
+interface NoteMeta { updatedAt: number; isTrash: boolean; align?: 'left' | 'center' | 'right' }
 type MetaMap = Record<string, NoteMeta>;
 
 const META_KEY = 'valx-notes-metadata';
@@ -160,10 +160,16 @@ export function useNotes() {
     let out: string;
     if (kind === 'md') out = htmlToMarkdown(note.content);
     else if (kind === 'txt') {
-      out = note.content
+      const stash: string[] = [];
+      let temp = note.content.replace(/<mark class="vx-slop[^"]*"[^>]*>[\s\S]*?<\/mark>/gi, (m) => {
+        stash.push(m);
+        return `@@VXSLOP${stash.length - 1}@@`;
+      });
+      temp = temp
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<[^>]*>?/gm, '')
         .replace(/&nbsp;/g, ' ');
+      out = temp.replace(/@@VXSLOP(\d+)@@/g, (_, i) => stash[Number(i)]);
     } else out = note.content;
     return rewriteMediaToDisk(out, depth);
   };

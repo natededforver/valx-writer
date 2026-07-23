@@ -1,9 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Note, FilterState, Folder } from '../types';
-import { WorldMeta } from '../lib/world';
-import { FileText, Trash2, Hash, Moon, Sun, Plus, Folder as FolderIcon, Cloud, RefreshCw, Repeat, Settings, Globe, Search, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { FileText, Trash2, Hash, Moon, Sun, Plus, Folder as FolderIcon, Cloud, RefreshCw, Repeat, Settings, Search, X, ChevronDown, ChevronRight, ArrowDownUp, Bookmark, Check } from 'lucide-react';
 import { sessionGreeting } from '../lib/greeting';
-import { filterNotesForContainer, NoteDropdownList, BookmarkedNotesPanel } from './NoteList';
+import { filterNotesForContainer, NoteDropdownList, BookmarkedNotesPanel, NoteSort } from './NoteList';
+
+const LS_NOTE_SORT = 'valx-note-sort';
+const LS_NOTE_BOOKMARKED_ONLY = 'valx-note-bookmarked-only';
+const SORT_LABELS: Record<NoteSort, string> = {
+  modified: 'Recently edited',
+  oldest: 'Oldest first',
+  title: 'Title A–Z',
+};
 import { searchNotes, SearchHit } from '../lib/search';
 
 interface SidebarProps {
@@ -22,12 +29,6 @@ interface SidebarProps {
   fileFormat?: string;
   onOpenFormatConverter?: () => void;
   onOpenSettings?: () => void;
-  worlds?: WorldMeta[];
-  activeWorldId?: string | null;
-  inWorldMode?: boolean;
-  onOpenWorld?: (id: string) => void;
-  onAddWorld?: (name: string) => void;
-  onDeleteWorld?: (id: string) => void;
   notes: Note[];
   selectedNoteIds: string[];
   onSelectNotes: (ids: string[]) => void;
@@ -56,20 +57,28 @@ function expandKeyForFilter(filter: FilterState): string {
 export function Sidebar({
   filter, setFilter, tags, folders, onAddFolder, onDeleteFolder, onMoveNotesToFolder, onMoveNotesToTrash,
   isDarkMode, setIsDarkMode, workspaceHandle, selectWorkspace, fileFormat, onOpenFormatConverter, onOpenSettings,
-  worlds = [], activeWorldId = null, inWorldMode = false, onOpenWorld, onAddWorld, onDeleteWorld,
   notes, selectedNoteIds, onSelectNotes, onAddNote, noteExtensions = {}, bookmarkedIds = [], onToggleBookmark, onSearchNavigate, onOpenNote,
   oneDriveConnected = false, oneDriveSyncing = false, onGoToOneDriveSettings, onSyncOneDrive,
   className = '',
 }: SidebarProps) {
-  const isTrash = filter.type === 'trash' && !inWorldMode;
+  const isTrash = filter.type === 'trash';
   const [isAddingFolder, setIsAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
-  const [isAddingWorld, setIsAddingWorld] = useState(false);
-  const [newWorldName, setNewWorldName] = useState('');
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverTrash, setDragOverTrash] = useState(false);
   const [query, setQuery] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set(['all', 'bookmarks']));
+  // Note list sort + bookmarked-only filter (persisted). Applied to every
+  // container list (All Notes, folders, tags, trash) through one opts object.
+  const [sort, setSort] = useState<NoteSort>(() => (localStorage.getItem(LS_NOTE_SORT) as NoteSort) || 'modified');
+  const [bookmarkedOnly, setBookmarkedOnly] = useState(() => localStorage.getItem(LS_NOTE_BOOKMARKED_ONLY) === 'true');
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  useEffect(() => { localStorage.setItem(LS_NOTE_SORT, sort); }, [sort]);
+  useEffect(() => { localStorage.setItem(LS_NOTE_BOOKMARKED_ONLY, String(bookmarkedOnly)); }, [bookmarkedOnly]);
+  const listOpts = useMemo(
+    () => ({ sort, bookmarkedOnly, bookmarkedIds }),
+    [sort, bookmarkedOnly, bookmarkedIds]
+  );
 
   const searchQuery = query.trim();
   const isSearching = searchQuery.length >= 2;
@@ -99,20 +108,8 @@ export function Sidebar({
 
   const handleContainerClick = (nextFilter: FilterState) => {
     const key = expandKeyForFilter(nextFilter);
-    // In World Mode, setFilter also exits World Mode (App.handleSetFilter) — but
-    // the whole point of clicking "All Notes"/a group here is to expand it and
-    // drag a note onto the canvas, so just toggle the list open instead.
-    if (!inWorldMode) setFilter(nextFilter);
+    setFilter(nextFilter);
     toggleExpanded(key);
-  };
-
-  const handleAddWorldSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newWorldName.trim() && onAddWorld) {
-      onAddWorld(newWorldName.trim());
-      setNewWorldName('');
-      setIsAddingWorld(false);
-    }
   };
 
   const handleAddFolderSubmit = (e: React.FormEvent) => {
@@ -166,7 +163,7 @@ export function Sidebar({
 
   const [greet] = useState(() => sessionGreeting());
 
-  const allNotes = useMemo(() => filterNotesForContainer(notes, { type: 'all' }), [notes]);
+  const allNotes = useMemo(() => filterNotesForContainer(notes, { type: 'all' }, listOpts), [notes, listOpts]);
   const sortedFolders = useMemo(() => [...folders].sort((a, b) => a.name.localeCompare(b.name)), [folders]);
 
   const renderSearchResult = (hit: SearchHit, i: number) => (
@@ -214,6 +211,47 @@ export function Sidebar({
           </div>
         </div>
 
+        {/* Sort + bookmarked-only filter for every note list below. Hidden while
+            searching (search has its own result ordering). */}
+        {!isSearching && (
+          <div className="flex items-center gap-1 mb-3 px-1">
+            <div className="relative flex-1 min-w-0">
+              <button
+                onClick={() => setSortMenuOpen((v) => !v)}
+                className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-slate-500 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/5 transition-colors"
+                title="Sort notes"
+              >
+                <ArrowDownUp size={13} className="shrink-0" />
+                <span className="truncate">{SORT_LABELS[sort]}</span>
+              </button>
+              {sortMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setSortMenuOpen(false)} />
+                  <div className="vx-menu-pop absolute top-8 left-0 z-50 w-44 bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1">
+                    {(Object.keys(SORT_LABELS) as NoteSort[]).map((key) => (
+                      <button
+                        key={key}
+                        onClick={() => { setSort(key); setSortMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left text-slate-700 dark:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/5 transition-colors"
+                      >
+                        <Check size={14} className={sort === key ? 'text-[#32CD32] shrink-0' : 'opacity-0 shrink-0'} />
+                        <span>{SORT_LABELS[key]}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => setBookmarkedOnly((v) => !v)}
+              className={`p-1.5 rounded-md transition-colors shrink-0 ${bookmarkedOnly ? 'bg-[#32CD32]/10 text-[#32CD32]' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
+              title={bookmarkedOnly ? 'Showing bookmarked only' : 'Show bookmarked only'}
+            >
+              <Bookmark size={14} fill={bookmarkedOnly ? 'currentColor' : 'none'} />
+            </button>
+          </div>
+        )}
+
         {isSearching ? (
           <div className="mb-4">
             <div className="px-3 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-widest">
@@ -237,21 +275,17 @@ export function Sidebar({
               >
                 <button
                   onClick={() => handleContainerClick({ type: 'all' })}
-                  className={`flex-1 flex items-center gap-2 px-3 py-2 text-sm transition-colors ${filter.type === 'all' && !inWorldMode ? 'bg-slate-900/8 dark:bg-white/8 text-slate-900 dark:text-white font-medium' : 'text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-slate-100 font-medium hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
+                  className={`flex-1 flex items-center gap-2 px-3 py-2 text-sm transition-colors ${filter.type === 'all' ? 'bg-slate-900/8 dark:bg-white/8 text-slate-900 dark:text-white font-medium' : 'text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-slate-100 font-medium hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
                 >
                   <Chevron expanded={expandedKeys.has('all')} />
-                  <FileText size={16} className={filter.type === 'all' && !inWorldMode ? 'text-slate-900 dark:text-white' : ''} />
+                  <FileText size={16} className={filter.type === 'all' ? 'text-slate-900 dark:text-white' : ''} />
                   <span className="flex-1 text-left">All Notes</span>
                   <span className="text-[10px] text-slate-400 dark:text-slate-400 tabular-nums">{allNotes.length}</span>
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    // selectContainer's setFilter also exits World Mode (App.handleSetFilter) — a
-                    // quick "new note" click here shouldn't yank the user off their canvas, so skip
-                    // the filter change (and just expand All Notes) while a world is open.
-                    if (inWorldMode) setExpandedKeys((prev) => new Set(prev).add('all'));
-                    else selectContainer({ type: 'all' });
+                    selectContainer({ type: 'all' });
                     onAddNote();
                   }}
                   className="p-1.5 mr-1 text-slate-400 hover:text-[#32CD32] transition-colors hover:bg-slate-50 dark:hover:bg-neutral-900"
@@ -290,10 +324,10 @@ export function Sidebar({
               />
             )}
 
-            {/* Groups — each folder is its own expandable dropdown */}
+            {/* Folders — each folder is its own expandable dropdown */}
             <div className="mt-5">
               <div className="flex items-center justify-between px-3 text-xs font-bold text-slate-500 dark:text-slate-300 uppercase tracking-widest mb-2">
-                <span>Groups</span>
+                <span>Folders</span>
                 <button
                   onClick={() => setIsAddingFolder(true)}
                   className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
@@ -310,7 +344,7 @@ export function Sidebar({
                   const isDragOver = dragOverFolderId === folder.id;
                   const depth = (folder.name.match(/\//g) || []).length;
                   const baseName = folder.name.split('/').pop();
-                  const folderNotes = filterNotesForContainer(notes, { type: 'folder', folderId: folder.id });
+                  const folderNotes = filterNotesForContainer(notes, { type: 'folder', folderId: folder.id }, listOpts);
 
                   return (
                     <div key={folder.id}>
@@ -333,7 +367,7 @@ export function Sidebar({
                         <button
                           onClick={() => onDeleteFolder(folder.id)}
                           className="opacity-0 group-hover:opacity-100 p-1 mr-1 text-slate-400 hover:text-[#32CD32] transition-all"
-                          title="Delete group"
+                          title="Delete folder"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -348,7 +382,7 @@ export function Sidebar({
                             bookmarkedIds={bookmarkedIds}
                             onToggleBookmark={onToggleBookmark}
                             onOpenNote={onOpenNote}
-                            emptyLabel="No notes in this group"
+                            emptyLabel="No notes in this folder"
                           />
                         </div>
                       )}
@@ -362,7 +396,7 @@ export function Sidebar({
                       type="text"
                       value={newFolderName}
                       onChange={(e) => setNewFolderName(e.target.value)}
-                      placeholder="Group name"
+                      placeholder="Folder name"
                       className="w-full bg-white dark:bg-neutral-900 border-b border-slate-200 dark:border-neutral-800 px-2 py-1 text-sm text-slate-900 dark:text-white outline-none focus:border-[#32CD32]"
                       autoFocus
                       onBlur={() => {
@@ -373,65 +407,6 @@ export function Sidebar({
                 )}
               </div>
             </div>
-
-            {onOpenWorld && (
-              <div className="mt-5">
-                <div className="flex items-center justify-between px-3 text-xs font-bold text-slate-500 dark:text-slate-300 uppercase tracking-widest mb-2">
-                  <span>Worlds</span>
-                  <button
-                    onClick={() => setIsAddingWorld(true)}
-                    className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                  >
-                    <Plus size={14} />
-                  </button>
-                </div>
-
-                <div className="space-y-0.5">
-                  {worlds.map(world => {
-                    const isSelected = inWorldMode && activeWorldId === world.id;
-                    return (
-                      <div
-                        key={world.id}
-                        className="group flex items-center justify-between pr-2 transition-colors"
-                      >
-                        <button
-                          onClick={() => onOpenWorld(world.id)}
-                          className={`flex-1 min-w-0 flex items-center gap-3 px-3 py-1.5 text-sm transition-colors ${isSelected ? 'bg-slate-900/8 dark:bg-white/8 text-slate-900 dark:text-white font-medium' : 'text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
-                        >
-                          <Globe size={16} className={isSelected ? 'text-[#32CD32]' : 'text-slate-400'} />
-                          <span className="truncate min-w-0">{world.name}</span>
-                        </button>
-                        {onDeleteWorld && (
-                          <button
-                            onClick={() => onDeleteWorld(world.id)}
-                            className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-[#32CD32] transition-all"
-                            title="Delete world"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {isAddingWorld && (
-                    <form onSubmit={handleAddWorldSubmit} className="px-3 py-1.5">
-                      <input
-                        type="text"
-                        value={newWorldName}
-                        onChange={(e) => setNewWorldName(e.target.value)}
-                        placeholder="World name"
-                        className="w-full bg-white dark:bg-neutral-900 border-b border-slate-200 dark:border-neutral-800 px-2 py-1 text-sm text-slate-900 dark:text-white outline-none focus:border-[#32CD32]"
-                        autoFocus
-                        onBlur={() => {
-                          if (!newWorldName.trim()) setIsAddingWorld(false);
-                        }}
-                      />
-                    </form>
-                  )}
-                </div>
-              </div>
-            )}
 
             <div className="mt-5">
                 <div className="flex items-center justify-between px-3 text-xs font-bold text-slate-500 dark:text-slate-300 uppercase tracking-widest mb-2">
@@ -445,7 +420,7 @@ export function Sidebar({
                     const tagKey = `tag:${tag}`;
                     const isSelected = filter.type === 'tag' && filter.tag === tag;
                     const isExpanded = expandedKeys.has(tagKey);
-                    const tagNotes = filterNotesForContainer(notes, { type: 'tag', tag });
+                    const tagNotes = filterNotesForContainer(notes, { type: 'tag', tag }, listOpts);
 
                     return (
                       <div key={tag}>
@@ -496,14 +471,14 @@ export function Sidebar({
                   <Trash2 size={16} className={isTrash ? 'text-slate-900 dark:text-white' : ''} />
                   <span className="flex-1 text-left">Trash</span>
                   <span className="text-[10px] text-slate-400 dark:text-slate-400 tabular-nums">
-                    {filterNotesForContainer(notes, { type: 'trash' }).length}
+                    {filterNotesForContainer(notes, { type: 'trash' }, { sort }).length}
                   </span>
                 </button>
               </div>
               {expandedKeys.has('trash') && (
                 <div className="ml-4 border-l border-slate-100 dark:border-neutral-800 pl-1">
                   <NoteDropdownList
-                    notes={filterNotesForContainer(notes, { type: 'trash' })}
+                    notes={filterNotesForContainer(notes, { type: 'trash' }, { sort })}
                     selectedNoteIds={selectedNoteIds}
                     onSelectNotes={onSelectNotes}
                     noteExtensions={noteExtensions}

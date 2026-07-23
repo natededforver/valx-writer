@@ -12,7 +12,6 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "harness": "esbuild dev/harness-entry.ts --bundle --format=iife --outfile=dev/harness-bundle.js && node dev/serve.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"

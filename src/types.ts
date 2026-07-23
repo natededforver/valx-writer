@@ -11,8 +11,8 @@ export interface Note {
   updatedAt: number;
   isTrash: boolean;
   folderId?: string | null;
-  /** Per-note body text alignment; undefined = center (the default). */
-  align?: 'left' | 'right';
+  /** Per-note body text alignment; undefined = left (the default). */
+  align?: 'left' | 'center' | 'right';
 }
 
 export type FilterState =

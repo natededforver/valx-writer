@@ -1,6 +1,6 @@
 // Round-trip tests for the Phase 7 markdown additions (code, fences,
 // blockquotes, rules, checklists) plus regressions for what already worked.
-// Contract (CLAUDE.md): md -> html -> md must reproduce the markdown.
+// Contract: md -> html -> md must reproduce the markdown.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { htmlToMarkdown, markdownToHtml } from './format';

@@ -16,6 +16,7 @@
         "title": "Valx Prose Writer",
         "width": 1200,
         "height": 800,
+        "maximized": true,
         "resizable": true,
         "transparent": true,
         "decorations": false,

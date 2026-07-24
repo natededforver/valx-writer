@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Note, FilterState, Folder } from '../types';
-import { FileText, Trash2, Hash, Moon, Sun, Plus, Folder as FolderIcon, Cloud, RefreshCw, Repeat, Settings, Search, X, ChevronDown, ChevronRight, ArrowDownUp, Bookmark, Check } from 'lucide-react';
+import { FileText, Trash2, Hash, Moon, Sun, Plus, Folder as FolderIcon, Cloud, RefreshCw, Repeat, SlidersHorizontal, Search, X, ChevronDown, ChevronRight, ArrowDownUp, Bookmark, Check } from 'lucide-react';
 import { sessionGreeting } from '../lib/greeting';
 import { filterNotesForContainer, NoteDropdownList, BookmarkedNotesPanel } from './NoteList';
 import { NoteSort, NOTE_SORTS, SORT_LABELS, IS_DATE_SORT, normalizeSort, compareTitles } from '../lib/noteSort';
@@ -188,7 +188,10 @@ export function Sidebar({
     <div className={`vx-glass-strong text-slate-700 dark:text-slate-200 flex flex-col h-full min-h-0 ${className}`}>
       <div className="vx-editor-scroll flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-2">
         <div className="flex items-center mb-4">
-          <span className="text-lg font-medium tracking-wide text-slate-900 dark:text-white flex-1 truncate">{greet}</span>
+          {/* .vx-greeting carries the Blue Screen face + brand green (index.css) —
+              the one branded piece of text in the UI, so it sets its own colour
+              rather than inheriting the sidebar's. */}
+          <span className="vx-greeting text-xl tracking-wide flex-1 truncate">{greet}</span>
         </div>
 
         <div className="mb-4">
@@ -554,7 +557,7 @@ export function Sidebar({
                 <button
                   onClick={onGoToOneDriveSettings}
                   className="p-1.5 text-slate-500 dark:text-slate-300 hover:text-[#32CD32] transition-colors"
-                  title="Connect OneDrive (in Settings)"
+                  title="Connect OneDrive (in Preferences)"
                 >
                   <Cloud size={14} />
                 </button>
@@ -573,9 +576,9 @@ export function Sidebar({
               <button
                 onClick={onOpenSettings}
                 className="p-1.5 text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                title="Settings"
+                title="Preferences (Ctrl+,)"
               >
-                <Settings size={14} />
+                <SlidersHorizontal size={14} />
               </button>
             )}
           </div>

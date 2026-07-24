@@ -2,37 +2,60 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* SF Pro Text ships inside the app (src/assets/fonts) so the default look is
-   identical on machines that don't have it installed. */
+/* Every typeface the app uses ships inside it (src/assets/fonts), so the look
+   is identical on machines that don't have them installed:
+     Helvetica     — the UI typeface (chrome, sidebar, menus, dialogs)
+     Lucida Console— the writing surface, and only the writing surface
+     Blue Screen   — greetings only, in the brand green (--vx-brand)
+   There is no font picker: the editor typeface is a fixed part of the app's
+   identity. Swapping in a different one is a change to these @font-face rules,
+   not a runtime setting. */
 @font-face {
-  font-family: 'SF Pro';
-  src: url('./assets/fonts/SF-Pro-Text-Regular.otf') format('opentype');
+  font-family: 'Valx Helvetica';
+  src: url('./assets/fonts/Helvetica.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'SF Pro';
-  src: url('./assets/fonts/SF-Pro-Text-Bold.otf') format('opentype');
+  font-family: 'Valx Helvetica';
+  src: url('./assets/fonts/Helvetica-Bold.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'SF Pro';
-  src: url('./assets/fonts/SF-Pro-Text-RegularItalic.otf') format('opentype');
+  font-family: 'Valx Helvetica';
+  src: url('./assets/fonts/Helvetica-Oblique.ttf') format('truetype');
   font-weight: 400;
   font-style: italic;
   font-display: swap;
 }
+@font-face {
+  font-family: 'Valx Mono';
+  src: url('./assets/fonts/LucidaConsole.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Blue Screen';
+  src: url('./assets/fonts/BlueScreen.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
-/* App-wide font. --vx-font is set from Settings (persisted in localStorage,
-   re-applied on boot in App.tsx); unset -> bundled SF Pro.
-   Overriding Tailwind's --font-sans is what makes it stick: the app root has
-   the `font-sans` utility, which would otherwise pin every descendant (editor
-   included) to Tailwind's default stack regardless of what `body` says. */
+/* App-wide font. Overriding Tailwind's --font-sans is what makes it stick: the
+   app root has the `font-sans` utility, which would otherwise pin every
+   descendant to Tailwind's default stack regardless of what `body` says. */
 :root {
-  --font-sans: var(--vx-font, 'SF Pro'), 'SF Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Valx Helvetica', Helvetica, Arial, 'Segoe UI', Roboto, sans-serif;
+  /* The writing surface. Kept separate from --font-sans so UI chrome and prose
+     never drift onto the same typeface. */
+  --vx-editor-font: 'Valx Mono', 'Lucida Console', Consolas, monospace;
+  /* Brand green, sampled from the app logo. */
+  --vx-brand: #315f30;
   --vx-surface: #ffffff;
   --vx-hair: #e5e7eb;
 }
@@ -157,6 +180,20 @@ body {
   color: white;
 }
 
+/* The writing surface: Lucida Console, true black. Set here rather than via
+   Tailwind utilities on the element so every nested block (headings, lists,
+   quotes, table cells) inherits it too — a `text-slate-700` utility on the
+   host would leave those at their own colours. */
+.rich-editor,
+.vx-editor-title {
+  font-family: var(--vx-editor-font);
+  color: #000;
+}
+.dark .rich-editor,
+.dark .vx-editor-title {
+  color: #fff;
+}
+
 .rich-editor {
   caret-color: transparent; /* native caret hidden; .vx-caret overlay draws the custom asset */
 }
@@ -210,6 +247,42 @@ body {
 }
 .vx-editor-scroll::-webkit-scrollbar-button {
   display: none;
+}
+
+/* Auto-hide while typing. The class is added on keystroke and removed shortly
+   after the last one (RichTextEditor), so the scrollbar retreats out of the way
+   of the words and returns the moment you stop — or the moment you reach for it
+   with the pointer, which is why :hover overrides the hidden state. Only the
+   thumb fades; the scroll container itself keeps its width so the text never
+   reflows when the bar comes and goes. */
+.vx-editor-scroll::-webkit-scrollbar-thumb {
+  transition: background-color 0.35s ease;
+}
+.vx-editor-scroll.vx-typing::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.vx-editor-scroll.vx-typing:hover::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.28);
+  background-clip: padding-box;
+}
+.vx-editor-scroll.vx-typing {
+  scrollbar-color: transparent transparent;
+}
+.vx-editor-scroll.vx-typing:hover {
+  scrollbar-color: rgba(120, 120, 120, 0.35) transparent;
+}
+
+/* Greeting (sidebar header) — the one place the Blue Screen face is used, in
+   the brand green so the wordmark reads as branding rather than as UI text. */
+.vx-greeting {
+  font-family: 'Blue Screen', var(--font-sans);
+  color: var(--vx-brand);
+  letter-spacing: 0.01em;
+}
+.dark .vx-greeting {
+  /* The brand green is too dark to read on black — lift it toward the logo's
+     lighter green while keeping the same hue. */
+  color: #6cc46a;
 }
 
 /* Links in notes — internal note links and external URLs alike (including the

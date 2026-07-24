@@ -15,3 +15,12 @@
 ::highlight(vx-task-done) {
   text-decoration: line-through;
 }
+
+/* Misspellings, from the app's own checker (src/lib/spellcheck.ts) — the OS
+   webview's native underline is off. Same wavy red the platform draws, so it
+   reads as a spelling error and not as app styling. */
+::highlight(vx-misspelled) {
+  text-decoration: underline wavy #e5484d;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}

@@ -27,6 +27,7 @@ use tauri_plugin_fs::FsExt;
 #[cfg(windows)]
 mod native_mark_as;
 mod onedrive;
+mod spellcheck;
 
 // Ordered (label, kind) pairs for the native "Mark as" submenu. The renderer
 // owns the ordering/labels (creator → human authors → AI → Other Website) and
@@ -187,8 +188,14 @@ pub fn run() {
             set_mark_as_items,
             onedrive::start_oauth,
             onedrive::sync_onedrive,
+            spellcheck::spell_check,
+            spellcheck::spell_suggest,
+            spellcheck::spell_add_word,
+            spellcheck::spell_remove_word,
+            spellcheck::spell_user_words,
         ])
         .setup(|app| {
+            spellcheck::load_user_dictionary(app.handle());
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
                 let items = app.state::<MarkAsItems>().0.clone();

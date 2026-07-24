@@ -14,7 +14,7 @@
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
-import { exists, mkdir, readDir, remove, writeFile, writeTextFile, readFile } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, readDir, remove, writeFile, writeTextFile, readFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { writeText as clipboardWriteText, readImage as clipboardReadImage } from '@tauri-apps/plugin-clipboard-manager';
 import { ATTACH_DIR, MEDIA_URL_PREFIX } from './format';
@@ -85,6 +85,28 @@ async function selectDirectory(): Promise<string | null> {
 // Same contract as Electron's fs:readDirectory (see src-tauri/src/lib.rs):
 // missing root comes back as data; scan errors reject.
 const readDirectory = (root: string) => invoke('read_directory', { root });
+
+// File > Open File… — pick one text-ish file and hand back its name + contents.
+// Deliberately text-only: the caller turns this into a new note, and the binary
+// note format (.docx) has its own import path through the workspace scan.
+async function openTextFile(): Promise<{ name: string; content: string } | null> {
+  const picked = await openDialog({
+    multiple: false,
+    filters: [
+      { name: 'Text & notes', extensions: [...NOTE_OPEN_EXTS] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  });
+  if (typeof picked !== 'string' || !picked) return null;
+  const name = picked.split(/[\\/]/).pop() || 'Untitled';
+  return { name, content: await readTextFile(picked) };
+}
+
+// Mirrors NOTE_EXTS in src-tauri/src/lib.rs — the formats Valx reads as notes.
+const NOTE_OPEN_EXTS = [
+  'md', 'markdown', 'mdown', 'mkd', 'txt', 'text', 'html', 'htm',
+  'css', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'py',
+];
 
 async function createFolder(root: string, name: string): Promise<void> {
   await mkdir(joinPath(root, sanitizeRelPath(name)), { recursive: true });
@@ -357,5 +379,6 @@ export function installDesktopBridge(): void {
     listAttachments,
     clipboardWriteText,
     clipboardReadImageFile,
+    openTextFile,
   };
 }

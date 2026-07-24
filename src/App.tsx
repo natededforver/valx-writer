@@ -7,7 +7,9 @@ import { markAsItems, CREATORS_EVENT } from './lib/creators';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
 import { FormatConverter } from './components/FormatConverter';
-import { SettingsModal, LS_SPELL_LANG, LS_FONT, LS_TRANSPARENCY, applyFont, applyTransparency } from './components/SettingsModal';
+import { SettingsModal } from './components/SettingsModal';
+import { DictionaryModal } from './components/DictionaryModal';
+import { LS_TRANSPARENCY, applyTransparency, prefOn } from './lib/prefs';
 import { FilterState, JumpTarget } from './types';
 import { SearchHit } from './lib/search';
 import { linkHrefForNote } from './lib/noteLinks';
@@ -62,10 +64,8 @@ export default function App() {
   // — connect/disconnect both live in Settings now.
   const [highlightOneDriveSettings, setHighlightOneDriveSettings] = useState(false);
   const goToOneDriveSettings = () => { setHighlightOneDriveSettings(true); setIsSettingsOpen(true); };
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const stored = localStorage.getItem('bear-theme-dark');
-    return stored === null ? true : stored === 'true';
-  });
+  // Light is the default look — dark is opt-in, remembered once chosen.
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('bear-theme-dark') === 'true');
 
   // The desktop window is created hidden behind the logo splash. Reveal it
   // once React has committed the first frame, so the app never appears blank.
@@ -136,16 +136,10 @@ export default function App() {
     return () => window.removeEventListener(CREATORS_EVENT, push);
   }, []);
 
-  // Re-apply the saved spellcheck/dictionary language on launch so the desktop
-  // app honours the user's Settings choice over the OS-locale auto-pick.
+  // Re-apply saved appearance preferences on launch. Transparency ships off,
+  // so an unset key means opaque (prefOn handles the ship-defaults).
   useEffect(() => {
-    const api = (window as any).electronAPI;
-    const saved = localStorage.getItem(LS_SPELL_LANG);
-    if (saved && api?.setSpellCheckerLanguages) {
-      api.setSpellCheckerLanguages([saved]);
-    }
-    applyFont(localStorage.getItem(LS_FONT) || '');
-    applyTransparency(localStorage.getItem(LS_TRANSPARENCY) !== 'false');
+    applyTransparency(prefOn(LS_TRANSPARENCY));
   }, []);
 
   // Sync active note logic
@@ -354,6 +348,8 @@ export default function App() {
           listAttachments={listAttachments}
           sidebarOpen={showSidebarEff}
           onToggleSidebar={handleToggleSidebar}
+          onOpenFolder={selectWorkspace}
+          onOpenPreferences={() => setIsSettingsOpen(true)}
           className={`${editorVisible ? 'flex' : 'hidden'} md:flex w-full md:flex-1 min-w-0 pt-14 md:pt-0`}
         />
 
@@ -380,6 +376,10 @@ export default function App() {
         onDisconnectOneDrive={isTauri ? oneDrive.disconnect : undefined}
         highlightOneDrive={highlightOneDriveSettings}
       />
+
+      {/* User dictionary manager — opens on the 'valx-open-dictionary' event
+          the Edit menu fires, so nothing has to thread state down to it. */}
+      <DictionaryModal />
 
       {syncToast && <div className="vx-toast">{syncToast}</div>}
     </div>

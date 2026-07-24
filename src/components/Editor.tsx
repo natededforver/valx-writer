@@ -1,14 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Note, JumpTarget } from '../types';
 import { plainText } from '../lib/search';
-import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Share2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, CodeXml, ArrowLeft, ArrowRight, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Strikethrough, CheckSquare, Type, MoreHorizontal, Minus, Square, Play, ChevronRight, Plus } from 'lucide-react';
+import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, SlidersHorizontal, BookA } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '../lib/desktop';
 import { RichTextEditor } from './RichTextEditor';
-import { formatKind, htmlToMarkdown, markdownToHtml, wordCount } from '../lib/format';
+import { contentFromDisk, formatKind, htmlToMarkdown, markdownToHtml, wordCount } from '../lib/format';
 import { codeLangFromExt, highlightCode, buildPreviewDoc, PREVIEWABLE } from '../lib/codeHighlight';
 import { mediaDisplayHtml, previewMediaBase } from '../lib/desktop';
-import { LS_LINE_COUNTER, LINE_COUNTER_EVENT, LS_HISTORY_INTERVAL, HISTORY_INTERVAL_EVENT, DEFAULT_HISTORY_INTERVAL, LS_WORDCOUNT, LS_WORDCOUNT_GOAL, WORDCOUNT_EVENT } from './SettingsModal';
+import {
+  LS_LINE_COUNTER, LINE_COUNTER_EVENT, LS_WORDCOUNT, WORDCOUNT_EVENT,
+  LS_AUTOCAP, AUTOCAP_EVENT, LS_TRANSPARENCY, LS_TYPEWRITER, TYPEWRITER_EVENT,
+  LS_SPELLCHECK_ON, SPELLCHECK_EVENT, LS_SPELL_LANG,
+  HISTORY_INTERVAL_EVENT, historyInterval, wordGoal, prefOn, setPref,
+  emitWordCount, applyTransparency,
+} from '../lib/prefs';
 import { Creator, CREATORS_EVENT, creatorMeName, setCreatorMeName, loadCreators, saveCreators, newCreatorId } from '../lib/creators';
 import { deriveByline, stripByline, syncByline, bylineIsEmpty } from '../lib/byline';
 import { Snapshot, pushSnapshot, loadHistory, saveHistory } from '../lib/history';
@@ -65,10 +71,14 @@ interface EditorProps {
   /** Desktop sidebar visibility — drives the single toggle arrow in the toolbar. */
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
+  /** File > Open Folder… — swaps the workspace the notes are read from. */
+  onOpenFolder?: () => void;
+  /** File > Preferences… */
+  onOpenPreferences?: () => void;
   className?: string;
 }
 
-export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, deleteNotePerm, isFullscreen, toggleFullscreen, onAddNoteWithContent, onMergeNotes, onSaveNow, jumpTo, onOpenNoteLink, noteExt = '', listAttachments, sidebarOpen, onToggleSidebar, className = '' }: EditorProps) {
+export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, deleteNotePerm, isFullscreen, toggleFullscreen, onAddNoteWithContent, onMergeNotes, onSaveNow, jumpTo, onOpenNoteLink, noteExt = '', listAttachments, sidebarOpen, onToggleSidebar, onOpenFolder, onOpenPreferences, className = '' }: EditorProps) {
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [droppedTextFiles, setDroppedTextFiles] = useState<globalThis.File[] | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -89,16 +99,37 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
 
   // Line counter: a per-app toggle in Settings. Read once, then kept live via
   // the event Settings fires on apply (no reload needed).
-  const [lineCounter, setLineCounter] = useState(() => localStorage.getItem(LS_LINE_COUNTER) === 'true');
+  const [lineCounter, setLineCounter] = useState(() => prefOn(LS_LINE_COUNTER));
   useEffect(() => {
     const onChange = (e: any) => setLineCounter(!!e.detail);
     window.addEventListener(LINE_COUNTER_EVENT, onChange);
     return () => window.removeEventListener(LINE_COUNTER_EVENT, onChange);
   }, []);
 
-  // Word-count widget (corner pill) + optional goal — live-updated from Settings.
-  const [wcOn, setWcOn] = useState(() => localStorage.getItem(LS_WORDCOUNT) !== 'false');
-  const [wcGoal, setWcGoal] = useState(() => parseInt(localStorage.getItem(LS_WORDCOUNT_GOAL) || '0', 10) || 0);
+  // Menu-bar toggles. Each is mirrored in React state (so the menu shows a
+  // checkmark) and in localStorage (so the modules that actually read it —
+  // RichTextEditor's auto-capitalize, the typewriter synth, the spellchecker —
+  // pick it up without being wired through props). setToggle keeps the three
+  // steps in one place instead of five near-identical handlers.
+  const [autoCap, setAutoCap] = useState(() => prefOn(LS_AUTOCAP));
+  const [transparency, setTransparency] = useState(() => prefOn(LS_TRANSPARENCY));
+  const [typewriter, setTypewriter] = useState(() => prefOn(LS_TYPEWRITER));
+  const [spellOn, setSpellOn] = useState(() => prefOn(LS_SPELLCHECK_ON));
+  const setToggle = (
+    key: string,
+    event: string,
+    next: boolean,
+    apply: (v: boolean) => void,
+    extra?: (v: boolean) => void
+  ) => {
+    apply(next);
+    setPref(key, next, event);
+    extra?.(next);
+  };
+
+  // Word-count widget (corner pill) + optional goal — live-updated from Preferences.
+  const [wcOn, setWcOn] = useState(() => prefOn(LS_WORDCOUNT));
+  const [wcGoal, setWcGoal] = useState(() => wordGoal());
   useEffect(() => {
     const onChange = (e: any) => { setWcOn(!!e.detail?.enabled); setWcGoal(e.detail?.goal || 0); };
     window.addEventListener(WORDCOUNT_EVENT, onChange);
@@ -269,10 +300,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // (including the one you just left) stays reachable from the list.
   const [historyOpen, setHistoryOpen] = useState(false);
   const [versions, setVersions] = useState<Snapshot[]>([]);
-  const [historyIntervalMin, setHistoryIntervalMin] = useState(() => {
-    const v = parseInt(localStorage.getItem(LS_HISTORY_INTERVAL) || '', 10);
-    return Number.isFinite(v) && v > 0 ? v : DEFAULT_HISTORY_INTERVAL;
-  });
+  const [historyIntervalMin, setHistoryIntervalMin] = useState(() => historyInterval());
   const noteRef = useRef(note);
   noteRef.current = note;
   useEffect(() => {
@@ -399,6 +427,63 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // File > Open File… — pick a text file and land it in a new note. Desktop
+  // uses the native dialog through the bridge; the browser falls back to a
+  // throwaway <input type=file>, which is the only picker it has.
+  const handleOpenFile = async () => {
+    const toNote = (name: string, raw: string) =>
+      onAddNoteWithContent(name.replace(/\.[^/.]+$/, ''), contentFromDisk(name, raw));
+    const api = (window as any).electronAPI;
+    if (api?.openTextFile) {
+      const picked = await api.openTextFile();
+      if (picked) toNote(picked.name, picked.content);
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.md,.markdown,.txt,.text,.html,.htm,.css,.js,.ts,.tsx,.jsx,.py';
+    input.onchange = async () => {
+      const f = input.files?.[0];
+      if (f) toNote(f.name, await f.text());
+    };
+    input.click();
+  };
+
+  // The global keydown listener registers once, so it must not capture this
+  // render's copies: handleOpenFile reaches onAddNoteWithContent, which closes
+  // over the active folder filter, and a stale one would drop opened files into
+  // whichever folder was selected when the listener was installed. Same
+  // ref-mirroring rule the note/creator handlers in this file already follow.
+  const openFileRef = useRef<() => void>(() => {});
+  const openFolderRef = useRef<(() => void) | undefined>(undefined);
+  const pastePlainRef = useRef<() => void>(() => {});
+
+  // Edit menu: the standard clipboard/history commands. document.execCommand is
+  // deprecated on paper but is still the only API that drives contentEditable's
+  // native undo stack — a hand-rolled history would fight it rather than
+  // replace it. onMouseDown={preventDefault} on the menu rows keeps the
+  // selection alive, so these act on what was selected before the menu opened.
+  const editCmd = (cmd: string) => () => { document.execCommand(cmd); setOpenMenu(null); };
+  // Paste is NOT execCommand('paste'): Chromium (and so WebView2) refuses that
+  // outside a real paste gesture, which would leave a menu item that does
+  // nothing at all. Read the clipboard and insert the text instead. The rich
+  // editor's own context menu routes paste through its slop-marking path; here
+  // in the menu bar — which also serves the code and markdown surfaces — plain
+  // insertion is the behaviour that is correct everywhere.
+  const pasteFromClipboard = async () => {
+    setOpenMenu(null);
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) document.execCommand('insertText', false, text);
+    } catch {
+      showToast('Clipboard unavailable');
+    }
+  };
+  const pastePlain = pasteFromClipboard;
+  openFileRef.current = handleOpenFile;
+  openFolderRef.current = onOpenFolder;
+  pastePlainRef.current = pastePlain;
+
   // Ctrl+S: flush the note to disk and play the save feedback (lime border
   // glow + centered "Saved!" pill). Keyed by timestamp so a rapid second
   // Ctrl+S restarts the animation instead of being swallowed.
@@ -439,6 +524,20 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         setIsFindVisible((v) => !v);
+      }
+
+      // File menu accelerators. Ctrl+Shift+O is Open Folder, plain Ctrl+O is
+      // Open File — checked in that order so the Shift variant isn't swallowed.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        if (e.shiftKey) openFolderRef.current?.();
+        else openFileRef.current();
+      }
+
+      // Ctrl+Shift+V pastes without carrying the source's formatting.
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        pastePlainRef.current();
       }
 
       // Ctrl+P for Print
@@ -739,18 +838,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     setIsShareOpen(false);
   };
 
-  const handleCopyToClipboard = async () => {
-      const plainText = note.title + '\n\n' + note.content.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
-      try {
-          const api = (window as any).electronAPI;
-          if (api?.clipboardWriteText) await api.clipboardWriteText(plainText);
-          else await navigator.clipboard.writeText(plainText);
-          showToast("Copied to clipboard!");
-      } catch(err) {
-          showToast("Failed to copy to clipboard.");
-      }
-      setIsShareOpen(false);
-  };
 
   // Each file's text -> HTML, joined in drop order with a blank line between
   // files so a multi-file drop reads as one continuous document, not a wall
@@ -847,6 +934,9 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               <div className={menuPopCls}>
                 {!note.isTrash ? (
                   <>
+                    <button onClick={() => { setOpenMenu(null); handleOpenFile(); }} className={itemCls}><FileUp size={15} className="opacity-60" /> Open File…<span className={shortcutCls}>Ctrl O</span></button>
+                    {onOpenFolder && <button onClick={() => { setOpenMenu(null); onOpenFolder(); }} className={itemCls}><FolderOpen size={15} className="opacity-60" /> Open Folder…<span className={shortcutCls}>Ctrl Shift O</span></button>}
+                    <div className={dividerCls} />
                     <button onClick={() => { onSaveNow?.(note.id); setOpenMenu(null); }} className={itemCls}><Check size={15} className="opacity-60" /> Save<span className={shortcutCls}>Ctrl S</span></button>
                     <div className={dividerCls} />
                     {/* Export as → flyout */}
@@ -874,8 +964,9 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                       )}
                     </div>
                     <div className={dividerCls} />
-                    <button onClick={() => { handleCopyToClipboard(); setOpenMenu(null); }} className={itemCls}><Copy size={15} className="opacity-60" /> Copy all text</button>
                     <button onClick={() => { setOpenMenu(null); handlePrint(); }} className={itemCls}><Printer size={15} className="opacity-60" /> Print<span className={shortcutCls}>Ctrl P</span></button>
+                    <div className={dividerCls} />
+                    {onOpenPreferences && <button onClick={() => { setOpenMenu(null); onOpenPreferences(); }} className={itemCls}><SlidersHorizontal size={15} className="opacity-60" /> Preferences…<span className={shortcutCls}>Ctrl ,</span></button>}
                     <div className={dividerCls} />
                     <button onClick={() => { moveToTrash(note.id); setOpenMenu(null); }} className={itemCls}><Trash2 size={15} className="opacity-60" /> Move to Trash</button>
                   </>
@@ -893,9 +984,33 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           <div className="relative z-50">
             <button onClick={() => setOpenMenu((m) => (m === 'edit' ? null : 'edit'))} onMouseEnter={() => openMenu && setOpenMenu('edit')} className={menuBtnCls('edit')}>Edit</button>
             {openMenu === 'edit' && (
-              <div className={menuPopCls}>
+              /* onMouseDown={preventDefault} on every row: opening a menu would
+                 otherwise blur the editor and collapse the selection, so Cut /
+                 Copy / formatting would act on nothing. */
+              <div className={menuPopCls} onMouseDown={(e) => e.preventDefault()}>
+                <button onClick={editCmd('undo')} className={itemCls}><Undo2 size={15} className="opacity-60" /> Undo<span className={shortcutCls}>Ctrl Z</span></button>
+                <button onClick={editCmd('redo')} className={itemCls}><Redo2 size={15} className="opacity-60" /> Redo<span className={shortcutCls}>Ctrl Shift Z</span></button>
+                <div className={dividerCls} />
+                <button onClick={editCmd('cut')} className={itemCls}><Scissors size={15} className="opacity-60" /> Cut<span className={shortcutCls}>Ctrl X</span></button>
+                <button onClick={editCmd('copy')} className={itemCls}><Copy size={15} className="opacity-60" /> Copy<span className={shortcutCls}>Ctrl C</span></button>
+                <button onClick={pasteFromClipboard} className={itemCls}><ClipboardPaste size={15} className="opacity-60" /> Paste<span className={shortcutCls}>Ctrl V</span></button>
+                <button onClick={pastePlain} className={itemCls}><ClipboardType size={15} className="opacity-60" /> Paste as plain text<span className={shortcutCls}>Ctrl Shift V</span></button>
+                <div className={dividerCls} />
+                <button onClick={editCmd('selectAll')} className={itemCls}><TextSelect size={15} className="opacity-60" /> Select All<span className={shortcutCls}>Ctrl A</span></button>
+                <div className={dividerCls} />
                 <button onClick={() => { setIsFindVisible(true); setOpenMenu(null); }} className={itemCls}><Search size={15} className="opacity-60" /> Find in note<span className={shortcutCls}>Ctrl F</span></button>
-                <button onClick={() => { handleCopyToClipboard(); setOpenMenu(null); }} className={itemCls}><Copy size={15} className="opacity-60" /> Copy all text</button>
+                <div className={dividerCls} />
+                <div className={sectionCls}>Spelling</div>
+                <button onClick={() => setToggle(LS_SPELLCHECK_ON, SPELLCHECK_EVENT, !spellOn, setSpellOn)} className={itemCls}>
+                  <Check size={14} className={spellOn ? 'text-[#32CD32]' : 'opacity-0'} /> Check spelling while typing
+                </button>
+                <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-open-dictionary')); }} className={itemCls}>
+                  <BookA size={15} className="opacity-60" /> Dictionary…
+                </button>
+                <div className={dividerCls} />
+                <button onClick={() => setToggle(LS_AUTOCAP, AUTOCAP_EVENT, !autoCap, setAutoCap)} className={itemCls}>
+                  <Check size={14} className={autoCap ? 'text-[#32CD32]' : 'opacity-0'} /> Auto-capitalize
+                </button>
               </div>
             )}
           </div>
@@ -907,7 +1022,9 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               {openMenu === 'format' && (
                 <div className={menuPopCls}>
                   {isCodeNote ? (
-                    <button onClick={() => { setSyntaxViewer((v) => !v); setOpenMenu(null); }} className={itemCls}><CodeXml size={15} className="opacity-60" /> Syntax highlighting <span className="ml-auto text-[10px] text-slate-400">{syntaxViewer ? 'On' : 'Off'}</span></button>
+                    /* Code notes have nothing to format — everything that used
+                       to sit here (syntax highlighting) is a View concern. */
+                    <div className="px-3 py-1.5 text-[11px] text-slate-400 dark:text-slate-500">Nothing to format in a code file.</div>
                   ) : (
                     <>
                       {!mdSource && (
@@ -927,9 +1044,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                           <button onMouseDown={(e) => e.preventDefault()} onClick={() => { setTableMenu(true); setTHover({ r: 0, c: 0 }); setOpenMenu(null); }} className={itemCls}><Table size={15} className="opacity-60" /> Insert table…</button>
                         </>
                       )}
-                      {isMdNote && (
-                        <button onClick={() => { toggleMdSource(); setOpenMenu(null); }} className={itemCls}><CodeXml size={15} className="opacity-60" /> {mdSource ? 'Rich text view' : 'Markdown source'}</button>
-                      )}
                     </>
                   )}
                 </div>
@@ -943,9 +1057,35 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             {openMenu === 'view' && (
               <div className={menuPopCls}>
                 <button onClick={() => { toggleFullscreen(); setOpenMenu(null); }} className={itemCls}>{isFullscreen ? <Minimize2 size={15} className="opacity-60" /> : <Maximize2 size={15} className="opacity-60" />} {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}<span className={shortcutCls}>F11</span></button>
-                {canPreview && <button onClick={() => { setShowPreview((v) => !v); setOpenMenu(null); }} className={itemCls}><Eye size={15} className="opacity-60" /> {showPreview ? 'Hide preview' : 'Preview'}</button>}
-                {!note.isTrash && <button onClick={() => { openHistory(); setOpenMenu(null); }} className={itemCls}><History size={15} className="opacity-60" /> Version history</button>}
                 {onToggleSidebar && <button onClick={() => { onToggleSidebar(); setOpenMenu(null); }} className={itemCls}><ArrowLeft size={15} className="opacity-60" /> {sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}</button>}
+                <div className={dividerCls} />
+                {/* Markdown source moved here from Format: it swaps what the
+                    editor SHOWS, it doesn't change the note's formatting. */}
+                {isMdNote && !note.isTrash && (
+                  <button onClick={() => { toggleMdSource(); setOpenMenu(null); }} className={itemCls}>
+                    <Check size={14} className={mdSource ? 'text-[#32CD32]' : 'opacity-0'} /> Markdown source
+                  </button>
+                )}
+                {isCodeNote && <button onClick={() => { setSyntaxViewer((v) => !v); setOpenMenu(null); }} className={itemCls}><Check size={14} className={syntaxViewer ? 'text-[#32CD32]' : 'opacity-0'} /> Syntax highlighting</button>}
+                {canPreview && <button onClick={() => { setShowPreview((v) => !v); setOpenMenu(null); }} className={itemCls}><Eye size={15} className="opacity-60" /> {showPreview ? 'Hide preview' : 'Preview'}</button>}
+                <div className={dividerCls} />
+                <div className={sectionCls}>Counters</div>
+                <button onClick={() => setToggle(LS_WORDCOUNT, '', !wcOn, setWcOn, emitWordCount)} className={itemCls}>
+                  <Check size={14} className={wcOn ? 'text-[#32CD32]' : 'opacity-0'} /> Word count
+                </button>
+                <button onClick={() => setToggle(LS_LINE_COUNTER, LINE_COUNTER_EVENT, !lineCounter, setLineCounter)} className={itemCls}>
+                  <Check size={14} className={lineCounter ? 'text-[#32CD32]' : 'opacity-0'} /> Line numbers
+                </button>
+                <div className={dividerCls} />
+                <div className={sectionCls}>Appearance</div>
+                <button onClick={() => setToggle(LS_TRANSPARENCY, '', !transparency, setTransparency, applyTransparency)} className={itemCls}>
+                  <Check size={14} className={transparency ? 'text-[#32CD32]' : 'opacity-0'} /> Transparency
+                </button>
+                <button onClick={() => setToggle(LS_TYPEWRITER, TYPEWRITER_EVENT, !typewriter, setTypewriter)} className={itemCls}>
+                  <Check size={14} className={typewriter ? 'text-[#32CD32]' : 'opacity-0'} /> Typewriter sounds
+                </button>
+                <div className={dividerCls} />
+                {!note.isTrash && <button onClick={() => { openHistory(); setOpenMenu(null); }} className={itemCls}><History size={15} className="opacity-60" /> Version history</button>}
               </div>
             )}
           </div>

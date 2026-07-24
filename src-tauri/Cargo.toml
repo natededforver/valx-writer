@@ -28,6 +28,11 @@ serde_json = "1"
 # every Graph call is one-shot from a tauri::command. sha2/getrandom/base64
 # are for PKCE (code_verifier/code_challenge) — hand-rolling that crypto is
 # exactly the kind of "simplification" that isn't worth the risk.
+# Spellchecking (src/spellcheck.rs). Pure-Rust Hunspell-compatible checker, so
+# there is no libhunspell to find or ship on Windows. The en_US dictionary is
+# baked into the binary with include_str! (see spellcheck.rs) — the app owns its
+# dictionary rather than deferring to whatever the OS webview happens to have.
+spellbook = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 url = "2"
 sha2 = "0.10"

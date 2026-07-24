@@ -3,7 +3,7 @@ import {
   buildTableHtml, getCellFromSelection, moveCell as tableMoveCell,
   addRow, addColumn, deleteRow, deleteColumn, deleteTable, isTableEmpty,
 } from '../lib/tableEditing';
-import { Plus, Minus, Trash2 } from 'lucide-react';
+import { Plus, Minus, Trash2, BookPlus, EyeOff, Scissors, Copy, ClipboardPaste, Tag } from 'lucide-react';
 import { JumpTarget } from '../types';
 import { parseTrailingMdLink } from '../lib/noteLinks';
 import { slopWrapText, wordSpans, SlopType } from '../lib/slop';
@@ -11,6 +11,11 @@ import { mediaDisplaySrc, mediaDisplayHtml, mediaCanonicalHtml, onNativeMarkAs }
 import { SlashMenu, SlashItem, SlashSyntaxItem, SlashMediaItem } from './SlashMenu';
 import { AttachmentItem } from '../hooks/useFileSystem';
 import { typewriterEnabled, playKey, playReturn } from '../lib/typewriter';
+import {
+  paintMisspellings, suggest, wordAtPoint, addWord, ignoreWord, DICTIONARY_EVENT,
+} from '../lib/spellcheck';
+import { SPELLCHECK_EVENT } from '../lib/prefs';
+import { markAsItems } from '../lib/creators';
 
 interface RichTextEditorProps {
   value: string;
@@ -179,11 +184,34 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   // Custom text caret: the native caret is hidden (caret-color: transparent in
   // index.css) and this overlay draws the asset at the insertion point. Reads
   // only refs + live DOM selection — no React state — so deps stay [] and the
-  // listeners register once (per the ref-mirroring rule in CLAUDE.md).
+  // listeners register once — a listener that captured state would go stale.
   useEffect(() => {
     const editor = editorRef.current;
     const caret = caretRef.current;
     if (!editor || !caret) return;
+
+    // Base inline-box height of the editor's own font, measured once per font
+    // (an invisible span with line-height:normal reports exactly the height a
+    // collapsed Range reports inside plain body text). It is the constant the
+    // caret is centred against — see the anchoring note in place() below.
+    let baseH = 0;
+    let baseKey = '';
+    const baseInlineH = (): number => {
+      const cs = getComputedStyle(editor);
+      const key = `${cs.fontSize}|${cs.fontFamily}`;
+      if (key === baseKey && baseH) return baseH;
+      const probe = document.createElement('span');
+      probe.textContent = 'x';
+      probe.setAttribute(
+        'style',
+        'position:absolute!important;visibility:hidden!important;white-space:pre!important;line-height:normal!important'
+      );
+      editor.appendChild(probe);
+      baseH = probe.getBoundingClientRect().height || parseFloat(cs.fontSize) || 16;
+      probe.remove();
+      baseKey = key;
+      return baseH;
+    };
 
     const place = () => {
       const sel = window.getSelection();
@@ -219,9 +247,21 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
       caret.style.display = 'block';
       caret.style.height = CARET_H + 'px';
       caret.style.width  = CARET_W + 'px';
-      const lineH = rect.height || CARET_H;
-      caret.style.left = rect.left - host.left - CARET_W / 2 + 'px';
-      caret.style.top  = rect.top  - host.top  + (lineH - CARET_H) / 2 + 'px';
+      // Anchor on the line's BOTTOM, not on the centre of whatever inline box
+      // the caret happens to sit in. Inline boxes on one line are aligned by
+      // BASELINE, not by centre: <code> (0.9em, its own font) measures 17px tall
+      // at y=24 where the surrounding body text measures 19px at y=22 — same
+      // line, centres 1px apart. Centring on rect.height therefore made the
+      // caret hop up and down as it crossed code spans, links, marks and any
+      // mixed-size run. Baseline-aligned boxes DO share a bottom edge, so
+      // rect.bottom is invariant along the line; offsetting from it by a
+      // constant (the base font's own inline height) pins the caret to one
+      // height for the whole line. Rounded because the asset is a raster image:
+      // the quarter-pixel offsets line-height produces would otherwise
+      // rasterise to different pixel rows line by line.
+      const bottom = rect.bottom ?? rect.top + rect.height;
+      caret.style.left = Math.round(rect.left - host.left - CARET_W / 2) + 'px';
+      caret.style.top  = Math.round(bottom - host.top - (CARET_H + baseInlineH()) / 2) + 'px';
       // Restart the blink so the caret is solid the instant it moves.
       caret.style.animation = 'none';
       void caret.offsetWidth;
@@ -371,7 +411,8 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   };
 
   // Caret moves (click, arrows) trigger the empty-mark cleanup.
-  // Refs, not closures: this listener registers once (CLAUDE.md ref-mirroring).
+  // Refs, not closures: this listener registers once, so it must read the
+  // current handler rather than the one captured at subscribe time.
   const updateSlopEditRef = useRef(updateSlopEdit);
   updateSlopEditRef.current = updateSlopEdit;
   useEffect(() => {
@@ -441,13 +482,75 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     return editorRef.current?.contains(r.commonAncestorContainer) ? r : null;
   };
 
+  // Right-click menu. This used to defer entirely to WebView2's native menu so
+  // its spelling suggestions survived (native_mark_as.rs spliced "Mark as" into
+  // it). Now that the app owns spellchecking, the native menu has nothing left
+  // that we can't draw ourselves — and it never had "Add to Dictionary" exposed
+  // to the host at all, which is the item this menu exists to provide.
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number; y: number;
+    word: string | null; range: Range | null; suggestions: string[];
+    hasSelection: boolean;
+  } | null>(null);
+
   const handleContextMenu = (e: React.MouseEvent) => {
+    if (disabled) return;
     const r = selectionInEditor();
-    if (disabled || !r) return;
-    // Never preventDefault here — the OS/webview owns the native menu
-    // (spellcheck suggestions, cut/copy/paste, and the injected "Mark as"
-    // submenu from native_mark_as.rs).
-    slopRangeRef.current = r.cloneRange();
+    if (r) slopRangeRef.current = r.cloneRange();
+    e.preventDefault();
+    const { clientX: x, clientY: y } = e;
+    setCtxMenu({ x, y, word: null, range: null, suggestions: [], hasSelection: !!r });
+    // Suggestions need two async hops (word lookup, then the suggest call), so
+    // the menu opens immediately and fills in its spelling section when they
+    // land — a menu that waited would feel broken on a slow first check.
+    void (async () => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const hit = await wordAtPoint(editor, x, y);
+      if (!hit) return;
+      const suggestions = await suggest(hit.word);
+      setCtxMenu((m) => (m && m.x === x && m.y === y
+        ? { ...m, word: hit.word, range: hit.range, suggestions }
+        : m));
+    })();
+  };
+
+  // Menu-driven paste. document.execCommand('paste') is refused by Chromium
+  // (and therefore by WebView2) outside a real paste gesture — wiring the menu
+  // item to it would have made a button that silently does nothing. Read the
+  // clipboard asynchronously instead and insert through the same
+  // slop-marking path the paste EVENT uses, so text pasted from the menu
+  // carries the same provenance marks as text pasted with Ctrl+V.
+  const pasteFromClipboard = async () => {
+    setCtxMenu(null);
+    if (disabled) return;
+    let text = '';
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      return; // clipboard permission denied — nothing sensible to do
+    }
+    if (!text) return;
+    editorRef.current?.focus();
+    if (text === lastInternalCopyRef.current) {
+      document.execCommand('insertText', false, text);
+    } else {
+      suppressUnwrapRef.current = true;
+      try { insertHtmlAtCaret(slopWrapText(text, 'paste')); }
+      finally { suppressUnwrapRef.current = false; }
+    }
+    handleInput();
+  };
+
+  /** Replace the misspelled range with a correction, keeping the caret after it. */
+  const applySuggestion = (range: Range, replacement: string) => {
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('insertText', false, replacement);
+    setCtxMenu(null);
+    handleInput();
   };
 
   const markSelectionAs = (type: 'me' | SlopType, opts?: { author?: string; site?: string; url?: string }) => {
@@ -486,7 +589,35 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     }
     paintTagHighlights();
     paintTaskHighlights();
+    scheduleSpellPaint();
   }, [value]);
+
+  // Spellcheck repaint. Debounced and trailing-edge only: each pass walks the
+  // document and (for words it hasn't judged yet) makes one IPC call, so running
+  // it per keystroke would both thrash the backend and underline half-typed
+  // words the instant they stop matching. 600ms is long enough that a word is
+  // finished before it is judged.
+  const spellTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleSpellPaint = useCallback(() => {
+    if (spellTimer.current) clearTimeout(spellTimer.current);
+    spellTimer.current = setTimeout(() => {
+      if (editorRef.current) void paintMisspellings(editorRef.current);
+    }, 600);
+  }, []);
+  useEffect(() => () => { if (spellTimer.current) clearTimeout(spellTimer.current); }, []);
+
+  // Toggling "Check spelling while typing", or adding/removing a dictionary
+  // word, has to repaint immediately — the words on screen didn't change, the
+  // verdicts about them did.
+  useEffect(() => {
+    const repaint = () => { if (editorRef.current) void paintMisspellings(editorRef.current); };
+    window.addEventListener(SPELLCHECK_EVENT, repaint);
+    window.addEventListener(DICTIONARY_EVENT, repaint);
+    return () => {
+      window.removeEventListener(SPELLCHECK_EVENT, repaint);
+      window.removeEventListener(DICTIONARY_EVENT, repaint);
+    };
+  }, []);
 
   // Search-result navigation: select + scroll to the occurrence-th match of
   // jumpTo.query, and pulse an overlay so the hit stays visible even after the
@@ -576,7 +707,23 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     if (e.key === ')' && !disabled && maybeConvertMdLink()) handleInput();
   };
 
+  // Scrollbar auto-hide: while keystrokes keep arriving the enclosing scroll
+  // container carries .vx-typing (index.css fades the thumb out); it clears
+  // shortly after the last one. Pointer :hover still overrides the hidden
+  // state, so reaching for the bar always brings it back — "intelligently"
+  // hidden means out of the way of the words, not unreachable.
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markTyping = useCallback(() => {
+    const scroller = editorRef.current?.closest('.vx-editor-scroll');
+    if (!scroller) return;
+    scroller.classList.add('vx-typing');
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => scroller.classList.remove('vx-typing'), 1200);
+  }, []);
+  useEffect(() => () => { if (typingTimer.current) clearTimeout(typingTimer.current); }, []);
+
   const handleInput = useCallback((e?: React.FormEvent) => {
+    markTyping();
     updateSlopEditRef.current();
     trackSlashRef.current();
     // '/' menu trigger — inspects the caret's own preceding character rather
@@ -656,8 +803,9 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
       onChange(mediaCanonicalHtml(editorRef.current.innerHTML));
       paintTagHighlights();
       paintTaskHighlights();
+      scheduleSpellPaint();
     }
-  }, [onChange]);
+  }, [onChange, markTyping]);
 
   // Read a File as raw base64 (no data: prefix) for the media import IPC.
   const readBase64 = (file: File): Promise<string> =>
@@ -1318,6 +1466,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   };
 
   const toolBtn = 'flex items-center gap-1 px-1.5 py-1 rounded hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-600 dark:text-slate-300 transition-colors';
+  const ctxItemCls = 'w-full text-left px-3 py-1.5 flex items-center gap-2 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-neutral-900 transition-colors disabled:opacity-40 disabled:hover:bg-transparent';
 
   return (
     <div className="relative" onMouseLeave={hideMediaTool}>
@@ -1341,11 +1490,88 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
         onMouseOver={(e) => showMediaTool(e.target as HTMLElement)}
         onDragOver={e => e.preventDefault()}
         data-placeholder={placeholder}
-        spellCheck={!disabled}
-        className={`rich-editor w-full min-h-[60vh] text-lg text-slate-700 dark:text-slate-300 leading-relaxed border-none outline-none focus:outline-none bg-transparent empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 dark:empty:before:text-slate-600 break-words ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
+        // The app checks spelling itself (src/lib/spellcheck.ts + the Rust
+        // backend) so it can own the language and offer "Add to Dictionary" —
+        // neither of which WebView2's built-in checker exposes to the host.
+        // Leaving the native one on would double-underline every word.
+        spellCheck={false}
+        className={`rich-editor w-full min-h-[60vh] text-lg leading-relaxed border-none outline-none focus:outline-none bg-transparent empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 dark:empty:before:text-slate-600 break-words ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
         style={{ whiteSpace: 'pre-wrap' }}
       />
       <div ref={caretRef} aria-hidden className="vx-caret" style={{ display: 'none' }} />
+
+      {/* Right-click menu — spelling first (the reason it exists), then the
+          clipboard commands the native menu used to provide, then "Mark as"
+          for a selection. Fixed-positioned at the pointer; mousedown anywhere
+          else dismisses it. */}
+      {ctxMenu && !disabled && (
+        <>
+          <div className="fixed inset-0 z-[59]" onMouseDown={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
+          <div
+            className="context-pop fixed z-[60] min-w-52 max-w-72 rounded-lg bg-white dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 shadow-xl py-1 text-sm"
+            style={{ top: Math.min(ctxMenu.y, window.innerHeight - 280), left: Math.min(ctxMenu.x, window.innerWidth - 240) }}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {ctxMenu.word && (
+              <>
+                {ctxMenu.suggestions.length > 0 ? (
+                  ctxMenu.suggestions.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => ctxMenu.range && applySuggestion(ctxMenu.range, s)}
+                      className="w-full text-left px-3 py-1.5 font-semibold text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-neutral-900 transition-colors"
+                    >
+                      {s}
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-3 py-1.5 text-xs text-slate-400 dark:text-slate-500">No suggestions</div>
+                )}
+                <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
+                <button
+                  onClick={() => { void addWord(ctxMenu.word!); setCtxMenu(null); }}
+                  className={ctxItemCls}
+                >
+                  <BookPlus size={15} className="opacity-60" /> Add to Dictionary
+                </button>
+                <button
+                  onClick={() => { ignoreWord(ctxMenu.word!); setCtxMenu(null); }}
+                  className={ctxItemCls}
+                >
+                  <EyeOff size={15} className="opacity-60" /> Ignore
+                </button>
+                <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
+              </>
+            )}
+
+            <button onClick={() => { document.execCommand('cut'); setCtxMenu(null); handleInput(); }} disabled={!ctxMenu.hasSelection} className={ctxItemCls}>
+              <Scissors size={15} className="opacity-60" /> Cut
+            </button>
+            <button onClick={() => { document.execCommand('copy'); setCtxMenu(null); }} disabled={!ctxMenu.hasSelection} className={ctxItemCls}>
+              <Copy size={15} className="opacity-60" /> Copy
+            </button>
+            <button onClick={pasteFromClipboard} className={ctxItemCls}>
+              <ClipboardPaste size={15} className="opacity-60" /> Paste
+            </button>
+
+            {ctxMenu.hasSelection && (
+              <>
+                <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
+                <div className="px-3 pt-1 pb-0.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Mark as</div>
+                {markAsItems().map(([label, kind]) => (
+                  <button
+                    key={kind + label}
+                    onClick={() => { markSelectionAs(kind as any); setCtxMenu(null); }}
+                    className={ctxItemCls}
+                  >
+                    <Tag size={15} className="opacity-60" /> <span className="truncate">{label}</span>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       {slashPos && !disabled && (
         <SlashMenu

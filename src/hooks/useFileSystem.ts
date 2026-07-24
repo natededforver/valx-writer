@@ -99,7 +99,8 @@ export function useFileSystem() {
   const selectWorkspace = async () => {
     try {
       // Desktop backend first (Tauri bridge installs window.electronAPI; the
-      // 'electron' kind string is a legacy identity key — see CLAUDE.md).
+      // 'electron' kind string is a legacy identity key, kept so stored
+      // workspace handles from older versions still resolve).
       if ('electronAPI' in window) {
         const path = await (window as any).electronAPI.selectDirectory();
         if (path) {

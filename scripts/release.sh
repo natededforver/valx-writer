@@ -11,7 +11,7 @@
 # know which slice they need.
 #
 # Output lands in out/release/ with stable asset names:
-#   valx-prose-writer.dmg  and  valx-prose-writer-mac.zip
+#   valx-prose-writer.dmg
 #
 # Signing & notarization (optional; unsigned builds work but Gatekeeper will
 # make the user right-click > Open on first launch). Set before running:
@@ -93,8 +93,6 @@ fi
 
 mkdir -p out/release
 cp "$DMG" "out/release/valx-prose-writer.dmg"
-# ditto (not zip) so the bundle's symlinks and signature survive the archive.
-ditto -c -k --sequesterRsrc --keepParent "$APP" "out/release/valx-prose-writer-mac.zip"
 
 green "Release artifacts (v$VERSION)"
 ls -lh out/release | awk 'NR>1 {printf "%s  %s\n", $9, $5}'
@@ -104,6 +102,5 @@ if [[ "$PUBLISH" == "1" ]]; then
   command -v gh >/dev/null || { echo "gh not found — install the GitHub CLI and run 'gh auth login'" >&2; exit 1; }
   gh release create "v$VERSION" \
     out/release/valx-prose-writer.dmg \
-    out/release/valx-prose-writer-mac.zip \
     --title "Valx Writer v$VERSION" --generate-notes
 fi

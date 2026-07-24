@@ -1,120 +1,107 @@
 <div align="center">
-  <img src="site/logo.png" alt="Valx Prose Writer logo" width="120" />
+  <img src="site/logo.png" alt="Valx Prose Writer logo" width="100" />
 
   # Valx Prose Writer
 
   **A minimalist, local-first writing app. Your words, your disk.**
 
-  No accounts. No subscriptions. Every note is a real
-  file, in a folder you choose, on your machine.
+  No accounts. No subscriptions. No telemetry.<br />
+  Every note is a real file, in a folder you choose, on your machine.
 
-  [Download](#download) · [Features](#features) · [Building from source](#building-from-source)
+  [Download](#download) · [Features](#features) · [Build from source](#build-from-source)
 </div>
-
-<!-- SCREENSHOT: hero shot of the editor in dark mode -->
-<!-- <img src="docs/screenshots/editor-hero.png" alt="Valx editor" width="800" /> -->
 
 ---
 
 ## Download
 
-Grab the latest build from [**GitHub Releases**](https://github.com/natededforver/valx-writer/releases/latest):
-
-| Build | What it is |
+| Platform | Download |
 |---|---|
-| `Valx Prose Writer_x.x.x_x64-setup.exe` | **Windows** — NSIS installer, installs to your user profile, adds a Start Menu entry, clean uninstall. |
-| `valx-prose-writer-portable-windows.zip` | **Windows** — portable; unzip and run `valx-prose-writer.exe` anywhere, no install, no admin rights. |
-| `valx-prose-writer.dmg` | **macOS 11+** — universal (Apple Silicon + Intel); drag to Applications. |
-| `valx-prose-writer-mac.zip` | **macOS 11+** — the same `.app`, zipped, for anyone who'd rather not mount a disk image. |
+| **Windows** 10 / 11, 64-bit | [`valx-prose-writer-setup.exe`](https://github.com/natededforver/valx-writer/releases/latest/download/valx-prose-writer-setup.exe) |
+| **macOS** 11 Big Sur and up | [`valx-prose-writer.dmg`](https://github.com/natededforver/valx-writer/releases/latest/download/valx-prose-writer.dmg) — universal, Apple Silicon & Intel |
 
-Built with [Tauri](https://tauri.app/) — a Rust shell over the OS's own webview (WebView2 on Windows, WKWebView on macOS), not Electron, so the app is a few MB, not a few hundred.
+Every version lives on the [releases page](https://github.com/natededforver/valx-writer/releases).
 
-If the macOS build isn't notarized yet, Gatekeeper will refuse the first launch;
-right-click the app and choose **Open** once to get past it.
+Built with [Tauri](https://tauri.app/): a Rust shell over the OS's own webview —
+WebView2 on Windows, WKWebView on macOS. A few MB, not a few hundred.
 
-<!-- VIDEO: 30-second install + first-run walkthrough -->
-<!-- <video src="docs/screenshots/install-demo.mp4" controls width="800"></video> -->
+> **First launch.** Windows may ask you to confirm an app from a new publisher —
+> choose *More info → Run anyway*. On macOS, right-click Valx in Applications and
+> choose *Open* once. Both go away once the builds are signed.
 
 ## Features
 
-### Writing
-- **Live markdown** — type `#` for headings, `**bold**`, `*italic*`, `~~strike~~`, lists, tables, code blocks; renders as you type, saved to disk as clean markdown (or `.txt`/`.html`, your choice).
-- **Slash menu** (`/`) — quick-insert headings, lists, tables, dividers, and media without leaving the keyboard.
-- **Full markdown source mode** — drop into raw markdown when you want it.
-- **Rich media** — drag images, audio, and video straight into a note; files are referenced from disk, not bloated into the note itself.
-- **Word count**, spellcheck (the app's own Hunspell-compatible checker with bundled en/fr/de/it/es dictionaries — identical on every platform, not whatever the OS webview happens to ship), and a slash-anchored formatting toolbar.
+**Writing.** Live markdown — type `#`, `**bold**`, `*italic*`, `~~strike~~`, lists,
+tables, code blocks and watch them render as you type, saved to disk as clean
+markdown (or `.txt` / `.html`, your choice). A slash menu (`/`) inserts headings,
+lists, tables, dividers and media without leaving the keyboard, and you can drop
+into raw markdown source whenever you want it.
 
-<!-- SCREENSHOT: slash menu open in a note -->
+**Media.** Drag images, audio and video straight into a note. Files are referenced
+from disk, never bloated into the note itself.
 
-### Organization
-- **Folders (Groups)**, **tags**, **search** (jump straight to the matching word in a note), and **bookmarks** for quick access.
-- **Trash** with confirmation before permanent delete.
-- Multi-select notes for bulk move/delete.
-- Resizable, collapsible sidebar and preview rail; double-click a rail to snap it fullscreen.
+**Spellcheck.** The app's own Hunspell-compatible checker with English, French,
+German, Italian and Spanish bundled — identical on every platform rather than
+whatever the OS webview happens to ship. Add to Dictionary included.
 
-<!-- SCREENSHOT: sidebar with folders, tags, bookmarks expanded -->
+**Organization.** Folders, tags, search that jumps to the matching word, bookmarks,
+multi-select for bulk moves, and a trash that asks before deleting for good.
 
-### World Mode
-A visual canvas for planning: drag out nodes, connect them, arrange your story/project spatially instead of linearly. Every mutation is undo/redo-safe.
+**Provenance ("Mark as").** Select any text and mark it as written by you, by AI,
+or sourced from another website — with a reference line appended automatically —
+so a note can honestly show what's yours and what isn't. It sits in the editor's
+right-click menu next to the spelling suggestions, the same on both platforms.
 
-<!-- SCREENSHOT: World Mode canvas with a few connected nodes -->
+**Format freedom.** Convert a whole workspace, or one note, between `.md`, `.txt`,
+`.html` and `.docx` in a click. Export to PDF, DOCX or ODT. Tables and file-chip
+attachments survive the round trip.
 
-### Slop detector ("Mark as")
-Select any text and mark it as written by **you**, by **AI**, or sourced from **another website** (with an auto-appended reference line) — so a note can honestly show what's yours and what isn't. It lives in the editor's right-click menu, alongside the spelling suggestions and Add to Dictionary — same menu, same place, on Windows and macOS.
+**Sync, your way.** Point your workspace at a Google Drive, Dropbox or Mega folder
+and their own client handles it — no Valx account, ever. For OneDrive, sign in
+under Settings and Valx syncs directly, resolving conflicts by newest edit, with
+no OneDrive client required. Or stay entirely offline.
 
-<!-- SCREENSHOT: native context menu showing the Mark as submenu -->
+## Platform differences
 
-### Format freedom
-- Convert your whole workspace (or just the note you have open) between `.md`, `.txt`, `.html`, and `.docx` in one click.
-- Export any note to PDF, DOCX, or ODT.
-- Obsidian-style tables and file-chip attachments read and write correctly round-trip.
+The app is the same on both; the window it lives in is not.
 
-### Themes & appearance
-- Dark mode by default, full light mode by toggle.
-- Frameless, custom title bar with native-feeling window controls.
+| | Windows | macOS |
+|---|---|---|
+| Window | Frameless, app-drawn caption buttons | Native decorations and traffic lights |
+| Menus | In-window menu bar | In-window menu bar plus the system menu bar |
+| Shortcuts | `Ctrl` | `⌘`, shown with proper glyphs |
+| Closing | Closing the window quits | `⌘W` hides, `⌘Q` quits, Dock icon restores |
+| Distraction-free | Chrome fades away | Chrome and traffic lights fade; hover the top edge |
 
-<!-- SCREENSHOT: settings panel / theme picker -->
+Everything that differs lives in
+[`src-tauri/tauri.macos.conf.json`](src-tauri/tauri.macos.conf.json), which Tauri
+merges over the base config only when the host is macOS. The base config stays the
+Windows one, so a Windows build is unaffected by anything in the macOS overlay.
 
-### Sync, your way
-Point your workspace folder at Google Drive, Dropbox, or Mega, and syncing happens automatically through that service's own desktop client — no account with Valx, ever. Or stay fully offline.
+## Build from source
 
-For OneDrive specifically, Valx can sync directly: sign in with your Microsoft account in Settings and Valx pulls and pushes your workspace on demand, resolving conflicts by newest edit — no OneDrive desktop client required.
+You'll need [Node.js](https://nodejs.org/) 20+ and the
+[Rust toolchain](https://www.rust-lang.org/tools/install). On macOS the Command
+Line Tools are enough (`xcode-select --install`) — full Xcode is **not** required,
+since Tauri assembles the `.app` and `.dmg` itself instead of driving `xcodebuild`.
 
-### Free, forever
-No subscriptions, no paywalls, no telemetry.
-
-## Building from source
-
-Prerequisites: [Node.js](https://nodejs.org/) 20+, npm, and the [Rust toolchain](https://www.rust-lang.org/tools/install) (for the desktop shell).
-On macOS the **Command Line Tools** are enough (`xcode-select --install`) — full
-Xcode is not required, since Tauri assembles the `.app` and `.dmg` itself rather
-than driving `xcodebuild`. Notarizing needs `xcrun notarytool`, which recent
-Command Line Tools ship; if your `xcrun` can't find it, install Xcode.
-
-```
+```bash
 npm install
-npm run tauri:dev     # run the desktop app in dev mode
+npm run tauri:dev
 ```
 
-Other useful commands:
-
-- `npm run dev` — Vite dev server only, in a regular browser tab (uses the Web File System Access API instead of the desktop bridge — handy for quick UI iteration).
-- `npm run lint` — TypeScript type check.
-- `node --import tsx --test src/lib/*.test.ts` — unit tests for the pure logic modules.
-- `npm run tauri:build` — full production build for the host platform: NSIS installer + portable `.exe` on Windows, `.app` + `.dmg` on macOS, under `src-tauri/target/release/bundle/`.
-- `npm run mac:release` — macOS release build ([`scripts/release.sh`](scripts/release.sh)): typecheck, universal `.app` + `.dmg`, stable asset names in `out/release/`. Pass `--publish` to push them to GitHub Releases. The Windows counterpart is [`scripts/release.ps1`](scripts/release.ps1).
-
-Platform differences live in [`src-tauri/tauri.macos.conf.json`](src-tauri/tauri.macos.conf.json),
-which Tauri merges over `tauri.conf.json` automatically when the host is macOS —
-the base config stays the Windows one, so a Windows build is byte-for-byte
-unaffected by anything in the macOS overlay.
-
-Tagged pushes (`vX.Y.Z`) trigger [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds both artifacts and publishes them to GitHub Releases automatically.
+| Command | What it does |
+|---|---|
+| `npm run dev` | Vite only, in a browser tab — uses the Web File System Access API instead of the desktop bridge. Quick UI iteration. |
+| `npm run lint` | TypeScript type check. |
+| `node --import tsx --test src/lib/*.test.ts` | Unit tests for the pure logic modules. |
+| `npm run tauri:build` | Production build for the host platform, under `src-tauri/target/release/bundle/`. |
+| `npm run mac:release` | macOS release: universal `.app` + `.dmg` with stable asset names in `out/release/`. See [`scripts/release.sh`](scripts/release.sh); the Windows counterpart is [`scripts/release.ps1`](scripts/release.ps1). |
 
 ## Website
 
-The landing site (landing page + download page) lives in [site/](site/) as plain static HTML/CSS.
+The landing and download pages live in [site/](site/) as plain static HTML and CSS.
 
 ## License
 
-Polyform Noncommercial 1.0.0. See [LICENSE](LICENSE).
+Polyform Noncommercial 1.0.0 — see [LICENSE](LICENSE).

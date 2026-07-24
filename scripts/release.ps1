@@ -1,52 +1,73 @@
 # -----------------------------------------------------------------------------
-# Valx Writer release script.
-#   .\scripts\release.ps1            -> test, build, package installer + portable zip
-#   .\scripts\release.ps1 -Publish   -> additionally publish to GitHub Releases (needs `gh auth login`)
-#   .\scripts\release.ps1 -OutDir out2 -> build into a different directory (use when
-#                                         out\ is locked by a process running from it)
-# Output lands in <OutDir>\release\ with the exact asset names the download page
-# links to: valx-prose-writer-setup.exe and valx-prose-writer-portable.zip
+# Valx Writer Windows release script — the counterpart to scripts/release.sh.
+#
+#   .\scripts\release.ps1             -> typecheck, build, package the installer
+#   .\scripts\release.ps1 -Publish    -> additionally publish to GitHub Releases
+#                                        (needs `gh auth login`)
+#
+# Output lands in out\release\ with the exact asset name the download page links
+# to: valx-prose-writer-setup.exe
+#
+# This drives `tauri build`. The previous version of this script called
+# electron-forge and electron-builder, which stopped being able to run when the
+# app moved from Electron to Tauri — neither package is a dependency any more,
+# and there is no forge/builder config left in the repo.
+#
+# Signing (optional; unsigned installers make SmartScreen warn on first run).
+# Tauri reads these itself:
+#   TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+# For an Authenticode certificate, set bundle.windows.certificateThumbprint in
+# tauri.conf.json rather than passing it here.
 # -----------------------------------------------------------------------------
-param([switch]$Publish, [string]$OutDir = 'out')
+param([switch]$Publish)
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
-$env:VALX_OUT_DIR = $OutDir
 
-Write-Host '== Typecheck ==' -ForegroundColor Green
+function Step($msg) { Write-Host "== $msg ==" -ForegroundColor Green }
+
+Step 'Preflight'
+foreach ($tool in 'node', 'cargo') {
+  if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+    throw "$tool not found. Node 20+ from https://nodejs.org and Rust from https://rustup.rs are both required."
+  }
+}
+
+Step 'Install dependencies'
+npm ci
+if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+
+Step 'Typecheck'
 npm run lint
 if ($LASTEXITCODE -ne 0) { throw 'Typecheck failed' }
 
-Write-Host '== Build renderer + main ==' -ForegroundColor Green
-npm run build
-if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
-
-Write-Host '== Clean old artifacts ==' -ForegroundColor Green
-if (Test-Path $OutDir) {
-  try { Remove-Item $OutDir -Recurse -Force -ErrorAction Stop }
-  catch { throw "Could not clean $OutDir (a process is running from it?). Close it or rerun with -OutDir <fresh-dir>." }
+Step 'Clean old artifacts'
+if (Test-Path out) {
+  try { Remove-Item out -Recurse -Force -ErrorAction Stop }
+  catch { throw 'Could not clean out\ (is the app running from it?). Close it and retry.' }
 }
 
-Write-Host '== Package (app + portable zip) ==' -ForegroundColor Green
-npx electron-forge make
-if ($LASTEXITCODE -ne 0) { throw 'electron-forge make failed' }
-
-Write-Host '== NSIS installer (wizard with install-location page) ==' -ForegroundColor Green
-npx electron-builder --prepackaged "$OutDir/valx-prose-writer-win32-x64" --win "-c.directories.output=$OutDir/installer"
-if ($LASTEXITCODE -ne 0) { throw 'electron-builder failed' }
+Step 'Build (NSIS installer)'
+npx tauri build
+if ($LASTEXITCODE -ne 0) { throw 'tauri build failed' }
 
 $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-New-Item -ItemType Directory -Force $OutDir\release | Out-Null
-Copy-Item "$OutDir\installer\valx-prose-writer-setup.exe" "$OutDir\release\valx-prose-writer-setup.exe"
-Copy-Item "$OutDir\make\zip\win32\x64\valx-prose-writer-win32-x64-$version.zip" "$OutDir\release\valx-prose-writer-portable.zip"
+$nsisDir = 'src-tauri\target\release\bundle\nsis'
+$setup = Get-ChildItem $nsisDir -Filter '*-setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $setup) { throw "No installer produced under $nsisDir" }
 
-Write-Host "== Release artifacts (v$version) ==" -ForegroundColor Green
-Get-ChildItem $OutDir\release | ForEach-Object { '{0}  {1:N1} MB' -f $_.Name, ($_.Length / 1MB) }
+New-Item -ItemType Directory -Force out\release | Out-Null
+Copy-Item $setup.FullName 'out\release\valx-prose-writer-setup.exe'
+
+Step "Release artifacts (v$version)"
+Get-ChildItem out\release | ForEach-Object { '{0}  {1:N1} MB' -f $_.Name, ($_.Length / 1MB) }
 
 if ($Publish) {
-  Write-Host '== Publishing to GitHub Releases ==' -ForegroundColor Green
+  Step 'Publishing to GitHub Releases'
+  if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    throw "gh not found — install the GitHub CLI and run 'gh auth login'"
+  }
   gh release create "v$version" `
-    "$OutDir\release\valx-prose-writer-setup.exe" `
-    "$OutDir\release\valx-prose-writer-portable.zip" `
+    'out\release\valx-prose-writer-setup.exe' `
     --title "Valx Writer v$version" --generate-notes
   if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }
 }

@@ -58,7 +58,7 @@ export const QUIRKY_NIGHT: string[] = [
   'Be loud with your ideas.', 'Stars out, go and see it.',
   'Night-shift writer.', 'Use proper lighting.',
   'Late-night confessions (fictional, probably).', "Its never late.",
-  'One more page before sleep.', 'Take your time.',
+  'One more page before sleep.', 'Take your time, the night is long.',
   'Whisper it onto the page.', 'Guess who is back again.',
   'Keep up.', 'Like moth to the fire.',
   'Quiet keys, loud thoughts.', 'Raise the stakes!',

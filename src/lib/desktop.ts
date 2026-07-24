@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------------
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { open as openDialog, save as saveDialog, confirm as nativeConfirm } from '@tauri-apps/plugin-dialog';
 import { exists, mkdir, readDir, remove, writeFile, writeTextFile, readFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { writeText as clipboardWriteText, readText as clipboardReadText, readImage as clipboardReadImage } from '@tauri-apps/plugin-clipboard-manager';
@@ -43,6 +43,28 @@ export const mediaCanonicalHtml = (html: string): string =>
 /** Origin prefix buildPreviewDoc needs for /__media/ in the sandboxed preview
  *  (under Tauri the content is pre-rewritten with mediaDisplayHtml instead). */
 export const previewMediaBase = (): string => (isTauri ? '' : location.origin);
+
+/**
+ * Yes/no confirmation for an irreversible action.
+ *
+ * Not `window.confirm`: a webview only shows JS dialogs if the host implements
+ * the callback for them, and there is no guarantee of that under Tauri —
+ * WKWebView in particular will simply do nothing and hand back `false`, which
+ * would silently turn "empty the trash" into a button that never works. The
+ * dialog plugin puts up a real NSAlert / Win32 task dialog instead.
+ *
+ * Falls back to window.confirm in the browser build, where it is genuinely the
+ * only option and genuinely works. Any failure resolves false — the safe answer
+ * for a destructive prompt.
+ */
+export async function confirmDestructive(message: string, title: string, okLabel = 'Delete'): Promise<boolean> {
+  if (!isTauri) return window.confirm(message);
+  try {
+    return await nativeConfirm(message, { title, kind: 'warning', okLabel, cancelLabel: 'Cancel' });
+  } catch {
+    return false;
+  }
+}
 
 /** Fires when App > Preferences… is chosen from the macOS menu bar
  *  (macos_menu.rs). No-op outside Tauri, and never fires on Windows, where the

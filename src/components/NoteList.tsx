@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Note, FilterState } from '../types';
-import { Bookmark, ChevronDown, ChevronRight } from 'lucide-react';
+import { Bookmark, ChevronDown, ChevronRight, RotateCcw, Trash2 } from 'lucide-react';
 import { wordCount } from '../lib/format';
 import { NoteSort, sortNotes } from '../lib/noteSort';
 
@@ -47,6 +47,12 @@ interface NoteDropdownListProps {
   /** Active sort — a row shows the created date while sorting by it, so the
    *  order the list is in is the order of the dates you can see. */
   sort?: NoteSort;
+  /** Restore a trashed note. Passed only by the Trash list; rows elsewhere
+   *  have nothing to restore from and render no button. */
+  onRestore?: (id: string) => void;
+  /** Delete a trashed note for good. Same deal — Trash list only. Already
+   *  confirmed by the caller, so this row just calls it. */
+  onDeletePerm?: (id: string) => void;
 }
 
 /** Compact note rows rendered inside an expanded All Notes / group dropdown. */
@@ -60,6 +66,8 @@ export function NoteDropdownList({
   onOpenNote,
   emptyLabel = 'No notes',
   sort = 'modified-desc',
+  onRestore,
+  onDeletePerm,
 }: NoteDropdownListProps) {
   const showCreated = sort.startsWith('created');
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
@@ -139,6 +147,31 @@ export function NoteDropdownList({
               >
                 <Bookmark size={12} fill={isBookmarked ? 'currentColor' : 'none'} />
               </button>
+            )}
+            {/* Trash rows only. Restore sits next to delete because a trash
+                list that can only destroy is a trap — the undo for landing
+                here by accident has to be reachable from the same row. */}
+            {(onRestore || onDeletePerm) && (
+              <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                {onRestore && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRestore(note.id); }}
+                    title="Restore this note"
+                    className="p-0.5 rounded text-slate-400 hover:text-[#32CD32] transition-colors"
+                  >
+                    <RotateCcw size={12} />
+                  </button>
+                )}
+                {onDeletePerm && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDeletePerm(note.id); }}
+                    title="Delete permanently"
+                    className="p-0.5 rounded text-slate-400 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
             )}
             <div className="font-medium text-sm text-slate-900 dark:text-white truncate pr-5">
               {note.title || 'Untitled Note'}

@@ -1,6 +1,6 @@
 [package]
 name = "valx-prose-writer"
-version = "1.0.3"
+version = "1.0.4"
 description = "minimalist writing app"
 authors = ["tchkrv"]
 edition = "2021"

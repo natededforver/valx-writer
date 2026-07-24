@@ -56,8 +56,12 @@ const SLASH_SYNTAX: SlashSyntaxItem[] = [
   { type: 'syntax', id: 'table', label: 'Table', hint: '' },
 ];
 
-const CARET_W = 24; // px — fixed I-beam width, font-size-independent
-const CARET_H = 36; // px — fixed I-beam height, font-size-independent
+// Box width for the caret asset. The bar itself occupies the middle 12.5% of
+// the (32px-wide) image, so this renders a 3px bar centred on the insertion
+// point. There is no CARET_H: the height is the text's own inline height,
+// measured per font in place() — a fixed height is what left the bar
+// overhanging short text and short of tall text.
+const CARET_W = 24;
 
 const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -243,25 +247,34 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
         rect = { left: r.left, top: r.top, height: lh } as DOMRect;
       }
       const host = editor.parentElement!.getBoundingClientRect();
-      // Fixed caret dimensions — never derived from font size or line height.
-      caret.style.display = 'block';
-      caret.style.height = CARET_H + 'px';
-      caret.style.width  = CARET_W + 'px';
-      // Anchor on the line's BOTTOM, not on the centre of whatever inline box
-      // the caret happens to sit in. Inline boxes on one line are aligned by
-      // BASELINE, not by centre: <code> (0.9em, its own font) measures 17px tall
-      // at y=24 where the surrounding body text measures 19px at y=22 — same
-      // line, centres 1px apart. Centring on rect.height therefore made the
-      // caret hop up and down as it crossed code spans, links, marks and any
-      // mixed-size run. Baseline-aligned boxes DO share a bottom edge, so
-      // rect.bottom is invariant along the line; offsetting from it by a
-      // constant (the base font's own inline height) pins the caret to one
-      // height for the whole line. Rounded because the asset is a raster image:
-      // the quarter-pixel offsets line-height produces would otherwise
-      // rasterise to different pixel rows line by line.
+      // The caret box IS the text's own box — same top, same height, same
+      // subpixel grid. Two things follow from that, and both were bugs before:
+      //
+      // 1. Anchor on the line's BOTTOM, never on the centre of whatever inline
+      //    box the caret sits in. Inline boxes on one line are aligned by
+      //    BASELINE, not by centre: <code> (0.9em, its own font) measures 17px
+      //    tall at y=24 where surrounding body text measures 19px at y=22 —
+      //    same line, centres 1px apart. Centring on rect.height made the caret
+      //    hop as it crossed code spans, links, marks and mixed-size runs.
+      //    Baseline-aligned boxes DO share a bottom edge, so rect.bottom is
+      //    invariant along the line.
+      //
+      // 2. Do NOT round. Text lines sit on a fractional grid (line-height 29.25
+      //    here), so snapping the caret to whole pixels made it drift up to a
+      //    quarter pixel against the text — a visible 1px hop on some lines,
+      //    which is exactly what rounding was meant to prevent. Sharing the
+      //    text's own subpixel position is what actually keeps them locked.
+      //
+      // The height is the base font's inline height rather than the current
+      // inline box's, so a caret next to a code span or a link is the same
+      // height as everywhere else on the line.
       const bottom = rect.bottom ?? rect.top + rect.height;
-      caret.style.left = Math.round(rect.left - host.left - CARET_W / 2) + 'px';
-      caret.style.top  = Math.round(bottom - host.top - (CARET_H + baseInlineH()) / 2) + 'px';
+      const h = baseInlineH();
+      caret.style.display = 'block';
+      caret.style.width  = CARET_W + 'px';
+      caret.style.height = h + 'px';
+      caret.style.left = rect.left - host.left - CARET_W / 2 + 'px';
+      caret.style.top  = bottom - host.top - h + 'px';
       // Restart the blink so the caret is solid the instant it moves.
       caret.style.animation = 'none';
       void caret.offsetWidth;

@@ -204,9 +204,16 @@ body {
   position: absolute;
   pointer-events: none;
   z-index: 5;
-  background: url('../i-beam cursor.png') center / contain no-repeat;
+  /* STRETCH (100% 100%), not `contain`. The asset is square with the bar in
+     its middle columns, so `contain` scaled it to fit the box's WIDTH — a
+     24px-tall bar floating in a 36px-tall box, leaving dead space above and
+     below and overhanging 18px text by 3px each end. That was the "height
+     gap". Stretching maps the image onto the box exactly, and since the bar is
+     a uniform column of pixels there is nothing to distort: it becomes as tall
+     as the box and 12.5% of its width. The box is sized to the text itself in
+     RichTextEditor's place(). */
+  background: url('../i-beam cursor.png') 0 0 / 100% 100% no-repeat;
   animation: vx-caret-blink 1.06s steps(1) infinite;
-  /* Dimensions set in JS from editor base line-height — not selection rect. */
 }
 @keyframes vx-caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 

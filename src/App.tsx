@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNotes } from './hooks/useNotes';
 import { useOneDrive } from './hooks/useOneDrive';
 import { isTauri, onOpenPreferences } from './lib/desktop';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isMac } from './lib/platform';
 import { dismissSplash } from './lib/splash';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
@@ -198,6 +200,28 @@ export default function App() {
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
   };
+
+  // macOS: distraction-free mode drives the window into *native* fullscreen, so
+  // AppKit takes the traffic lights away with the rest of the chrome — and
+  // slides them back in beside the system menu bar when the pointer reaches the
+  // top edge, which is the same gesture that reveals the app's own bar. Doing
+  // it this way rather than hiding the buttons ourselves is the whole point:
+  // the alternatives are dropping decorations (losing the rounded corners and
+  // shadow that made native decorations worth having) or reaching into
+  // NSWindow's standard buttons, and neither would reveal on hover.
+  //
+  // Mirrors app state onto the window, not the reverse: leaving native
+  // fullscreen by the green button or ⌃⌘F does not pull the sidebar back. The
+  // next toggle re-syncs, and two-way binding here would fight the user over
+  // which of the two states is authoritative.
+  //
+  // Lives in an effect rather than in toggleFullscreen because several paths
+  // set isFullscreen — the sidebar arrow, F11/⌘↩, picking a filter — and every
+  // one of them has to take the window with it.
+  useEffect(() => {
+    if (!isTauri || !isMac) return;
+    void getCurrentWindow().setFullscreen(isFullscreen).catch(() => {});
+  }, [isFullscreen]);
 
   // Ctrl/Cmd+, opens Settings from anywhere — the sidebar's Settings button is
   // unreachable while the sidebar is hidden/collapsed.

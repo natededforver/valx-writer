@@ -5,7 +5,7 @@ import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Se
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '../lib/desktop';
 import { accel, isMac } from '../lib/platform';
-import { useMacTitleBar } from '../hooks/useMacTitleBar';
+import { useMacTitleBar, MENU_BAR_REVEAL } from '../hooks/useMacTitleBar';
 import { RichTextEditor } from './RichTextEditor';
 import { contentFromDisk, formatKind, htmlToMarkdown, markdownToHtml, wordCount } from '../lib/format';
 import { codeLangFromExt, highlightCode, buildPreviewDoc, PREVIEWABLE } from '../lib/codeHighlight';
@@ -401,6 +401,16 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const chromeVisible = topHover || anyChromeMenuOpen;
   const chromeShown = !isFullscreen || chromeVisible;
 
+  // The editor only owes the traffic lights room when it IS the window's left
+  // edge — sidebar collapsed, or distraction-free mode where the sidebar is
+  // gone entirely. With the sidebar showing, the buttons sit over *it* and the
+  // sidebar clears them with a title-bar band instead.
+  const { inset: trafficLightInset, nativeFullscreen } = useMacTitleBar(!sidebarOpen || isFullscreen);
+  // Room for the auto-hidden system menu bar while it is on screen. Applied
+  // only when the chrome is revealed in native fullscreen; zero otherwise, so
+  // windowed mode and every non-Mac platform are untouched.
+  const macChromeTop = nativeFullscreen && chromeShown ? MENU_BAR_REVEAL : 0;
+
   // Toggling the sidebar off drops straight into fullscreen. Snapping the
   // chrome away in the usual 300ms reads as a glitch, so the entry into
   // fullscreen (and only that) gets a long fade — the bar dissolves instead of
@@ -438,11 +448,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const winClose = () => { if (isTauri) getCurrentWindow().close(); };
   const showCaptionButtons = isTauri && !isMac;
 
-  // The editor only owes the traffic lights room when it IS the window's left
-  // edge — that is, with the sidebar collapsed, or in distraction-free mode
-  // where the sidebar is gone entirely. With the sidebar showing, the buttons
-  // sit over *it* and the sidebar clears them with a title-bar band instead.
-  const { inset: trafficLightInset } = useMacTitleBar(!sidebarOpen || isFullscreen);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -925,6 +930,12 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       <div
         onMouseLeave={() => setTopHover(false)}
         className={`absolute top-0 inset-x-0 z-50 vx-glass-strong transition-[transform,opacity] ${chromeFadeCls} ease-[cubic-bezier(0.16,1,0.3,1)] ${chromeShown ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}
+        // In native fullscreen the window extends under the system menu bar,
+        // which slides down over the top of it on the same top-edge hover that
+        // reveals this bar. Without the offset the two land on top of each
+        // other and the traffic lights sit over the sidebar toggle. Only while
+        // actually revealed — the hidden bar is translated off-screen anyway.
+        style={macChromeTop ? { top: macChromeTop } : undefined}
       >
         {/* Title bar — sidebar toggle · centered doc title (drag region) · window controls */}
         <div className="h-9 flex items-center px-1.5 gap-1 text-slate-400 dark:text-slate-500" style={{ paddingLeft: trafficLightInset || undefined }}>

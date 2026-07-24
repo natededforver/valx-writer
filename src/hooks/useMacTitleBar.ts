@@ -35,6 +35,13 @@ export const TITLE_BAR_BAND = 28;
  *  a little air before whatever the app draws next. */
 export const TRAFFIC_LIGHT_INSET = 78;
 
+/** Height the auto-hidden system menu bar occupies while revealed in native
+ *  fullscreen. 24pt is the standard bar; displays with a notch reserve more, so
+ *  on those the app's chrome sits a few points higher than the bar's underside.
+ *  Cosmetic and only during the hover reveal — worth far less than the layout
+ *  thrash of measuring it live. */
+export const MENU_BAR_REVEAL = 24;
+
 export interface MacTitleBar {
   /** Height of the drag strip to put above a leftmost pane's content. */
   band: number;

@@ -5,11 +5,12 @@
 // language, no way to read its suggestions, and — the reason this module
 // exists — no way to add a word to its dictionary. The renderer therefore turns
 // the native checker off (spellcheck="false" on the editor) and asks these
-// commands instead, which run a Hunspell-compatible checker over a dictionary
-// baked into the binary.
+// commands instead, which run a Hunspell-compatible checker over the
+// dictionaries baked into the binary (English, French, German, Italian,
+// Spanish — see DICTS; the renderer names one per call).
 //
-//   spell_check       – words in, misspelled words out (one round trip per
-//                       edit, not one per word)
+//   spell_check       – language + words in, misspelled words out (one round
+//                       trip per edit, not one per word)
 //   spell_suggest     – correction candidates for a single word
 //   spell_add_word    – add to the user dictionary, persisted to disk
 //   spell_user_words  – the user dictionary, for restoring it on launch
@@ -20,25 +21,48 @@
 // restart.
 // ---------------------------------------------------------------------------
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use tauri::Manager;
 
-const AFF: &str = include_str!("../dictionaries/en_US.aff");
-const DIC: &str = include_str!("../dictionaries/en_US.dic");
+/// The bundled dictionaries, keyed by the name the renderer sends (which is
+/// also the file stem). Baked into the binary with include_str! rather than
+/// shipped as Tauri resources: no path resolution at runtime, no missing-file
+/// failure mode, and the renderer can switch language without any IO.
+const DICTS: &[(&str, &str, &str)] = &[
+    ("en_US", include_str!("../dictionaries/en_US.aff"), include_str!("../dictionaries/en_US.dic")),
+    ("French", include_str!("../dictionaries/French.aff"), include_str!("../dictionaries/French.dic")),
+    ("German", include_str!("../dictionaries/German.aff"), include_str!("../dictionaries/German.dic")),
+    ("Italian", include_str!("../dictionaries/Italian.aff"), include_str!("../dictionaries/Italian.dic")),
+    ("Spanish", include_str!("../dictionaries/Spanish.aff"), include_str!("../dictionaries/Spanish.dic")),
+];
 
-/// The compiled dictionary. Built once on first use — parsing the .dic costs
-/// real time, and every command below would otherwise pay it again.
-static DICT: OnceLock<Option<spellbook::Dictionary>> = OnceLock::new();
+/// Compiled dictionaries, one entry per language actually used this session.
+/// Parsing a .dic costs real time (German's is 3.8 MB), so it happens once and
+/// only for the languages the user picks — a startup that compiled all five
+/// would pay for four nobody asked for.
+static COMPILED: OnceLock<Mutex<HashMap<&'static str, Option<&'static spellbook::Dictionary>>>> =
+    OnceLock::new();
 
 /// Words the user added. Kept in memory as the authority for checks (the
 /// bundled dictionary is immutable once compiled) and mirrored to disk.
 static USER_WORDS: OnceLock<Mutex<BTreeSet<String>>> = OnceLock::new();
 
-fn dict() -> Option<&'static spellbook::Dictionary> {
-    DICT.get_or_init(|| spellbook::Dictionary::new(AFF, DIC).ok())
-        .as_ref()
+/// The compiled dictionary for `lang`, falling back to English for a name that
+/// isn't bundled (a stale preference must not silently disable spellchecking).
+fn dict(lang: &str) -> Option<&'static spellbook::Dictionary> {
+    let (name, aff, dic) = DICTS
+        .iter()
+        .find(|(n, _, _)| *n == lang)
+        .or_else(|| DICTS.first())?;
+    let mut compiled = COMPILED.get_or_init(Default::default).lock().ok()?;
+    *compiled.entry(name).or_insert_with(|| {
+        // ponytail: leaked on purpose — one allocation per language, kept for
+        // the life of the process anyway, and it buys a plain &'static return
+        // instead of threading a guard through every command.
+        spellbook::Dictionary::new(aff, dic).ok().map(|d| &*Box::leak(Box::new(d)))
+    })
 }
 
 fn user_words() -> &'static Mutex<BTreeSet<String>> {
@@ -64,7 +88,7 @@ pub fn load_user_dictionary(app: &tauri::AppHandle) {
 /// True when the word is spelled correctly. Checked against the user dictionary
 /// first (it is the smaller set and the one the user explicitly curated), then
 /// the bundled one.
-fn is_correct(word: &str) -> bool {
+fn is_correct(lang: &str, word: &str) -> bool {
     if word.is_empty() {
         return true;
     }
@@ -73,7 +97,7 @@ fn is_correct(word: &str) -> bool {
             return true;
         }
     }
-    match dict() {
+    match dict(lang) {
         // No dictionary compiled (corrupt bundle) — call everything correct
         // rather than underlining the user's entire document in red.
         None => true,
@@ -85,15 +109,15 @@ fn is_correct(word: &str) -> bool {
 /// keeps this to a single IPC round trip per edit; the renderer diffs the
 /// result against what it already has underlined.
 #[tauri::command]
-pub fn spell_check(words: Vec<String>) -> Vec<String> {
-    words.into_iter().filter(|w| !is_correct(w)).collect()
+pub fn spell_check(lang: String, words: Vec<String>) -> Vec<String> {
+    words.into_iter().filter(|w| !is_correct(&lang, w)).collect()
 }
 
 /// Correction candidates for one word, best first. Capped because this feeds a
 /// context menu — a list longer than a handful is unusable there.
 #[tauri::command]
-pub fn spell_suggest(word: String) -> Vec<String> {
-    let Some(d) = dict() else { return Vec::new() };
+pub fn spell_suggest(lang: String, word: String) -> Vec<String> {
+    let Some(d) = dict(&lang) else { return Vec::new() };
     let mut out = Vec::new();
     d.suggest(&word, &mut out);
     out.truncate(8);
@@ -146,21 +170,35 @@ mod tests {
     // stops being reported. Run with `cargo test -p valx-prose-writer`.
     #[test]
     fn checks_suggests_and_accepts_user_words() {
-        assert!(is_correct("writer"), "a dictionary word must pass");
-        assert!(!is_correct("wrtier"), "a misspelling must fail");
+        assert!(is_correct("en_US", "writer"), "a dictionary word must pass");
+        assert!(!is_correct("en_US", "wrtier"), "a misspelling must fail");
 
-        let bad = spell_check(vec!["writer".into(), "wrtier".into()]);
+        let bad = spell_check("en_US".into(), vec!["writer".into(), "wrtier".into()]);
         assert_eq!(bad, vec!["wrtier".to_string()]);
 
         assert!(
-            spell_suggest("wrtier".into()).iter().any(|s| s == "writer"),
+            spell_suggest("en_US".into(), "wrtier".into()).iter().any(|s| s == "writer"),
             "suggestions should reach the intended word"
         );
 
         // Adding bypasses the disk write (no AppHandle in a unit test) but
         // exercises the same in-memory set every check consults.
         user_words().lock().unwrap().insert("Valx".into());
-        assert!(is_correct("Valx"), "user-dictionary words must be accepted");
-        assert!(spell_check(vec!["Valx".into()]).is_empty());
+        assert!(is_correct("en_US", "Valx"), "user-dictionary words must be accepted");
+        assert!(spell_check("en_US".into(), vec!["Valx".into()]).is_empty());
+    }
+
+    // Every bundled dictionary must actually compile, and switching language
+    // must switch the verdict — "bonjour" is a misspelling in English and a
+    // word in French. An unknown name falls back to English rather than
+    // silently passing everything.
+    #[test]
+    fn every_bundled_language_compiles() {
+        for (name, _, _) in DICTS {
+            assert!(dict(name).is_some(), "{name} failed to compile");
+        }
+        assert!(!is_correct("en_US", "bonjour"));
+        assert!(is_correct("French", "bonjour"));
+        assert!(!is_correct("Klingon", "wrtier"), "unknown language falls back to English");
     }
 }

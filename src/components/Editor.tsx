@@ -11,10 +11,11 @@ import { mediaDisplayHtml, previewMediaBase } from '../lib/desktop';
 import {
   LS_LINE_COUNTER, LINE_COUNTER_EVENT, LS_WORDCOUNT, WORDCOUNT_EVENT,
   LS_AUTOCAP, AUTOCAP_EVENT, LS_TRANSPARENCY, LS_TYPEWRITER, TYPEWRITER_EVENT,
-  LS_SPELLCHECK_ON, SPELLCHECK_EVENT, LS_SPELL_LANG,
+  LS_SPELLCHECK_ON, SPELLCHECK_EVENT,
   HISTORY_INTERVAL_EVENT, historyInterval, wordGoal, prefOn, setPref,
   emitWordCount, applyTransparency,
 } from '../lib/prefs';
+import { LANGUAGES, spellLang, setSpellLang } from '../lib/spellcheck';
 import { Creator, CREATORS_EVENT, creatorMeName, setCreatorMeName, loadCreators, saveCreators, newCreatorId } from '../lib/creators';
 import { deriveByline, stripByline, syncByline, bylineIsEmpty } from '../lib/byline';
 import { Snapshot, pushSnapshot, loadHistory, saveHistory } from '../lib/history';
@@ -115,6 +116,9 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const [transparency, setTransparency] = useState(() => prefOn(LS_TRANSPARENCY));
   const [typewriter, setTypewriter] = useState(() => prefOn(LS_TYPEWRITER));
   const [spellOn, setSpellOn] = useState(() => prefOn(LS_SPELLCHECK_ON));
+  // Spellcheck language. Not a setToggle case — it's a pick-one, and
+  // setSpellLang already persists it and tells open editors to re-check.
+  const [lang, setLang] = useState(() => spellLang());
   const setToggle = (
     key: string,
     event: string,
@@ -1007,6 +1011,12 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                 <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-open-dictionary')); }} className={itemCls}>
                   <BookA size={15} className="opacity-60" /> Dictionary…
                 </button>
+                <div className={sectionCls}>Language</div>
+                {Object.entries(LANGUAGES).map(([key, label]) => (
+                  <button key={key} onClick={() => { setSpellLang(key); setLang(key); }} className={itemCls}>
+                    <Check size={14} className={lang === key ? 'text-[#32CD32]' : 'opacity-0'} /> {label}
+                  </button>
+                ))}
                 <div className={dividerCls} />
                 <button onClick={() => setToggle(LS_AUTOCAP, AUTOCAP_EVENT, !autoCap, setAutoCap)} className={itemCls}>
                   <Check size={14} className={autoCap ? 'text-[#32CD32]' : 'opacity-0'} /> Auto-capitalize

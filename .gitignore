@@ -10,3 +10,6 @@ coverage/
 .env*
 !.env.example
 .claude/
+
+# Source dictionaries — the shipped copies live in src-tauri/dictionaries/
+/Dictionaries/

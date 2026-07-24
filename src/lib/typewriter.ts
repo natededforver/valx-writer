@@ -12,7 +12,10 @@
 export const LS_TYPEWRITER = 'valx-typewriter';
 export const TYPEWRITER_EVENT = 'valx-typewriter-changed';
 
-export const typewriterEnabled = (): boolean => localStorage.getItem(LS_TYPEWRITER) === 'true';
+// Ships ON — the sounds are part of the out-of-the-box writing feel, so only an
+// explicit 'false' silences them. Mirrored by DEFAULT_ON in prefs.ts, which is
+// what puts the checkmark in the menu.
+export const typewriterEnabled = (): boolean => localStorage.getItem(LS_TYPEWRITER) !== 'false';
 
 let ctx: AudioContext | null = null;
 // Lazily created on the first sound (which only fires from a real keydown, i.e.

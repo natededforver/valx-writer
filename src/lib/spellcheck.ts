@@ -9,10 +9,30 @@
 // correctly" rather than throwing, so the editor behaves normally there.
 // ---------------------------------------------------------------------------
 import { isTauri } from './desktop';
-import { LS_SPELLCHECK_ON, prefOn } from './prefs';
+import { LS_SPELLCHECK_ON, LS_SPELL_LANG, prefOn } from './prefs';
 
-/** Fired when the user dictionary changes, so open editors re-check. */
+/** Fired when the user dictionary or the language changes, so open editors
+ *  re-check. Both invalidate every cached verdict, so they share one event. */
 export const DICTIONARY_EVENT = 'valx-dictionary-changed';
+
+/** The bundled dictionaries: backend key (= file stem) → menu label. */
+export const LANGUAGES: Record<string, string> = {
+  en_US: 'English',
+  French: 'French',
+  German: 'German',
+  Italian: 'Italian',
+  Spanish: 'Spanish',
+};
+
+export const spellLang = (): string => localStorage.getItem(LS_SPELL_LANG) || 'en_US';
+
+/** Switch dictionary. Every cached verdict is a verdict *in the old language*,
+ *  so the cache is dropped wholesale rather than tagged per language. */
+export function setSpellLang(lang: string): void {
+  localStorage.setItem(LS_SPELL_LANG, lang);
+  verdicts.clear();
+  window.dispatchEvent(new CustomEvent(DICTIONARY_EVENT));
+}
 
 // Words already judged, so re-checking a document the user is typing into only
 // asks the backend about words it has not seen. Cleared when the user
@@ -64,7 +84,7 @@ export function scanWords(root: Node): WordHit[] {
 export async function checkWords(words: string[]): Promise<Set<string>> {
   const unknown = [...new Set(words)].filter((w) => !verdicts.has(w));
   if (unknown.length) {
-    const bad = new Set(await call<string[]>('spell_check', { words: unknown }, []));
+    const bad = new Set(await call<string[]>('spell_check', { lang: spellLang(), words: unknown }, []));
     for (const w of unknown) verdicts.set(w, !bad.has(w));
   }
   return new Set(words.filter((w) => verdicts.get(w) === false));
@@ -72,7 +92,7 @@ export async function checkWords(words: string[]): Promise<Set<string>> {
 
 /** Correction candidates for one word, best first. */
 export const suggest = (word: string): Promise<string[]> =>
-  call<string[]>('spell_suggest', { word }, []);
+  call<string[]>('spell_suggest', { lang: spellLang(), word }, []);
 
 /** Add to the user dictionary; the word stops being reported everywhere. */
 export async function addWord(word: string): Promise<void> {

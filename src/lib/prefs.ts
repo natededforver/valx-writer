@@ -19,6 +19,7 @@ export const LS_WORDCOUNT_GOAL = 'valx-wordcount-goal';
 export const LS_HISTORY_INTERVAL = 'valx-history-interval';
 export const LS_TRANSPARENCY = 'valx-transparency';
 // Typewriter sounds own their key next to the synth that reads it.
+import { LS_TYPEWRITER } from './typewriter';
 export { LS_TYPEWRITER, TYPEWRITER_EVENT } from './typewriter';
 
 export const LINE_COUNTER_EVENT = 'valx-line-counter-changed';
@@ -29,11 +30,12 @@ export const SPELLCHECK_EVENT = 'valx-spellcheck-changed';
 
 export const DEFAULT_HISTORY_INTERVAL = 10;
 
-// Defaults that ship ON: auto-capitalize, the word-count pill and the line
-// counter are all part of the out-of-the-box writing setup, so their absence
-// from localStorage means "on" and only an explicit 'false' turns them off.
+// Defaults that ship ON: auto-capitalize, the word-count pill, the line
+// counter and the typewriter sounds are all part of the out-of-the-box writing
+// setup, so their absence from localStorage means "on" and only an explicit
+// 'false' turns them off.
 // Transparency ships OFF — the app opens as a solid, opaque window.
-const DEFAULT_ON = [LS_AUTOCAP, LS_WORDCOUNT, LS_LINE_COUNTER, LS_SPELLCHECK_ON];
+const DEFAULT_ON = [LS_AUTOCAP, LS_WORDCOUNT, LS_LINE_COUNTER, LS_SPELLCHECK_ON, LS_TYPEWRITER];
 
 /** Read a boolean preference, honouring its ship-default. */
 export function prefOn(key: string): boolean {

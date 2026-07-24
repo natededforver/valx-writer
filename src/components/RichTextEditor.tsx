@@ -56,12 +56,13 @@ const SLASH_SYNTAX: SlashSyntaxItem[] = [
   { type: 'syntax', id: 'table', label: 'Table', hint: '' },
 ];
 
-// Box width for the caret asset. The bar itself occupies the middle 12.5% of
-// the (32px-wide) image, so this renders a 3px bar centred on the insertion
-// point. There is no CARET_H: the height is the text's own inline height,
-// measured per font in place() — a fixed height is what left the bar
-// overhanging short text and short of tall text.
-const CARET_W = 24;
+// Caret thickness. The box IS the bar now (it used to be a square image whose
+// bar occupied the middle 12.5%), so this is the visible width: 3px, thick
+// enough to read as the app's green against Lucida Console. There is no
+// CARET_H: the height is the text's own inline height, measured per font in
+// place() — a fixed height is what left the bar overhanging short text and
+// short of tall text.
+const CARET_W = 3;
 
 const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -186,7 +187,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   }, [slashPos]);
 
   // Custom text caret: the native caret is hidden (caret-color: transparent in
-  // index.css) and this overlay draws the asset at the insertion point. Reads
+  // index.css) and this overlay draws the bar at the insertion point. Reads
   // only refs + live DOM selection — no React state — so deps stay [] and the
   // listeners register once — a listener that captured state would go stale.
   useEffect(() => {

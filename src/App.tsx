@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNotes } from './hooks/useNotes';
 import { useOneDrive } from './hooks/useOneDrive';
-import { isTauri, pushMarkAsItems } from './lib/desktop';
+import { isTauri, onOpenPreferences } from './lib/desktop';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isMac } from './lib/platform';
 import { dismissSplash } from './lib/splash';
-import { markAsItems, CREATORS_EVENT } from './lib/creators';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
 import { FormatConverter } from './components/FormatConverter';
@@ -127,15 +128,6 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  // Keep the native "Mark as" menu's author list in sync with the Creators
-  // settings (label + kind pairs), on launch and whenever creators change.
-  useEffect(() => {
-    const push = () => pushMarkAsItems(markAsItems());
-    push();
-    window.addEventListener(CREATORS_EVENT, push);
-    return () => window.removeEventListener(CREATORS_EVENT, push);
-  }, []);
-
   // Re-apply saved appearance preferences on launch. Transparency ships off,
   // so an unset key means opaque (prefOn handles the ship-defaults).
   useEffect(() => {
@@ -209,6 +201,28 @@ export default function App() {
     setIsFullscreen(!isFullscreen);
   };
 
+  // macOS: distraction-free mode drives the window into *native* fullscreen, so
+  // AppKit takes the traffic lights away with the rest of the chrome — and
+  // slides them back in beside the system menu bar when the pointer reaches the
+  // top edge, which is the same gesture that reveals the app's own bar. Doing
+  // it this way rather than hiding the buttons ourselves is the whole point:
+  // the alternatives are dropping decorations (losing the rounded corners and
+  // shadow that made native decorations worth having) or reaching into
+  // NSWindow's standard buttons, and neither would reveal on hover.
+  //
+  // Mirrors app state onto the window, not the reverse: leaving native
+  // fullscreen by the green button or ⌃⌘F does not pull the sidebar back. The
+  // next toggle re-syncs, and two-way binding here would fight the user over
+  // which of the two states is authoritative.
+  //
+  // Lives in an effect rather than in toggleFullscreen because several paths
+  // set isFullscreen — the sidebar arrow, F11/⌘↩, picking a filter — and every
+  // one of them has to take the window with it.
+  useEffect(() => {
+    if (!isTauri || !isMac) return;
+    void getCurrentWindow().setFullscreen(isFullscreen).catch(() => {});
+  }, [isFullscreen]);
+
   // Ctrl/Cmd+, opens Settings from anywhere — the sidebar's Settings button is
   // unreachable while the sidebar is hidden/collapsed.
   useEffect(() => {
@@ -221,6 +235,12 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // …and so does the macOS menu bar's App > Preferences… (macos_menu.rs). It
+  // is a separate path from the keydown above rather than a synthetic key
+  // event: AppKit dispatches the menu item without the webview ever seeing a
+  // keystroke, so there is nothing for that listener to catch.
+  useEffect(() => onOpenPreferences(() => setIsSettingsOpen(true)), []);
 
   return (
     <div className={`relative flex h-full w-full overflow-hidden text-slate-800 dark:text-slate-200 font-sans ${isDarkMode ? 'dark' : ''} ${dragging ? 'select-none cursor-col-resize' : ''}`}>

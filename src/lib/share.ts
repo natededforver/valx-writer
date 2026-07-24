@@ -1,4 +1,5 @@
 import { Note } from '../types';
+import { pasteChord } from './platform';
 
 // ---------------------------------------------------------------------------
 // "Send to Others" targets. Every send copies the FULL plain text to the
@@ -141,7 +142,7 @@ export const SHARE_TARGETS: ShareTarget[] = [
     domain: 'docs.google.com',
     kind: 'clipboard',
     buildUrl: () => ({ url: 'https://docs.new', truncated: false }),
-    hint: () => 'Note copied — press Ctrl+V in the new Google Doc',
+    hint: () => `Note copied — press ${pasteChord} in the new Google Doc`,
   },
   {
     id: 'keep',
@@ -150,7 +151,7 @@ export const SHARE_TARGETS: ShareTarget[] = [
     domain: 'keep.google.com',
     kind: 'clipboard',
     buildUrl: () => ({ url: 'https://keep.new', truncated: false }),
-    hint: () => 'Note copied — press Ctrl+V in the new Keep note',
+    hint: () => `Note copied — press ${pasteChord} in the new Keep note`,
   },
   {
     id: 'notion',
@@ -160,7 +161,7 @@ export const SHARE_TARGETS: ShareTarget[] = [
     kind: 'clipboard',
     // notion.new opens a fresh Notion page (requires being signed in).
     buildUrl: () => ({ url: 'https://notion.new', truncated: false }),
-    hint: () => 'Note copied — press Ctrl+V in the new Notion page',
+    hint: () => `Note copied — press ${pasteChord} in the new Notion page`,
   },
   {
     id: 'wordpress',
@@ -171,7 +172,7 @@ export const SHARE_TARGETS: ShareTarget[] = [
     // Press-This prefill is unreliable across WP plans; the dashboard's
     // new-post flow works for every wordpress.com account.
     buildUrl: () => ({ url: 'https://wordpress.com/post', truncated: false }),
-    hint: () => 'Note copied — press Ctrl+V in the new WordPress post',
+    hint: () => `Note copied — press ${pasteChord} in the new WordPress post`,
   },
   {
     id: 'medium',
@@ -180,7 +181,7 @@ export const SHARE_TARGETS: ShareTarget[] = [
     domain: 'medium.com',
     kind: 'clipboard',
     buildUrl: () => ({ url: 'https://medium.com/new-story', truncated: false }),
-    hint: () => 'Note copied — press Ctrl+V in the new Medium story',
+    hint: () => `Note copied — press ${pasteChord} in the new Medium story`,
   },
   {
     id: 'substack',

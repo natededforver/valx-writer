@@ -19,36 +19,14 @@ use base64::Engine;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 
-#[cfg(windows)]
-mod native_mark_as;
+#[cfg(target_os = "macos")]
+mod macos_menu;
 mod onedrive;
 mod spellcheck;
-
-// Ordered (label, kind) pairs for the native "Mark as" submenu. The renderer
-// owns the ordering/labels (creator → human authors → AI → Other Website) and
-// pushes them here via set_mark_as_items whenever the Creators settings change;
-// native_mark_as reads this to (re)build the menu on each right-click.
-pub(crate) struct MarkAsItems(pub(crate) Arc<Mutex<Vec<(String, String)>>>);
-
-fn default_mark_as_items() -> Vec<(String, String)> {
-    vec![
-        ("Me".into(), "me".into()),
-        ("AI".into(), "ai".into()),
-        ("Other Website…".into(), "web".into()),
-    ]
-}
-
-#[tauri::command]
-fn set_mark_as_items(state: tauri::State<MarkAsItems>, items: Vec<(String, String)>) {
-    if let Ok(mut guard) = state.0.lock() {
-        *guard = items;
-    }
-}
 
 #[derive(Serialize)]
 pub(crate) struct DiskFile {
@@ -176,16 +154,14 @@ pub fn run() {
         }
     }));
 
-    builder
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(MarkAsItems(Arc::new(Mutex::new(default_mark_as_items()))))
         .invoke_handler(tauri::generate_handler![
             read_directory,
             set_workspace_root,
-            set_mark_as_items,
             onedrive::start_oauth,
             onedrive::sync_onedrive,
             spellcheck::spell_check,
@@ -194,15 +170,45 @@ pub fn run() {
             spellcheck::spell_remove_word,
             spellcheck::spell_user_words,
         ])
+        // macOS: closing the window must not end the process. Elsewhere in the
+        // OS ⌘W closes a document and leaves the app running in the Dock, and a
+        // writing app that vanished instead would look broken — worse, the user
+        // reaches for ⌘W expecting to dismiss the window, not to quit mid-note.
+        // So the close is cancelled and the window hidden; ⌘Q (and the Quit menu
+        // item) remain the only way out. Windows keeps its own convention, where
+        // closing the last window IS how you quit, so this is macOS-only.
+        .on_window_event(|_window, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = _event {
+                if _window.label() == "main" {
+                    api.prevent_close();
+                    let _ = _window.hide();
+                }
+            }
+        })
         .setup(|app| {
             spellcheck::load_user_dictionary(app.handle());
-            #[cfg(windows)]
-            if let Some(window) = app.get_webview_window("main") {
-                let items = app.state::<MarkAsItems>().0.clone();
-                native_mark_as::install(&window, items);
-            }
+            // macOS puts the standard commands in the system menu bar; the
+            // app's own in-window menu bar covers the rest on every platform.
+            #[cfg(target_os = "macos")]
+            macos_menu::install(app.handle());
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // The other half of the hide-on-close contract: clicking the Dock icon of a
+    // running app with no visible window has to bring it back, or hiding the
+    // window would strand the app with no way to reach it. Built with .build()
+    // rather than .run() precisely to get at this event.
+    app.run(|_app, _event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = _event {
+            if let Some(window) = _app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }
+    });
 }

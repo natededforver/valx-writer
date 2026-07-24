@@ -8,6 +8,8 @@ import { NoteSort, NOTE_SORTS, SORT_LABELS, IS_DATE_SORT, normalizeSort, compare
 const LS_NOTE_SORT = 'valx-note-sort';
 const LS_NOTE_BOOKMARKED_ONLY = 'valx-note-bookmarked-only';
 import { searchNotes, SearchHit } from '../lib/search';
+import { accel } from '../lib/platform';
+import { useMacTitleBar } from '../hooks/useMacTitleBar';
 
 interface SidebarProps {
   filter: FilterState;
@@ -184,8 +186,22 @@ export function Sidebar({
       ? <ChevronDown size={14} className="text-slate-400 shrink-0" />
       : <ChevronRight size={14} className="text-slate-400 shrink-0" />;
 
+  // Unconditionally true: whenever this panel is *visible* it is the window's
+  // left edge. Collapsing the sidebar doesn't unmount it, it clips it to zero
+  // width, so the band goes invisible along with everything else here — and the
+  // editor picks up the clearance instead (see its own useMacTitleBar call).
+  const macTitleBar = useMacTitleBar(true);
+
   return (
     <div className={`vx-glass-strong text-slate-700 dark:text-slate-200 flex flex-col h-full min-h-0 ${className}`}>
+      {/* macOS: the sidebar is the window's left edge, so AppKit's traffic
+          lights land here. Give them an empty title-bar-height strip of their
+          own and let the whole column start below it — and make the strip a
+          drag region, since that is where a Mac user grabs the window. Zero
+          height everywhere else, so this collapses away entirely on Windows. */}
+      {macTitleBar.band > 0 && (
+        <div data-tauri-drag-region className="shrink-0" style={{ height: macTitleBar.band }} />
+      )}
       <div className="vx-editor-scroll flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-2">
         <div className="flex items-center mb-4">
           {/* .vx-greeting carries the Blue Screen face + brand green (index.css) —
@@ -576,7 +592,7 @@ export function Sidebar({
               <button
                 onClick={onOpenSettings}
                 className="p-1.5 text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                title="Preferences (Ctrl+,)"
+                title={`Preferences (${accel('Ctrl ,')})`}
               >
                 <SlidersHorizontal size={14} />
               </button>

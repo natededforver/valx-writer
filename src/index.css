@@ -318,15 +318,36 @@ body {
    carry the red/blue gradient texture. Static background + static glow only:
    no animation, so thousands of marked words cost nothing per frame. */
 .rich-editor mark.vx-slop {
-  /* No background-attachment: fixed — a fixed background clipped to text
-     (background-clip: text + transparent color) fails to paint in WebView2
-     when the mark is inserted via innerHTML on note load, leaving the words
-     invisible until a repaint. Default (scroll) attachment paints reliably. */
-  background: url('../sd-texture.png') 0 0 / 480px auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  /* The texture sits BEHIND the words, not inside their glyphs.
+
+     It used to be clipped to the text (background-clip: text + a transparent
+     colour), which makes the words themselves the only thing painting the
+     gradient — and therefore makes them vanish outright whenever that paint
+     doesn't happen. Two ways that bit: WebView2 skipped it for marks inserted
+     via innerHTML on note load, and on WKWebView the words read as invisible
+     against a dark workspace, since the glyph strokes are thin and this
+     texture averages ~30% luminance. A highlight cannot fail that way: the
+     text keeps its own colour and stays legible even if the image never
+     loads at all.
+
+     The flat layer over the texture washes it toward the surface colour so
+     the inherited text colour holds its contrast — lightening in light mode,
+     darkening in dark. */
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.62)),
+    url('../sd-texture.png');
+  background-size: auto, 480px auto;
+  color: inherit;
   padding: 2px 0;
+  /* Marks wrap per word, so a marked run is many adjacent <mark>s; cloning the
+     decoration keeps padding and radius correct on every fragment. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.dark .rich-editor mark.vx-slop {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.42)),
+    url('../sd-texture.png');
 }
 
 .rich-editor mark.vx-slop:first-of-type {
@@ -339,9 +360,11 @@ body {
   padding-right: 2px;
 }
 
-/* Glow effect on marked paragraphs */
+/* Glow on marked paragraphs. Softer than it was: the glow used to be the main
+   thing making clipped-to-text marks stand out, and now the highlight itself
+   carries that weight — at the old strength it haloed every highlight box. */
 .rich-editor p:has(mark.vx-slop) {
-  filter: drop-shadow(0 0 8px rgba(255, 40, 90, 0.4)) drop-shadow(0 0 16px rgba(60, 80, 255, 0.25));
+  filter: drop-shadow(0 0 6px rgba(255, 40, 90, 0.18)) drop-shadow(0 0 14px rgba(60, 80, 255, 0.12));
 }
 
 /* Creators menu — hiding a provenance type reverts those marks to plain text
@@ -351,10 +374,11 @@ body {
 .vx-hide-ai .rich-editor mark.vx-slop[data-slop="ai"],
 .vx-hide-web .rich-editor mark.vx-slop[data-slop="web"],
 .vx-hide-human .rich-editor mark.vx-slop[data-slop="human"] {
+  /* Wins over the .dark variant on specificity (4 classes to 3), so this
+     clears both layers in either theme. */
   background: none;
-  -webkit-background-clip: border-box;
-  background-clip: border-box;
   color: inherit;
+  padding: 0;
 }
 
 

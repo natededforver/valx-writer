@@ -432,7 +432,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const menuBtnCls = (id: string) => `px-2.5 flex items-center text-[13px] rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors ${openMenu === id ? 'bg-black/5 dark:bg-white/10 text-slate-900 dark:text-white' : ''}`;
   const menuPopCls = 'vx-menu-pop absolute top-8 left-0 z-50 min-w-52 bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1';
   const itemCls = 'w-full text-left px-3 py-1.5 text-sm hover:bg-slate-100 dark:hover:bg-neutral-900 flex items-center gap-2 text-slate-700 dark:text-slate-200 transition-colors';
-  const sectionCls = 'px-3 pt-1.5 pb-0.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest';
   const dividerCls = 'my-1 border-t border-slate-100 dark:border-neutral-800';
   // A flyout hanging off a menu row (Export as, Send to, Spelling, Language).
   const subPopCls = 'vx-menu-pop absolute left-full top-0 -mt-1 ml-1 z-50 min-w-44 max-h-72 overflow-auto bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1';
@@ -1056,8 +1055,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                             <button key={cmd} onMouseDown={(e) => e.preventDefault()} onClick={() => window.dispatchEvent(new CustomEvent('valx-format', { detail: cmd }))} className={itemCls}>{label}{sc && <span className={shortcutCls}>{accel(sc)}</span>}</button>
                           ))}
                           <div className={dividerCls} />
-                          <div className={sectionCls}>Alignment</div>
-                          {([[undefined, 'Left'], ['center', 'Center'], ['right', 'Right']] as const).map(([val, label]) => {
+                                    {([[undefined, 'Left'], ['center', 'Center'], ['right', 'Right']] as const).map(([val, label]) => {
                             const active = (note.align ?? undefined) === val || (val === undefined && !note.align);
                             return (
                               <button key={label} onMouseDown={(e) => e.preventDefault()} onClick={() => updateNote(note.id, { align: val })} className={itemCls}><Check size={14} className={active ? 'text-[#32CD32]' : 'opacity-0'} /> {label}</button>
@@ -1137,7 +1135,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                 {isCodeNote && <button onClick={() => { setSyntaxViewer((v) => !v); setOpenMenu(null); }} className={itemCls}><Check size={14} className={syntaxViewer ? 'text-[#32CD32]' : 'opacity-0'} /> Syntax highlighting</button>}
                 {canPreview && <button onClick={() => { setShowPreview((v) => !v); setOpenMenu(null); }} className={itemCls}><Eye size={15} className="opacity-60" /> {showPreview ? 'Hide preview' : 'Preview'}</button>}
                 <div className={dividerCls} />
-                <div className={sectionCls}>Counters</div>
                 <button onClick={() => setToggle(LS_WORDCOUNT, '', !wcOn, setWcOn, emitWordCount)} className={itemCls}>
                   <Check size={14} className={wcOn ? 'text-[#32CD32]' : 'opacity-0'} /> Word count
                 </button>
@@ -1145,7 +1142,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                   <Check size={14} className={lineCounter ? 'text-[#32CD32]' : 'opacity-0'} /> Line numbers
                 </button>
                 <div className={dividerCls} />
-                <div className={sectionCls}>Appearance</div>
                 <button onClick={() => setToggle(LS_TRANSPARENCY, '', !transparency, setTransparency, applyTransparency)} className={itemCls}>
                   <Check size={14} className={transparency ? 'text-[#32CD32]' : 'opacity-0'} /> Transparency
                 </button>
@@ -1165,7 +1161,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             <button onClick={() => setOpenMenu((m) => (m === 'creators' ? null : 'creators'))} onMouseEnter={() => openMenu && setOpenMenu('creators')} className={menuBtnCls('creators')}>Creators</button>
             {openMenu === 'creators' && (
               <div className={`${menuPopCls} min-w-64`}>
-                <div className={sectionCls}>Creator</div>
                 <div className="px-3 pb-2 pt-0.5">
                   <input
                     value={creatorMe}
@@ -1176,10 +1171,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                   />
                 </div>
                 <div className={dividerCls} />
-                <div className={`${sectionCls} flex items-center justify-between`}>
-                  <span>Human authors</span>
-                  <button onClick={(e) => { e.stopPropagation(); addCreator(); }} title="Add author" className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-400 hover:text-[#32CD32] transition-colors"><Plus size={14} /></button>
-                </div>
+                <button onClick={(e) => { e.stopPropagation(); addCreator(); }} className={itemCls}><Plus size={15} className="opacity-60" /> Add author</button>
                 {creators.length === 0 ? (
                   <div className="px-3 pb-1.5 pt-0.5 text-[11px] text-slate-400 dark:text-slate-500 leading-snug">Add co-authors to credit them and mark their words.</div>
                 ) : (
@@ -1197,7 +1189,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                   ))
                 )}
                 <div className={dividerCls} />
-                <div className={sectionCls}>Highlight by source</div>
                 {([['human', 'Human authors'], ['ai', 'AI'], ['web', 'Reference'], ['paste', 'Pasted']] as const).map(([a, label]) => (
                   <button key={a} onClick={() => toggleAuthor(a)} className={itemCls}><Check size={14} className={!hiddenAuthors.has(a) ? 'text-[#32CD32]' : 'opacity-0'} /> {label}</button>
                 ))}

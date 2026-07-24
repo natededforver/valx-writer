@@ -9,6 +9,7 @@ const LS_NOTE_SORT = 'valx-note-sort';
 const LS_NOTE_BOOKMARKED_ONLY = 'valx-note-bookmarked-only';
 import { searchNotes, SearchHit } from '../lib/search';
 import { accel } from '../lib/platform';
+import { confirmDestructive } from '../lib/desktop';
 import { useMacTitleBar } from '../hooks/useMacTitleBar';
 
 interface SidebarProps {
@@ -20,6 +21,11 @@ interface SidebarProps {
   onDeleteFolder: (id: string) => void;
   onMoveNotesToFolder: (ids: string[], folderId: string | null) => void;
   onMoveNotesToTrash: (ids: string[]) => void;
+  /** Trash row actions. Optional so the browser preview, which wires a subset
+   *  of the note handlers, simply renders the buttons out. */
+  onRestoreFromTrash?: (id: string) => void;
+  onDeleteNotePerm?: (id: string) => void;
+  onEmptyTrash?: () => void;
   isDarkMode: boolean;
   setIsDarkMode: (b: boolean) => void;
   workspaceHandle?: any;
@@ -54,6 +60,7 @@ function expandKeyForFilter(filter: FilterState): string {
 
 export function Sidebar({
   filter, setFilter, tags, folders, onAddFolder, onDeleteFolder, onMoveNotesToFolder, onMoveNotesToTrash,
+  onRestoreFromTrash, onDeleteNotePerm, onEmptyTrash,
   isDarkMode, setIsDarkMode, workspaceHandle, selectWorkspace, fileFormat, onOpenFormatConverter, onOpenSettings,
   notes, selectedNoteIds, onSelectNotes, onAddNote, noteExtensions = {}, bookmarkedIds = [], onToggleBookmark, onSearchNavigate, onOpenNote,
   oneDriveConnected = false, oneDriveSyncing = false, onGoToOneDriveSettings, onSyncOneDrive,
@@ -191,6 +198,24 @@ export function Sidebar({
   // width, so the band goes invisible along with everything else here — and the
   // editor picks up the clearance instead (see its own useMacTitleBar call).
   const macTitleBar = useMacTitleBar(true);
+
+  // Computed once: the header count, the Empty button's visibility and the
+  // list itself all read the same array, and they must not disagree.
+  const trashedNotes = useMemo(
+    () => filterNotesForContainer(notes, { type: 'trash' }, { sort }),
+    [notes, sort],
+  );
+
+  const handleEmptyTrash = async () => {
+    if (!onEmptyTrash) return;
+    const n = trashedNotes.length;
+    const ok = await confirmDestructive(
+      `Permanently delete ${n} note${n === 1 ? '' : 's'}? This cannot be undone.`,
+      'Empty Trash',
+      'Empty Trash',
+    );
+    if (ok) onEmptyTrash();
+  };
 
   return (
     <div className={`vx-glass-strong text-slate-700 dark:text-slate-200 flex flex-col h-full min-h-0 ${className}`}>
@@ -497,22 +522,38 @@ export function Sidebar({
                   <Trash2 size={16} className={isTrash ? 'text-slate-900 dark:text-white' : ''} />
                   <span className="flex-1 text-left">Trash</span>
                   <span className="text-[10px] text-slate-400 dark:text-slate-400 tabular-nums">
-                    {filterNotesForContainer(notes, { type: 'trash' }, { sort }).length}
+                    {trashedNotes.length}
                   </span>
                 </button>
+                {/* Empty the bin. Only rendered with something to empty, so the
+                    row stays quiet at rest — and it is the one control here
+                    that destroys many notes at once, hence the confirmation. */}
+                {onEmptyTrash && trashedNotes.length > 0 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleEmptyTrash(); }}
+                    title={`Permanently delete ${trashedNotes.length} note${trashedNotes.length === 1 ? '' : 's'}`}
+                    className="mr-1 px-1.5 py-1 rounded text-[10px] font-medium text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+                  >
+                    Empty
+                  </button>
+                )}
               </div>
               {expandedKeys.has('trash') && (
                 <div className="ml-4 border-l border-slate-100 dark:border-neutral-800 pl-1">
                   <NoteDropdownList
-                    notes={filterNotesForContainer(notes, { type: 'trash' }, { sort })}
+                    notes={trashedNotes}
                     selectedNoteIds={selectedNoteIds}
                     onSelectNotes={onSelectNotes}
                     noteExtensions={noteExtensions}
-                    bookmarkedIds={bookmarkedIds}
-                    onToggleBookmark={onToggleBookmark}
                     onOpenNote={onOpenNote}
                     emptyLabel="Trash is empty"
                     sort={sort}
+                    // Restore/delete take the row's top-right corner, which is
+                    // where the bookmark toggle would otherwise sit — and
+                    // bookmarking a note you have thrown away means nothing, so
+                    // it gives up the spot rather than crowding it.
+                    onRestore={onRestoreFromTrash}
+                    onDeletePerm={onDeleteNotePerm}
                   />
                 </div>
               )}

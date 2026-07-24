@@ -22,7 +22,7 @@ import { ChevronLeft } from 'lucide-react';
 type ViewState = 'list' | 'editor';
 
 export default function App() {
-  const { notes, folders, addNote, addNoteWithContent, updateNote, moveToTrash, restoreFromTrash, deleteNotePerm, tags, addFolder, deleteFolder, renameFolder, moveNotesToFolder, moveNotesToTrash, workspaceHandle, isWorkspaceRestored, selectWorkspace, fileFormat, saveNoteNow, convertWorkspaceFormat, convertNoteFormat, noteExtensions, bookmarkedIds, toggleBookmark, listAttachments, serializeDisk, rescanWorkspace } = useNotes();
+  const { notes, folders, addNote, addNoteWithContent, updateNote, moveToTrash, restoreFromTrash, deleteNotePerm, emptyTrash, tags, addFolder, deleteFolder, renameFolder, moveNotesToFolder, moveNotesToTrash, workspaceHandle, isWorkspaceRestored, selectWorkspace, fileFormat, saveNoteNow, convertWorkspaceFormat, convertNoteFormat, noteExtensions, bookmarkedIds, toggleBookmark, listAttachments, serializeDisk, rescanWorkspace } = useNotes();
   const oneDrive = useOneDrive(workspaceHandle, serializeDisk, rescanWorkspace);
   // Sync toast: auto-dismisses a few seconds after each result/error.
   const [syncToast, setSyncToast] = useState<string | null>(null);
@@ -282,6 +282,18 @@ export default function App() {
           onDeleteFolder={deleteFolder}
           onMoveNotesToFolder={moveNotesToFolder}
           onMoveNotesToTrash={moveNotesToTrash}
+          onRestoreFromTrash={restoreFromTrash}
+          // Deleting from the sidebar can take out the note the editor is
+          // showing, same as deleting from its menu — clear the selection so
+          // the editor drops to its null state instead of holding a dead id.
+          onDeleteNotePerm={(id) => {
+            deleteNotePerm(id);
+            if (id === activeNoteId) setSelectedNoteIds([]);
+          }}
+          onEmptyTrash={() => {
+            emptyTrash();
+            if (activeNote?.isTrash) setSelectedNoteIds([]);
+          }}
           isDarkMode={isDarkMode}
           setIsDarkMode={setIsDarkMode}
           workspaceHandle={workspaceHandle}

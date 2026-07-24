@@ -773,6 +773,14 @@ export function useNotes() {
     dropHistory(id).catch(() => {});
   };
 
+  /** Permanently delete every trashed note. Loops deleteNotePerm rather than
+   *  filtering state once, so each note still gets its tombstone, its disk
+   *  files removed and its history dropped — the bookkeeping that makes a
+   *  delete survive the next workspace scan instead of the note reappearing. */
+  const emptyTrash = () => {
+    for (const n of notesRef.current.filter((n) => n.isTrash)) deleteNotePerm(n.id);
+  };
+
   // ---------------------------------------------------------------------------
   // Legacy cleanup: old builds seeded a "Welcome to Valx" starter note that can
   // still live on in workspace files, metadata or cloud docs even though no
@@ -925,7 +933,7 @@ export function useNotes() {
 
   return {
     notes, folders, addNote, addNoteWithContent, updateNote, moveToTrash,
-    restoreFromTrash, deleteNotePerm, tags, addFolder, deleteFolder, renameFolder,
+    restoreFromTrash, deleteNotePerm, emptyTrash, tags, addFolder, deleteFolder, renameFolder,
     moveNotesToFolder, moveNotesToTrash, workspaceHandle, isWorkspaceRestored,
     selectWorkspace, fileFormat, setFileFormat,
     saveNoteNow, convertWorkspaceFormat, convertNoteFormat, noteExtensions,

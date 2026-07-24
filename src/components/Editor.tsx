@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Note, JumpTarget } from '../types';
 import { plainText } from '../lib/search';
-import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, SlidersHorizontal, BookA } from 'lucide-react';
+import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, SlidersHorizontal, BookA, SpellCheck, Languages } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '../lib/desktop';
 import { RichTextEditor } from './RichTextEditor';
@@ -385,6 +385,9 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // File-menu flyout (Export as / Send to), and the author's own display name.
   const [fileSub, setFileSub] = useState<'export' | 'send' | null>(null);
   useEffect(() => { if (openMenu !== 'file') setFileSub(null); }, [openMenu]);
+  // Words-menu flyout (Spelling / Language), same contract as fileSub.
+  const [wordsSub, setWordsSub] = useState<'spelling' | 'language' | null>(null);
+  useEffect(() => { if (openMenu !== 'words') setWordsSub(null); }, [openMenu]);
   // Provenance highlighting — which marks are dimmed (hidden). Your own writing
   // is never marked; paste/ai/web/human are the toggleable kinds.
   const [hiddenAuthors, setHiddenAuthors] = useState<Set<'paste' | 'ai' | 'web' | 'human'>>(new Set());
@@ -419,6 +422,8 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const itemCls = 'w-full text-left px-3 py-1.5 text-sm hover:bg-slate-100 dark:hover:bg-neutral-900 flex items-center gap-2 text-slate-700 dark:text-slate-200 transition-colors';
   const sectionCls = 'px-3 pt-1.5 pb-0.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest';
   const dividerCls = 'my-1 border-t border-slate-100 dark:border-neutral-800';
+  // A flyout hanging off a menu row (Export as, Send to, Spelling, Language).
+  const subPopCls = 'vx-menu-pop absolute left-full top-0 -mt-1 ml-1 z-50 min-w-44 max-h-72 overflow-auto bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1';
   const shortcutCls = 'ml-auto text-[10px] text-slate-400 dark:text-slate-500 tabular-nums pl-4';
 
   // Window controls (Tauri). No-ops in the browser preview (isTauri false).
@@ -947,7 +952,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                     <div className="relative" onMouseEnter={() => setFileSub('export')}>
                       <button onClick={() => setFileSub((s) => (s === 'export' ? null : 'export'))} className={`${itemCls} ${fileSub === 'export' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Download size={15} className="opacity-60" /> Export as<ChevronRight size={14} className="ml-auto opacity-50" /></button>
                       {fileSub === 'export' && (
-                        <div className="vx-menu-pop absolute left-full top-0 -mt-1 ml-1 z-50 min-w-44 bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1">
+                        <div className={subPopCls}>
                           {([['pdf', 'PDF Document'], ['docx', 'Word (DOCX)'], ['odt', 'OpenDocument (ODT)'], ['txt', 'TXT File'], ['md', 'Markdown (MD)'], ['html', 'HTML File']] as const).map(([fmt, label]) => (
                             <button key={fmt} onClick={() => { handlePandocExport(fmt); setOpenMenu(null); }} className={itemCls}><Download size={15} className="opacity-60" /> {label}</button>
                           ))}
@@ -958,7 +963,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                     <div className="relative" onMouseEnter={() => setFileSub('send')}>
                       <button onClick={() => setFileSub((s) => (s === 'send' ? null : 'send'))} className={`${itemCls} ${fileSub === 'send' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Send size={15} className="opacity-60" /> Send to<ChevronRight size={14} className="ml-auto opacity-50" /></button>
                       {fileSub === 'send' && (
-                        <div className="vx-menu-pop absolute left-full top-0 -mt-1 ml-1 z-50 min-w-44 max-h-72 overflow-auto bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1">
+                        <div className={subPopCls}>
                           {SHARE_TARGETS.map((target) => (
                             <button key={target.id} onClick={() => { handleSendTo(target); setOpenMenu(null); }} className={itemCls} title={`Send to ${target.label}`}>
                               <TargetIcon target={target} /><span className="truncate">{target.label}</span>
@@ -1003,24 +1008,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                 <button onClick={editCmd('selectAll')} className={itemCls}><TextSelect size={15} className="opacity-60" /> Select All<span className={shortcutCls}>Ctrl A</span></button>
                 <div className={dividerCls} />
                 <button onClick={() => { setIsFindVisible(true); setOpenMenu(null); }} className={itemCls}><Search size={15} className="opacity-60" /> Find in note<span className={shortcutCls}>Ctrl F</span></button>
-                <div className={dividerCls} />
-                <div className={sectionCls}>Spelling</div>
-                <button onClick={() => setToggle(LS_SPELLCHECK_ON, SPELLCHECK_EVENT, !spellOn, setSpellOn)} className={itemCls}>
-                  <Check size={14} className={spellOn ? 'text-[#32CD32]' : 'opacity-0'} /> Check spelling while typing
-                </button>
-                <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-open-dictionary')); }} className={itemCls}>
-                  <BookA size={15} className="opacity-60" /> Dictionary…
-                </button>
-                <div className={sectionCls}>Language</div>
-                {Object.entries(LANGUAGES).map(([key, label]) => (
-                  <button key={key} onClick={() => { setSpellLang(key); setLang(key); }} className={itemCls}>
-                    <Check size={14} className={lang === key ? 'text-[#32CD32]' : 'opacity-0'} /> {label}
-                  </button>
-                ))}
-                <div className={dividerCls} />
-                <button onClick={() => setToggle(LS_AUTOCAP, AUTOCAP_EVENT, !autoCap, setAutoCap)} className={itemCls}>
-                  <Check size={14} className={autoCap ? 'text-[#32CD32]' : 'opacity-0'} /> Auto-capitalize
-                </button>
               </div>
             )}
           </div>
@@ -1060,6 +1047,51 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               )}
             </div>
           )}
+
+          {/* WORDS — everything that judges or corrects the prose itself:
+              spelling, the dictionary it checks against, and the language.
+              These used to trail the Edit menu, which had become a grab bag. */}
+          <div className="relative z-50">
+            <button onClick={() => setOpenMenu((m) => (m === 'words' ? null : 'words'))} onMouseEnter={() => openMenu && setOpenMenu('words')} className={menuBtnCls('words')}>Words</button>
+            {openMenu === 'words' && (
+              <div className={menuPopCls} onMouseDown={(e) => e.preventDefault()}>
+                {/* Spelling → flyout */}
+                <div className="relative" onMouseEnter={() => setWordsSub('spelling')}>
+                  <button onClick={() => setWordsSub((s) => (s === 'spelling' ? null : 'spelling'))} className={`${itemCls} ${wordsSub === 'spelling' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><SpellCheck size={15} className="opacity-60" /> Spelling<ChevronRight size={14} className="ml-auto opacity-50" /></button>
+                  {wordsSub === 'spelling' && (
+                    <div className={subPopCls}>
+                      <button onClick={() => setToggle(LS_SPELLCHECK_ON, SPELLCHECK_EVENT, !spellOn, setSpellOn)} className={itemCls}>
+                        <Check size={14} className={spellOn ? 'text-[#32CD32]' : 'opacity-0'} /> Check spelling while typing
+                      </button>
+                      <button onClick={() => setToggle(LS_AUTOCAP, AUTOCAP_EVENT, !autoCap, setAutoCap)} className={itemCls}>
+                        <Check size={14} className={autoCap ? 'text-[#32CD32]' : 'opacity-0'} /> Auto-capitalize
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {/* Language → flyout */}
+                <div className="relative" onMouseEnter={() => setWordsSub('language')}>
+                  <button onClick={() => setWordsSub((s) => (s === 'language' ? null : 'language'))} className={`${itemCls} ${wordsSub === 'language' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Languages size={15} className="opacity-60" /> Language<ChevronRight size={14} className="ml-auto opacity-50" /></button>
+                  {wordsSub === 'language' && (
+                    <div className={subPopCls}>
+                      {Object.entries(LANGUAGES).map(([key, label]) => (
+                        <button key={key} onClick={() => { setSpellLang(key); setLang(key); }} className={itemCls}>
+                          <Check size={14} className={lang === key ? 'text-[#32CD32]' : 'opacity-0'} /> {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* Dictionary is a dialog, not a list — it opens straight from
+                    the row rather than pretending to be a third flyout. */}
+                <div onMouseEnter={() => setWordsSub(null)}>
+                  <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-open-dictionary')); }} className={itemCls}>
+                    <BookA size={15} className="opacity-60" /> Dictionary…
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* VIEW */}
           <div className="relative z-50">

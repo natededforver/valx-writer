@@ -228,9 +228,18 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
       const range = sel.getRangeAt(0);
       let rect = range.getBoundingClientRect();
       if (!rect.height) {
-        // ponytail: empty line / empty editor gives a zero-height range —
-        // approximate from the line element's rect + line-height (caret sits at
-        // line start). Upgrade to a temp-span measure only if that looks off.
+        // An empty line has no layout box for a COLLAPSED range (a caret
+        // between the <br><br> of a blank line, or on the blank line of a
+        // "\n\n" run in this pre-wrap editor, reports zero client rects), but
+        // the same position extended forward by one unit does: that rect is
+        // the blank line's own box, exact top/left/height, no guessing.
+        const fwd = range.cloneRange();
+        try { fwd.setEnd(range.startContainer, range.startOffset + 1); } catch { /* nothing after the caret */ }
+        rect = fwd.getBoundingClientRect();
+      }
+      if (!rect.height) {
+        // ponytail: nothing follows the caret (empty editor, end of the last
+        // line) — approximate from the line element's rect + line-height.
         const node = range.startContainer;
         let el: HTMLElement;
         if (node.nodeType === 3) {

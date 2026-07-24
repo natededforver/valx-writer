@@ -204,20 +204,17 @@ body {
    idle). It is an overlay rather than `caret-color` because CSS has no way to
    set caret WIDTH; the box is sized and positioned to the text's own inline
    box in RichTextEditor's place(). */
+/* The lime accent (links, checkmarks, save glow) rather than the logo's brand
+   green: the brand green is dark by design and reads as a hole on the dark
+   surface, and the lime reads better than it on the light one too — so it is
+   the caret colour in every mode. */
 .vx-caret {
   position: absolute;
   pointer-events: none;
   z-index: 5;
-  background: var(--vx-brand);
+  background: #32cd32;
   border-radius: 1px;
   animation: vx-caret-blink 1.06s steps(1) infinite;
-}
-/* The brand green is sampled from the logo and is dark by design — on the
-   near-black dark surface it would read as a hole. Switch to the app's other
-   green, the lime accent already used for links, checkmarks and the save glow,
-   rather than washing the logo green out towards grey with white. */
-.dark .vx-caret {
-  background: #32cd32;
 }
 @keyframes vx-caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 

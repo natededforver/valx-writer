@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Valx Prose Writer",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 720,
+        "minHeight": 480,
+        "center": true,
+        "resizable": true,
+        "transparent": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "dragDropEnabled": false,
+        "visible": false
+      },
+      {
+        "label": "splash",
+        "title": "Valx",
+        "url": "splash.html",
+        "width": 260,
+        "height": 260,
+        "center": true,
+        "transparent": true,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false
+      }
+    ]
+  },
+  "bundle": {
+    "targets": ["app", "dmg"],
+    "category": "public.app-category.productivity",
+    "shortDescription": "minimalist writing app",
+    "longDescription": "Valx Prose Writer — a minimalist, distraction-free writing app with provenance marking, spellchecking and OneDrive sync.",
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "entitlements": "Entitlements.plist",
+      "dmg": {
+        "windowSize": { "width": 660, "height": 400 },
+        "appPosition": { "x": 180, "y": 190 },
+        "applicationFolderPosition": { "x": 480, "y": 190 }
+      }
+    }
+  }
+}

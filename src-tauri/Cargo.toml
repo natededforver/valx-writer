@@ -15,7 +15,15 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # protocol-asset serves workspace media (images/audio/video) back to the
 # renderer with HTTP Range support — replaces the Electron localhost server.
-tauri = { version = "2", features = ["protocol-asset"] }
+# macos-private-api: the splash window is transparent, which on macOS is only
+# reachable through AppKit private API. It must sit on this top-level entry
+# rather than a cfg(target_os = "macos") one — tauri-build validates the
+# feature list against app.macOSPrivateApi in tauri.conf.json and its
+# find_dependency() stops at [dependencies], never reading [target.*]. Inert on
+# Windows (it gates macOS-only code paths), so the Windows build is unchanged.
+# Note: private API rules the app out of the Mac App Store; direct DMG
+# distribution — what scripts/release.sh builds — is unaffected.
+tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"
@@ -41,13 +49,3 @@ base64 = "0.22"
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-single-instance = "2"
-
-# Native "Mark as" context-menu merge (Windows/WebView2 only): hooks
-# ICoreWebView2's ContextMenuRequested COM event to splice a custom submenu
-# into the OS's own right-click menu, alongside its native spellcheck
-# suggestions. Versions pinned to what wry already pulls in (see Cargo.lock)
-# so the COM interface types are the same crate instance tauri hands back
-# from WebviewWindow::with_webview.
-[target."cfg(windows)".dependencies]
-webview2-com = "0.38"
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com"] }

@@ -7,7 +7,7 @@ import { Plus, Minus, Trash2, BookPlus, EyeOff, Scissors, Copy, ClipboardPaste, 
 import { JumpTarget } from '../types';
 import { parseTrailingMdLink } from '../lib/noteLinks';
 import { slopWrapText, wordSpans, SlopType } from '../lib/slop';
-import { mediaDisplaySrc, mediaDisplayHtml, mediaCanonicalHtml, onNativeMarkAs } from '../lib/desktop';
+import { mediaDisplaySrc, mediaDisplayHtml, mediaCanonicalHtml, readClipboardText } from '../lib/desktop';
 import { SlashMenu, SlashItem, SlashSyntaxItem, SlashMediaItem } from './SlashMenu';
 import { AttachmentItem } from '../hooks/useFileSystem';
 import { typewriterEnabled, playKey, playReturn } from '../lib/typewriter';
@@ -489,9 +489,10 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     }
   };
 
-  // Right-click on a selection populates slopRangeRef for the native "Mark as"
-  // submenu (native_mark_as.rs); 'web' first collects the source site via a
-  // small dialog, then marks + appends a reference line.
+  // Right-click on a selection parks the Range here, so the "Mark as" items in
+  // the menu below act on what was selected rather than on wherever the
+  // selection drifted to while the menu was open. 'web' first collects the
+  // source site via a small dialog, then marks + appends a reference line.
   const slopRangeRef = useRef<Range | null>(null);
   const [webDialog, setWebDialog] = useState(false);
   const [webSite, setWebSite] = useState('');
@@ -505,11 +506,13 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     return editorRef.current?.contains(r.commonAncestorContainer) ? r : null;
   };
 
-  // Right-click menu. This used to defer entirely to WebView2's native menu so
-  // its spelling suggestions survived (native_mark_as.rs spliced "Mark as" into
-  // it). Now that the app owns spellchecking, the native menu has nothing left
-  // that we can't draw ourselves — and it never had "Add to Dictionary" exposed
-  // to the host at all, which is the item this menu exists to provide.
+  // Right-click menu. This used to defer entirely to the OS webview's native
+  // menu so its spelling suggestions survived, with a COM hook splicing "Mark
+  // as" into it on Windows. Now that the app owns spellchecking, the native
+  // menu has nothing left that we can't draw ourselves — and it never had "Add
+  // to Dictionary" exposed to the host at all, which is the item this menu
+  // exists to provide. Drawing it ourselves is also what makes it identical on
+  // macOS, where WKWebView offers no equivalent of that COM hook.
   const [ctxMenu, setCtxMenu] = useState<{
     x: number; y: number;
     word: string | null; range: Range | null; suggestions: string[];
@@ -539,17 +542,19 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   };
 
   // Menu-driven paste. document.execCommand('paste') is refused by Chromium
-  // (and therefore by WebView2) outside a real paste gesture — wiring the menu
-  // item to it would have made a button that silently does nothing. Read the
-  // clipboard asynchronously instead and insert through the same
-  // slop-marking path the paste EVENT uses, so text pasted from the menu
-  // carries the same provenance marks as text pasted with Ctrl+V.
+  // (and therefore by WebView2) outside a real paste gesture, and WebKit is no
+  // more permissive — wiring the menu item to it would have made a button that
+  // silently does nothing. Read the clipboard asynchronously instead (via the
+  // desktop bridge, which goes to the OS clipboard rather than the
+  // user-activation-gated web API — see readClipboardText) and insert through
+  // the same slop-marking path the paste EVENT uses, so text pasted from the
+  // menu carries the same provenance marks as text pasted with ⌘V / Ctrl+V.
   const pasteFromClipboard = async () => {
     setCtxMenu(null);
     if (disabled) return;
     let text = '';
     try {
-      text = await navigator.clipboard.readText();
+      text = await readClipboardText();
     } catch {
       return; // clipboard permission denied — nothing sensible to do
     }
@@ -583,21 +588,6 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     else wrapSlopInRange(range, type, opts);
     handleInput();
   };
-
-  // The native "Mark as" submenu (Windows only, see native_mark_as.rs) reuses
-  // slopRangeRef, which handleContextMenu already populated before WebView2
-  // raised its ContextMenuRequested event — same range the JS bubble menu
-  // would have used. Subscribed once; mark*Ref keeps the handler current
-  // without resubscribing to the native event on every render.
-  const markSelectionAsRef = useRef(markSelectionAs);
-  markSelectionAsRef.current = markSelectionAs;
-  useEffect(() => {
-    return onNativeMarkAs((kind) => {
-      if (kind === 'web') { setWebSite(''); setWebUrl(''); setWebDialog(true); return; }
-      if (kind.startsWith('author:')) { markSelectionAsRef.current('human', { author: kind.slice(7) }); return; }
-      markSelectionAsRef.current(kind as 'me' | SlopType);
-    });
-  }, []);
 
   // The DOM shows the display form of media URLs (asset protocol under Tauri);
   // `value` stays canonical (/__media/…). The two rewrites round-trip exactly,

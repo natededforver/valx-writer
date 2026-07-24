@@ -6,17 +6,17 @@
 // module is inert and the Web File System Access fallbacks take over.
 //
 // Deliberately NOT provided (Electron/Chromium-only): the spellcheck APIs.
-// SettingsModal already degrades when those are absent; the OS webview's
-// native context menu (which carries spelling suggestions on Windows) takes
-// over. "Mark as" rides alongside it instead of replacing it — see
-// onNativeMarkAs below and src-tauri/src/native_mark_as.rs.
+// The app owns spellchecking itself now (src/lib/spellcheck.ts over the Rust
+// backend), and RichTextEditor draws its own right-click menu carrying the
+// suggestions, Add to Dictionary, and "Mark as" — so nothing here needs to
+// reach into the OS webview's native menu.
 // ---------------------------------------------------------------------------
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { exists, mkdir, readDir, remove, writeFile, writeTextFile, readFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
-import { writeText as clipboardWriteText, readImage as clipboardReadImage } from '@tauri-apps/plugin-clipboard-manager';
+import { writeText as clipboardWriteText, readText as clipboardReadText, readImage as clipboardReadImage } from '@tauri-apps/plugin-clipboard-manager';
 import { ATTACH_DIR, MEDIA_URL_PREFIX } from './format';
 import { canonicalMediaHtml, displayMediaHtml, displayMediaSrc } from './mediaUrl';
 import { KNOWN_EXT, serializeNote } from './exports';
@@ -44,14 +44,15 @@ export const mediaCanonicalHtml = (html: string): string =>
  *  (under Tauri the content is pre-rewritten with mediaDisplayHtml instead). */
 export const previewMediaBase = (): string => (isTauri ? '' : location.origin);
 
-/** Fires when the user picks a "Mark as" item from the *native* Windows
- *  context menu (native_mark_as.rs). No-op outside Tauri — the JS-drawn
- *  bubble menu is the only path there. Returns an unsubscribe function. */
-export function onNativeMarkAs(cb: (kind: string) => void): () => void {
+/** Fires when App > Preferences… is chosen from the macOS menu bar
+ *  (macos_menu.rs). No-op outside Tauri, and never fires on Windows, where the
+ *  same command lives in the app's own in-window File menu. Returns an
+ *  unsubscribe function. */
+export function onOpenPreferences(cb: () => void): () => void {
   if (!isTauri) return () => {};
   let unlisten: (() => void) | undefined;
   let cancelled = false;
-  listen<string>('mark-as', (e) => cb(e.payload)).then((fn) => {
+  listen<null>('menu://preferences', () => cb()).then((fn) => {
     if (cancelled) fn();
     else unlisten = fn;
   });
@@ -59,13 +60,6 @@ export function onNativeMarkAs(cb: (kind: string) => void): () => void {
     cancelled = true;
     unlisten?.();
   };
-}
-
-/** Push the ordered "Mark as" menu items (label, kind) to the native Windows
- *  context menu (native_mark_as.rs). No-op outside Tauri. */
-export function pushMarkAsItems(items: [string, string][]): void {
-  if (!isTauri) return;
-  invoke('set_mark_as_items', { items }).catch(() => {});
 }
 
 // --- backend implementation --------------------------------------------------
@@ -334,6 +328,32 @@ async function exportBatch(notes: { title?: string; html?: string }[], format: s
   } catch (err: any) {
     return { success: false, error: err?.message || String(err), count };
   }
+}
+
+/**
+ * Clipboard text for the menu-driven Paste commands.
+ *
+ * Prefers the Tauri plugin, which reads the OS clipboard from Rust. That is
+ * not a micro-optimisation: WebKit gates navigator.clipboard.readText() behind
+ * a user-activation check and, when it does allow the read, can interpose its
+ * own paste-confirmation affordance — so on macOS the web API turns "Edit >
+ * Paste" into a menu item that intermittently rejects or double-prompts.
+ * Chromium/WebView2 is more permissive, but there is no reason to keep two
+ * behaviours when the native read is correct on both.
+ *
+ * Falls back to navigator.clipboard in the browser build, where it is the only
+ * clipboard there is. Returns '' rather than throwing when the clipboard is
+ * empty or unreadable; callers treat that as "nothing to paste".
+ */
+export async function readClipboardText(): Promise<string> {
+  if (isTauri) {
+    try {
+      return (await clipboardReadText()) ?? '';
+    } catch {
+      return ''; // empty clipboard reads as an error on some platforms
+    }
+  }
+  return navigator.clipboard.readText();
 }
 
 // Raw RGBA -> PNG File via canvas (the clipboard plugin hands back decoded

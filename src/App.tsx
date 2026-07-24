@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNotes } from './hooks/useNotes';
 import { useOneDrive } from './hooks/useOneDrive';
-import { isTauri, pushMarkAsItems } from './lib/desktop';
+import { isTauri, onOpenPreferences } from './lib/desktop';
 import { dismissSplash } from './lib/splash';
-import { markAsItems, CREATORS_EVENT } from './lib/creators';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
 import { FormatConverter } from './components/FormatConverter';
@@ -127,15 +126,6 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  // Keep the native "Mark as" menu's author list in sync with the Creators
-  // settings (label + kind pairs), on launch and whenever creators change.
-  useEffect(() => {
-    const push = () => pushMarkAsItems(markAsItems());
-    push();
-    window.addEventListener(CREATORS_EVENT, push);
-    return () => window.removeEventListener(CREATORS_EVENT, push);
-  }, []);
-
   // Re-apply saved appearance preferences on launch. Transparency ships off,
   // so an unset key means opaque (prefOn handles the ship-defaults).
   useEffect(() => {
@@ -221,6 +211,12 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // …and so does the macOS menu bar's App > Preferences… (macos_menu.rs). It
+  // is a separate path from the keydown above rather than a synthetic key
+  // event: AppKit dispatches the menu item without the webview ever seeing a
+  // keystroke, so there is nothing for that listener to catch.
+  useEffect(() => onOpenPreferences(() => setIsSettingsOpen(true)), []);
 
   return (
     <div className={`relative flex h-full w-full overflow-hidden text-slate-800 dark:text-slate-200 font-sans ${isDarkMode ? 'dark' : ''} ${dragging ? 'select-none cursor-col-resize' : ''}`}>

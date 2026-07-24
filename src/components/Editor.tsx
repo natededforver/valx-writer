@@ -4,10 +4,12 @@ import { plainText } from '../lib/search';
 import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, SlidersHorizontal, BookA, SpellCheck, Languages } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '../lib/desktop';
+import { accel, isMac } from '../lib/platform';
+import { useMacTitleBar } from '../hooks/useMacTitleBar';
 import { RichTextEditor } from './RichTextEditor';
 import { contentFromDisk, formatKind, htmlToMarkdown, markdownToHtml, wordCount } from '../lib/format';
 import { codeLangFromExt, highlightCode, buildPreviewDoc, PREVIEWABLE } from '../lib/codeHighlight';
-import { mediaDisplayHtml, previewMediaBase } from '../lib/desktop';
+import { mediaDisplayHtml, previewMediaBase, readClipboardText } from '../lib/desktop';
 import {
   LS_LINE_COUNTER, LINE_COUNTER_EVENT, LS_WORDCOUNT, WORDCOUNT_EVENT,
   LS_AUTOCAP, AUTOCAP_EVENT, LS_TRANSPARENCY, LS_TYPEWRITER, TYPEWRITER_EVENT,
@@ -427,9 +429,20 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const shortcutCls = 'ml-auto text-[10px] text-slate-400 dark:text-slate-500 tabular-nums pl-4';
 
   // Window controls (Tauri). No-ops in the browser preview (isTauri false).
+  // Drawn on Windows/Linux only: macOS keeps its native decorations and gets
+  // real traffic lights overlaid on this same bar (titleBarStyle "Overlay" in
+  // tauri.macos.conf.json), so a second set of app-drawn buttons on the right
+  // would be both redundant and wrong-side.
   const winMinimize = () => { if (isTauri) getCurrentWindow().minimize(); };
   const winMaximize = () => { if (isTauri) getCurrentWindow().toggleMaximize(); };
   const winClose = () => { if (isTauri) getCurrentWindow().close(); };
+  const showCaptionButtons = isTauri && !isMac;
+
+  // The editor only owes the traffic lights room when it IS the window's left
+  // edge — that is, with the sidebar collapsed, or in distraction-free mode
+  // where the sidebar is gone entirely. With the sidebar showing, the buttons
+  // sit over *it* and the sidebar clears them with a title-bar band instead.
+  const { inset: trafficLightInset } = useMacTitleBar(!sidebarOpen || isFullscreen);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -482,7 +495,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const pasteFromClipboard = async () => {
     setOpenMenu(null);
     try {
-      const text = await navigator.clipboard.readText();
+      const text = await readClipboardText();
       if (text) document.execCommand('insertText', false, text);
     } catch {
       showToast('Clipboard unavailable');
@@ -517,8 +530,10 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // Global keybind for fullscreen toggle
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Toggle fullscreen with F11 or Ctrl+Enter
-      if (e.key === 'F11' || (e.ctrlKey && e.key === 'Enter')) {
+      // Toggle fullscreen with F11 or Ctrl/Cmd+Enter. F11 keeps working on a
+      // Mac keyboard that has it, but ⌘↩ is the binding the menu advertises
+      // there — macOS gives F11 to Show Desktop by default.
+      if (e.key === 'F11' || ((e.ctrlKey || e.metaKey) && e.key === 'Enter')) {
         e.preventDefault();
         toggleFullscreen();
       }
@@ -549,8 +564,8 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         pastePlainRef.current();
       }
 
-      // Ctrl+P for Print
-      if (e.ctrlKey && e.key === 'p') {
+      // Ctrl/Cmd+P for Print
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
         // Let native print dialog handle it
       }
 
@@ -601,7 +616,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         onDrop={handleDrop}
       >
         {/* Slim chrome strip so the window stays draggable/closable with no note open. */}
-        <div className="hidden md:flex absolute top-0 inset-x-0 h-10 items-center px-3 z-40 vx-glass-strong">
+        <div className="hidden md:flex absolute top-0 inset-x-0 h-10 items-center px-3 z-40 vx-glass-strong" style={{ paddingLeft: trafficLightInset || undefined }}>
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
@@ -612,7 +627,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             </button>
           )}
           <div data-tauri-drag-region className="flex-1 h-full" />
-          {isTauri && (
+          {showCaptionButtons && (
             <div className="flex items-center -mr-2 shrink-0">
               <button onClick={winMinimize} aria-label="Minimize" className="w-10 h-10 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"><Minus size={15} /></button>
               <button onClick={winMaximize} aria-label="Maximize" className="w-10 h-10 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"><Square size={12} /></button>
@@ -912,7 +927,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         className={`absolute top-0 inset-x-0 z-50 vx-glass-strong transition-[transform,opacity] ${chromeFadeCls} ease-[cubic-bezier(0.16,1,0.3,1)] ${chromeShown ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}
       >
         {/* Title bar — sidebar toggle · centered doc title (drag region) · window controls */}
-        <div className="h-9 flex items-center px-1.5 gap-1 text-slate-400 dark:text-slate-500">
+        <div className="h-9 flex items-center px-1.5 gap-1 text-slate-400 dark:text-slate-500" style={{ paddingLeft: trafficLightInset || undefined }}>
           {onToggleSidebar && (
             <button onClick={onToggleSidebar} className="hidden md:flex p-1.5 rounded-md hover:text-slate-600 dark:hover:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors" title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}>
               {sidebarOpen ? <ArrowLeft size={17} /> : <ArrowRight size={17} />}
@@ -923,7 +938,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               {(note.title || 'Untitled')} — Valx
             </span>
           </div>
-          {isTauri && (
+          {showCaptionButtons && (
             <div className="flex items-center -mr-1 shrink-0">
               <button onClick={winMinimize} aria-label="Minimize" className="w-11 h-9 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"><Minus size={15} /></button>
               <button onClick={winMaximize} aria-label="Maximize" className="w-11 h-9 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"><Square size={12} /></button>
@@ -943,10 +958,10 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               <div className={menuPopCls}>
                 {!note.isTrash ? (
                   <>
-                    <button onClick={() => { setOpenMenu(null); handleOpenFile(); }} className={itemCls}><FileUp size={15} className="opacity-60" /> Open File…<span className={shortcutCls}>Ctrl O</span></button>
-                    {onOpenFolder && <button onClick={() => { setOpenMenu(null); onOpenFolder(); }} className={itemCls}><FolderOpen size={15} className="opacity-60" /> Open Folder…<span className={shortcutCls}>Ctrl Shift O</span></button>}
+                    <button onClick={() => { setOpenMenu(null); handleOpenFile(); }} className={itemCls}><FileUp size={15} className="opacity-60" /> Open File…<span className={shortcutCls}>{accel('Ctrl O')}</span></button>
+                    {onOpenFolder && <button onClick={() => { setOpenMenu(null); onOpenFolder(); }} className={itemCls}><FolderOpen size={15} className="opacity-60" /> Open Folder…<span className={shortcutCls}>{accel('Ctrl Shift O')}</span></button>}
                     <div className={dividerCls} />
-                    <button onClick={() => { onSaveNow?.(note.id); setOpenMenu(null); }} className={itemCls}><Check size={15} className="opacity-60" /> Save<span className={shortcutCls}>Ctrl S</span></button>
+                    <button onClick={() => { onSaveNow?.(note.id); setOpenMenu(null); }} className={itemCls}><Check size={15} className="opacity-60" /> Save<span className={shortcutCls}>{accel('Ctrl S')}</span></button>
                     <div className={dividerCls} />
                     {/* Export as → flyout */}
                     <div className="relative" onMouseEnter={() => setFileSub('export')}>
@@ -973,9 +988,9 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                       )}
                     </div>
                     <div className={dividerCls} />
-                    <button onClick={() => { setOpenMenu(null); handlePrint(); }} className={itemCls}><Printer size={15} className="opacity-60" /> Print<span className={shortcutCls}>Ctrl P</span></button>
+                    <button onClick={() => { setOpenMenu(null); handlePrint(); }} className={itemCls}><Printer size={15} className="opacity-60" /> Print<span className={shortcutCls}>{accel('Ctrl P')}</span></button>
                     <div className={dividerCls} />
-                    {onOpenPreferences && <button onClick={() => { setOpenMenu(null); onOpenPreferences(); }} className={itemCls}><SlidersHorizontal size={15} className="opacity-60" /> Preferences…<span className={shortcutCls}>Ctrl ,</span></button>}
+                    {onOpenPreferences && <button onClick={() => { setOpenMenu(null); onOpenPreferences(); }} className={itemCls}><SlidersHorizontal size={15} className="opacity-60" /> Preferences…<span className={shortcutCls}>{accel('Ctrl ,')}</span></button>}
                     <div className={dividerCls} />
                     <button onClick={() => { moveToTrash(note.id); setOpenMenu(null); }} className={itemCls}><Trash2 size={15} className="opacity-60" /> Move to Trash</button>
                   </>
@@ -997,17 +1012,17 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                  otherwise blur the editor and collapse the selection, so Cut /
                  Copy / formatting would act on nothing. */
               <div className={menuPopCls} onMouseDown={(e) => e.preventDefault()}>
-                <button onClick={editCmd('undo')} className={itemCls}><Undo2 size={15} className="opacity-60" /> Undo<span className={shortcutCls}>Ctrl Z</span></button>
-                <button onClick={editCmd('redo')} className={itemCls}><Redo2 size={15} className="opacity-60" /> Redo<span className={shortcutCls}>Ctrl Shift Z</span></button>
+                <button onClick={editCmd('undo')} className={itemCls}><Undo2 size={15} className="opacity-60" /> Undo<span className={shortcutCls}>{accel('Ctrl Z')}</span></button>
+                <button onClick={editCmd('redo')} className={itemCls}><Redo2 size={15} className="opacity-60" /> Redo<span className={shortcutCls}>{accel('Ctrl Shift Z')}</span></button>
                 <div className={dividerCls} />
-                <button onClick={editCmd('cut')} className={itemCls}><Scissors size={15} className="opacity-60" /> Cut<span className={shortcutCls}>Ctrl X</span></button>
-                <button onClick={editCmd('copy')} className={itemCls}><Copy size={15} className="opacity-60" /> Copy<span className={shortcutCls}>Ctrl C</span></button>
-                <button onClick={pasteFromClipboard} className={itemCls}><ClipboardPaste size={15} className="opacity-60" /> Paste<span className={shortcutCls}>Ctrl V</span></button>
-                <button onClick={pastePlain} className={itemCls}><ClipboardType size={15} className="opacity-60" /> Paste as plain text<span className={shortcutCls}>Ctrl Shift V</span></button>
+                <button onClick={editCmd('cut')} className={itemCls}><Scissors size={15} className="opacity-60" /> Cut<span className={shortcutCls}>{accel('Ctrl X')}</span></button>
+                <button onClick={editCmd('copy')} className={itemCls}><Copy size={15} className="opacity-60" /> Copy<span className={shortcutCls}>{accel('Ctrl C')}</span></button>
+                <button onClick={pasteFromClipboard} className={itemCls}><ClipboardPaste size={15} className="opacity-60" /> Paste<span className={shortcutCls}>{accel('Ctrl V')}</span></button>
+                <button onClick={pastePlain} className={itemCls}><ClipboardType size={15} className="opacity-60" /> Paste as plain text<span className={shortcutCls}>{accel('Ctrl Shift V')}</span></button>
                 <div className={dividerCls} />
-                <button onClick={editCmd('selectAll')} className={itemCls}><TextSelect size={15} className="opacity-60" /> Select All<span className={shortcutCls}>Ctrl A</span></button>
+                <button onClick={editCmd('selectAll')} className={itemCls}><TextSelect size={15} className="opacity-60" /> Select All<span className={shortcutCls}>{accel('Ctrl A')}</span></button>
                 <div className={dividerCls} />
-                <button onClick={() => { setIsFindVisible(true); setOpenMenu(null); }} className={itemCls}><Search size={15} className="opacity-60" /> Find in note<span className={shortcutCls}>Ctrl F</span></button>
+                <button onClick={() => { setIsFindVisible(true); setOpenMenu(null); }} className={itemCls}><Search size={15} className="opacity-60" /> Find in note<span className={shortcutCls}>{accel('Ctrl F')}</span></button>
               </div>
             )}
           </div>
@@ -1027,7 +1042,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                       {!mdSource && (
                         <>
                           {([['bold', 'Bold', 'Ctrl B'], ['italic', 'Italic', 'Ctrl I'], ['strikeThrough', 'Strikethrough', 'Ctrl Shift X'], ['checkbox', 'Insert checkbox', '']] as const).map(([cmd, label, sc]) => (
-                            <button key={cmd} onMouseDown={(e) => e.preventDefault()} onClick={() => window.dispatchEvent(new CustomEvent('valx-format', { detail: cmd }))} className={itemCls}>{label}{sc && <span className={shortcutCls}>{sc}</span>}</button>
+                            <button key={cmd} onMouseDown={(e) => e.preventDefault()} onClick={() => window.dispatchEvent(new CustomEvent('valx-format', { detail: cmd }))} className={itemCls}>{label}{sc && <span className={shortcutCls}>{accel(sc)}</span>}</button>
                           ))}
                           <div className={dividerCls} />
                           <div className={sectionCls}>Alignment</div>
@@ -1098,7 +1113,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             <button onClick={() => setOpenMenu((m) => (m === 'view' ? null : 'view'))} onMouseEnter={() => openMenu && setOpenMenu('view')} className={menuBtnCls('view')}>View</button>
             {openMenu === 'view' && (
               <div className={menuPopCls}>
-                <button onClick={() => { toggleFullscreen(); setOpenMenu(null); }} className={itemCls}>{isFullscreen ? <Minimize2 size={15} className="opacity-60" /> : <Maximize2 size={15} className="opacity-60" />} {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}<span className={shortcutCls}>F11</span></button>
+                <button onClick={() => { toggleFullscreen(); setOpenMenu(null); }} className={itemCls}>{isFullscreen ? <Minimize2 size={15} className="opacity-60" /> : <Maximize2 size={15} className="opacity-60" />} {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}<span className={shortcutCls}>{isMac ? '⌘↩' : 'F11'}</span></button>
                 {onToggleSidebar && <button onClick={() => { onToggleSidebar(); setOpenMenu(null); }} className={itemCls}><ArrowLeft size={15} className="opacity-60" /> {sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}</button>}
                 <div className={dividerCls} />
                 {/* Markdown source moved here from Format: it swaps what the

@@ -8,7 +8,7 @@
   No accounts. No subscriptions. Every note is a real
   file, in a folder you choose, on your machine.
 
-  [Download for Windows](#download) · [Features](#features) · [Building from source](#building-from-source)
+  [Download](#download) · [Features](#features) · [Building from source](#building-from-source)
 </div>
 
 <!-- SCREENSHOT: hero shot of the editor in dark mode -->
@@ -22,10 +22,15 @@ Grab the latest build from [**GitHub Releases**](https://github.com/natededforve
 
 | Build | What it is |
 |---|---|
-| `Valx Prose Writer_x.x.x_x64-setup.exe` | NSIS installer — installs to your user profile, adds a Start Menu entry, clean uninstall. |
-| `valx-prose-writer-portable-windows.zip` | Portable — unzip and run `valx-prose-writer.exe` anywhere, no install, no admin rights. |
+| `Valx Prose Writer_x.x.x_x64-setup.exe` | **Windows** — NSIS installer, installs to your user profile, adds a Start Menu entry, clean uninstall. |
+| `valx-prose-writer-portable-windows.zip` | **Windows** — portable; unzip and run `valx-prose-writer.exe` anywhere, no install, no admin rights. |
+| `valx-prose-writer.dmg` | **macOS 11+** — universal (Apple Silicon + Intel); drag to Applications. |
+| `valx-prose-writer-mac.zip` | **macOS 11+** — the same `.app`, zipped, for anyone who'd rather not mount a disk image. |
 
-Windows only for now (built with [Tauri](https://tauri.app/) — a Rust/WebView2 shell, not Electron, so the app is a few MB, not a few hundred).
+Built with [Tauri](https://tauri.app/) — a Rust shell over the OS's own webview (WebView2 on Windows, WKWebView on macOS), not Electron, so the app is a few MB, not a few hundred.
+
+If the macOS build isn't notarized yet, Gatekeeper will refuse the first launch;
+right-click the app and choose **Open** once to get past it.
 
 <!-- VIDEO: 30-second install + first-run walkthrough -->
 <!-- <video src="docs/screenshots/install-demo.mp4" controls width="800"></video> -->
@@ -37,7 +42,7 @@ Windows only for now (built with [Tauri](https://tauri.app/) — a Rust/WebView2
 - **Slash menu** (`/`) — quick-insert headings, lists, tables, dividers, and media without leaving the keyboard.
 - **Full markdown source mode** — drop into raw markdown when you want it.
 - **Rich media** — drag images, audio, and video straight into a note; files are referenced from disk, not bloated into the note itself.
-- **Word count**, spellcheck (native OS spellcheck via the system webview), and a slash-anchored formatting toolbar.
+- **Word count**, spellcheck (the app's own Hunspell-compatible checker with bundled en/fr/de/it/es dictionaries — identical on every platform, not whatever the OS webview happens to ship), and a slash-anchored formatting toolbar.
 
 <!-- SCREENSHOT: slash menu open in a note -->
 
@@ -55,7 +60,7 @@ A visual canvas for planning: drag out nodes, connect them, arrange your story/p
 <!-- SCREENSHOT: World Mode canvas with a few connected nodes -->
 
 ### Slop detector ("Mark as")
-Select any text and mark it as written by **you**, by **AI**, or sourced from **another website** (with an auto-appended reference line) — so a note can honestly show what's yours and what isn't. On Windows this lives right inside the native right-click menu, next to spellcheck suggestions.
+Select any text and mark it as written by **you**, by **AI**, or sourced from **another website** (with an auto-appended reference line) — so a note can honestly show what's yours and what isn't. It lives in the editor's right-click menu, alongside the spelling suggestions and Add to Dictionary — same menu, same place, on Windows and macOS.
 
 <!-- SCREENSHOT: native context menu showing the Mark as submenu -->
 
@@ -81,6 +86,10 @@ No subscriptions, no paywalls, no telemetry.
 ## Building from source
 
 Prerequisites: [Node.js](https://nodejs.org/) 20+, npm, and the [Rust toolchain](https://www.rust-lang.org/tools/install) (for the desktop shell).
+On macOS the **Command Line Tools** are enough (`xcode-select --install`) — full
+Xcode is not required, since Tauri assembles the `.app` and `.dmg` itself rather
+than driving `xcodebuild`. Notarizing needs `xcrun notarytool`, which recent
+Command Line Tools ship; if your `xcrun` can't find it, install Xcode.
 
 ```
 npm install
@@ -92,7 +101,13 @@ Other useful commands:
 - `npm run dev` — Vite dev server only, in a regular browser tab (uses the Web File System Access API instead of the desktop bridge — handy for quick UI iteration).
 - `npm run lint` — TypeScript type check.
 - `node --import tsx --test src/lib/*.test.ts` — unit tests for the pure logic modules.
-- `npm run tauri:build` — full production build: NSIS installer + portable `.exe` in `src-tauri/target/release/`.
+- `npm run tauri:build` — full production build for the host platform: NSIS installer + portable `.exe` on Windows, `.app` + `.dmg` on macOS, under `src-tauri/target/release/bundle/`.
+- `npm run mac:release` — macOS release build ([`scripts/release.sh`](scripts/release.sh)): typecheck, universal `.app` + `.dmg`, stable asset names in `out/release/`. Pass `--publish` to push them to GitHub Releases. The Windows counterpart is [`scripts/release.ps1`](scripts/release.ps1).
+
+Platform differences live in [`src-tauri/tauri.macos.conf.json`](src-tauri/tauri.macos.conf.json),
+which Tauri merges over `tauri.conf.json` automatically when the host is macOS —
+the base config stays the Windows one, so a Windows build is byte-for-byte
+unaffected by anything in the macOS overlay.
 
 Tagged pushes (`vX.Y.Z`) trigger [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds both artifacts and publishes them to GitHub Releases automatically.
 

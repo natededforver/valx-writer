@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for the notarized DMG build.
+
+  JIT / unsigned-executable-memory: JavaScriptCore inside WKWebView. Without
+  these the hardened runtime kills the webview process on first script.
+  disable-library-validation: the bundled WebKit helper is loaded out of
+  process; library validation rejects it in a signed-but-not-Apple bundle.
+  network.client / network.server: OneDrive Graph calls and the PKCE OAuth
+  loopback listener on 127.0.0.1:19836 (src/onedrive.rs).
+  files.user-selected.read-write: the workspace folder the user picks in the
+  native open panel.
+
+  The last three only bite under App Sandbox, which this build does not opt
+  into (Tauri's asset protocol and the arbitrary user workspace root are not
+  sandbox-compatible). They are declared anyway so the plist stays correct if
+  a sandboxed / Mac App Store target is ever added — note that would also
+  require dropping app.macOSPrivateApi (used for the transparent splash).
+-->
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+</dict>
+</plist>

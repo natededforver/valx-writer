@@ -64,14 +64,21 @@
   --vx-hair: #262626;
 }
 
-/* --- Glass design language --- */
+/* --- Glass design language ---
+   Each rule declares a flat var(--vx-surface) background before its color-mix()
+   one. color-mix landed in Safari 16.2 (macOS 13); the app's macOS floor is
+   11.0, and on those older WebKit builds the second declaration is simply
+   invalid and dropped, leaving opaque chrome rather than an unreadable
+   transparent strip. Chromium/WebView2 always takes the color-mix. */
 .vx-glass {
+  background: var(--vx-surface);
   background: color-mix(in srgb, var(--vx-surface) 35%, transparent);
   backdrop-filter: blur(28px) saturate(1.8);
   -webkit-backdrop-filter: blur(28px) saturate(1.8);
   border: 1px solid color-mix(in srgb, var(--vx-hair) 50%, transparent);
 }
 .vx-glass-soft {
+  background: var(--vx-surface);
   background: color-mix(in srgb, var(--vx-surface) 25%, transparent);
   backdrop-filter: blur(20px) saturate(1.6);
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
@@ -85,6 +92,7 @@
   -webkit-backdrop-filter: none;
 }
 .vx-glass-strong {
+  background: var(--vx-surface);
   background: color-mix(in srgb, var(--vx-surface) 90%, transparent);
   backdrop-filter: blur(64px) saturate(1.8);
   -webkit-backdrop-filter: blur(64px) saturate(1.8);
@@ -95,7 +103,10 @@
    100vh can disagree with the native webview's client area on a borderless
    (decorations:false) Windows window when maximized, leaving a strip of
    uncovered window at the bottom. Pinning html/body/#root to 100% + clipping
-   overflow makes the editor cover the client area edge-to-edge. */
+   overflow makes the editor cover the client area edge-to-edge. macOS keeps
+   its native decorations, so it never had that gap — but the same height chain
+   is what stops rubber-band scrolling from dragging the whole page under the
+   overlaid title bar there, so it is wanted on both. */
 html, body, #root {
   height: 100%;
   margin: 0;

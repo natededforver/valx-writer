@@ -6,10 +6,11 @@ import {
 import { Plus, Minus, Trash2 } from 'lucide-react';
 import { JumpTarget } from '../types';
 import { parseTrailingMdLink } from '../lib/noteLinks';
-import { slopWrapText, webReferenceHtml, wordSpans, SlopType } from '../lib/slop';
+import { slopWrapText, wordSpans, SlopType } from '../lib/slop';
 import { mediaDisplaySrc, mediaDisplayHtml, mediaCanonicalHtml, onNativeMarkAs } from '../lib/desktop';
 import { SlashMenu, SlashItem, SlashSyntaxItem, SlashMediaItem } from './SlashMenu';
 import { AttachmentItem } from '../hooks/useFileSystem';
+import { typewriterEnabled, playKey, playReturn } from '../lib/typewriter';
 
 interface RichTextEditorProps {
   value: string;
@@ -388,7 +389,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   /** Wrap every word the range touches in slop marks (replacing any existing
    *  provenance first). Targets are collected before mutating, then processed
    *  in reverse document order so earlier offsets stay valid. */
-  const wrapSlopInRange = (range: Range, type: SlopType) => {
+  const wrapSlopInRange = (range: Range, type: SlopType, extra?: { author?: string; site?: string; url?: string }) => {
     unwrapSlopInRange(range);
     const targets: { node: Text; start: number; end: number }[] = [];
     const pushTarget = (t: Text) => {
@@ -412,6 +413,13 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
         const mk = document.createElement('mark');
         mk.className = 'vx-slop';
         mk.dataset.slop = type;
+        // Human marks name their author; web marks carry their source (encoded
+        // so quotes/spaces can't break the attribute) — the byline reads both.
+        if (extra?.author) mk.dataset.author = extra.author;
+        if (type === 'web' && extra?.site) {
+          mk.dataset.srcSite = encodeURIComponent(extra.site);
+          if (extra.url) mk.dataset.srcUrl = encodeURIComponent(extra.url);
+        }
         r.surroundContents(mk);
       }
     }
@@ -442,12 +450,11 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     slopRangeRef.current = r.cloneRange();
   };
 
-  const markSelectionAs = (type: 'me' | SlopType, ref?: { site: string; url?: string }) => {
+  const markSelectionAs = (type: 'me' | SlopType, opts?: { author?: string; site?: string; url?: string }) => {
     const range = slopRangeRef.current;
     if (!range || !editorRef.current) return;
     if (type === 'me') unwrapSlopInRange(range);
-    else wrapSlopInRange(range, type);
-    if (ref?.site) editorRef.current.insertAdjacentHTML('beforeend', webReferenceHtml(ref.site, ref.url));
+    else wrapSlopInRange(range, type, opts);
     handleInput();
   };
 
@@ -461,6 +468,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   useEffect(() => {
     return onNativeMarkAs((kind) => {
       if (kind === 'web') { setWebSite(''); setWebUrl(''); setWebDialog(true); return; }
+      if (kind.startsWith('author:')) { markSelectionAsRef.current('human', { author: kind.slice(7) }); return; }
       markSelectionAsRef.current(kind as 'me' | SlopType);
     });
   }, []);
@@ -1028,6 +1036,17 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Any keyboard activity dismisses the media remove button.
     hideMediaTool();
+    // Typewriter sounds (Settings toggle). Shift+Enter is the carriage-return
+    // bell + slide; every other actual typing key is a clack. Pure modifier /
+    // navigation keys stay silent. Read straight from localStorage like
+    // auto-capitalize does — no re-render needed to pick up the toggle.
+    if (typewriterEnabled()) {
+      if (e.key === 'Enter' && e.shiftKey) playReturn();
+      else if (
+        (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) ||
+        e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Tab'
+      ) playKey();
+    }
     // '/' menu owns navigation keys while open.
     if (slashPos) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {

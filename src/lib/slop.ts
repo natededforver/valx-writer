@@ -1,13 +1,15 @@
 // Slop detector — provenance marks for text the user didn't write themselves.
-// A slop mark is `<mark class="vx-slop" data-slop="paste|ai|web">` wrapping ONE
-// word. Marks ride through .md files verbatim as inline HTML (same precedent
+// A slop mark is `<mark class="vx-slop" data-slop="paste|ai|web|human">` wrapping
+// ONE word. A `human` mark carries data-author="<creator id>"; a `web` mark
+// carries data-src-site / data-src-url so the byline can list its source.
+// Marks ride through .md files verbatim as inline HTML (same precedent
 // as audio/video tags in format.ts), so provenance survives reloads with no
 // side-channel storage. Marks persist through any amount of editing — the
 // only way to remove one is the "Mark as me" unwrap in the editor.
 // ponytail: ~40 bytes of markup per marked word on disk; compact token syntax
 // only if huge pastes make file size a real complaint.
 
-export type SlopType = 'paste' | 'ai' | 'web';
+export type SlopType = 'paste' | 'ai' | 'web' | 'human';
 
 const escText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

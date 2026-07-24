@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNotes } from './hooks/useNotes';
 import { useOneDrive } from './hooks/useOneDrive';
-import { isTauri } from './lib/desktop';
+import { isTauri, pushMarkAsItems } from './lib/desktop';
+import { markAsItems, CREATORS_EVENT } from './lib/creators';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
 import { FormatConverter } from './components/FormatConverter';
 import { SettingsModal, LS_SPELL_LANG, LS_FONT, LS_TRANSPARENCY, applyFont, applyTransparency } from './components/SettingsModal';
-import { OnboardingSlideshow } from './components/OnboardingSlideshow';
 import { FilterState, JumpTarget } from './types';
 import { SearchHit } from './lib/search';
 import { linkHrefForNote } from './lib/noteLinks';
@@ -61,10 +61,6 @@ export default function App() {
   // — connect/disconnect both live in Settings now.
   const [highlightOneDriveSettings, setHighlightOneDriveSettings] = useState(false);
   const goToOneDriveSettings = () => { setHighlightOneDriveSettings(true); setIsSettingsOpen(true); };
-  // First-ever launch shows the one-time feature tour.
-  const [showOnboarding, setShowOnboarding] = useState(() => {
-    return localStorage.getItem('valx-onboarding-done') !== 'true';
-  });
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const stored = localStorage.getItem('bear-theme-dark');
     return stored === null ? true : stored === 'true';
@@ -117,11 +113,6 @@ export default function App() {
   // While dragging, width transitions would lag the pointer.
   const railTransition = dragging ? '' : 'transition-[width,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]';
 
-  const closeOnboarding = () => {
-    localStorage.setItem('valx-onboarding-done', 'true');
-    setShowOnboarding(false);
-  };
-
   useEffect(() => {
     localStorage.setItem('bear-theme-dark', String(isDarkMode));
     if (isDarkMode) {
@@ -130,6 +121,15 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Keep the native "Mark as" menu's author list in sync with the Creators
+  // settings (label + kind pairs), on launch and whenever creators change.
+  useEffect(() => {
+    const push = () => pushMarkAsItems(markAsItems());
+    push();
+    window.addEventListener(CREATORS_EVENT, push);
+    return () => window.removeEventListener(CREATORS_EVENT, push);
+  }, []);
 
   // Re-apply the saved spellcheck/dictionary language on launch so the desktop
   // app honours the user's Settings choice over the OS-locale auto-pick.
@@ -161,6 +161,22 @@ export default function App() {
     const currentFolderId = filter.type === 'folder' ? filter.folderId : null;
     const newNote = addNote(currentFolderId);
     setSelectedNoteIds([newNote.id]);
+  };
+
+  // The single top arrow both hides the sidebar and drops into distraction-free
+  // fullscreen writing — the two states are coupled (iA-Writer style). Hiding
+  // with no note open would strand the user on the empty editor (no chrome in
+  // fullscreen), so a blank note is created first. Revealing the sidebar exits
+  // fullscreen.
+  const handleToggleSidebar = () => {
+    if (showSidebar) {
+      if (!activeNoteId) handleAddNote();
+      setShowSidebar(false);
+      setIsFullscreen(true);
+    } else {
+      setShowSidebar(true);
+      setIsFullscreen(false);
+    }
   };
 
   const handleSearchNavigate = (hit: SearchHit, query: string) => {
@@ -208,7 +224,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className={`relative flex h-screen w-full overflow-hidden text-slate-800 dark:text-slate-200 font-sans ${isDarkMode ? 'dark' : ''} ${dragging ? 'select-none cursor-col-resize' : ''}`}>
+    <div className={`relative flex h-full w-full overflow-hidden text-slate-800 dark:text-slate-200 font-sans ${isDarkMode ? 'dark' : ''} ${dragging ? 'select-none cursor-col-resize' : ''}`}>
       {/* Mobile Header (visible only on small screens). The sidebar and the
           note list are the same panel now, so the only switch is between the
           sidebar/list view and the editor view. The 'list' view shows the
@@ -332,7 +348,7 @@ export default function App() {
           noteExt={activeNote ? (noteExtensions[activeNote.id] ?? '') : ''}
           listAttachments={listAttachments}
           sidebarOpen={showSidebarEff}
-          onToggleSidebar={() => setShowSidebar((v) => !v)}
+          onToggleSidebar={handleToggleSidebar}
           className={`${editorVisible ? 'flex' : 'hidden'} md:flex w-full md:flex-1 min-w-0 pt-14 md:pt-0`}
         />
 
@@ -359,9 +375,6 @@ export default function App() {
         onDisconnectOneDrive={isTauri ? oneDrive.disconnect : undefined}
         highlightOneDrive={highlightOneDriveSettings}
       />
-
-      {/* One-time tour for freshly created accounts */}
-      {showOnboarding && <OnboardingSlideshow onClose={closeOnboarding} />}
 
       {syncToast && <div className="vx-toast">{syncToast}</div>}
     </div>

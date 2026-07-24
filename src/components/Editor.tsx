@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Note, JumpTarget } from '../types';
 import { plainText } from '../lib/search';
-import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Share2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, CodeXml, ArrowLeft, ArrowRight, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Strikethrough, CheckSquare, Type, MoreHorizontal, Minus, Square, Play, ChevronRight } from 'lucide-react';
+import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Share2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, CodeXml, ArrowLeft, ArrowRight, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Strikethrough, CheckSquare, Type, MoreHorizontal, Minus, Square, Play, ChevronRight, Plus } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '../lib/desktop';
 import { RichTextEditor } from './RichTextEditor';
@@ -9,6 +9,8 @@ import { formatKind, htmlToMarkdown, markdownToHtml, wordCount } from '../lib/fo
 import { codeLangFromExt, highlightCode, buildPreviewDoc, PREVIEWABLE } from '../lib/codeHighlight';
 import { mediaDisplayHtml, previewMediaBase } from '../lib/desktop';
 import { LS_LINE_COUNTER, LINE_COUNTER_EVENT, LS_HISTORY_INTERVAL, HISTORY_INTERVAL_EVENT, DEFAULT_HISTORY_INTERVAL, LS_WORDCOUNT, LS_WORDCOUNT_GOAL, WORDCOUNT_EVENT } from './SettingsModal';
+import { Creator, CREATORS_EVENT, creatorMeName, setCreatorMeName, loadCreators, saveCreators, newCreatorId } from '../lib/creators';
+import { deriveByline, stripByline, syncByline, bylineIsEmpty } from '../lib/byline';
 import { Snapshot, pushSnapshot, loadHistory, saveHistory } from '../lib/history';
 import html2pdf from 'html2pdf.js';
 import { asBlob } from 'html-docx-js-typescript';
@@ -103,6 +105,83 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     return () => window.removeEventListener(WORDCOUNT_EVENT, onChange);
   }, []);
 
+  // Word-count pill visibility: fades out while actively typing so it never
+  // competes with the words; reappears the moment the pointer moves (to peek at
+  // progress) and once typing pauses. Two independent timers — "typing" and
+  // "pointer active" — and the pill is hidden only when typing AND the pointer
+  // is idle.
+  const [wcTyping, setWcTyping] = useState(false);
+  const [wcHover, setWcHover] = useState(false);
+  const wcTypeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wcHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!note) return;
+    setWcTyping(true);
+    if (wcTypeTimer.current) clearTimeout(wcTypeTimer.current);
+    wcTypeTimer.current = setTimeout(() => setWcTyping(false), 1500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.content]);
+  const bumpWcHover = () => {
+    setWcHover(true);
+    if (wcHoverTimer.current) clearTimeout(wcHoverTimer.current);
+    wcHoverTimer.current = setTimeout(() => setWcHover(false), 1800);
+  };
+  useEffect(() => () => {
+    if (wcTypeTimer.current) clearTimeout(wcTypeTimer.current);
+    if (wcHoverTimer.current) clearTimeout(wcHoverTimer.current);
+  }, []);
+
+  // Goal reached: when the live count first crosses the goal (by typing, not by
+  // opening an already-finished note), flash a gentle "You've written enough."
+  // and surface the pill again for a moment.
+  const wcCount = note ? wordCount(note.content) : 0;
+  const goalReached = wcGoal > 0 && wcCount >= wcGoal;
+  const [goalCheer, setGoalCheer] = useState(false);
+  const goalStateRef = useRef<{ id: string | null; reached: boolean }>({ id: null, reached: false });
+  const goalCheerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!note) return;
+    const st = goalStateRef.current;
+    if (st.id !== note.id) { goalStateRef.current = { id: note.id, reached: goalReached }; return; }
+    if (goalReached && !st.reached) {
+      setGoalCheer(true);
+      if (goalCheerTimer.current) clearTimeout(goalCheerTimer.current);
+      goalCheerTimer.current = setTimeout(() => setGoalCheer(false), 3500);
+    }
+    goalStateRef.current = { id: note.id, reached: goalReached };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.id, goalReached]);
+  useEffect(() => () => { if (goalCheerTimer.current) clearTimeout(goalCheerTimer.current); }, []);
+
+  // Creators — the primary creator name (replaces "Me") and any extra human
+  // authors, both global. Kept live via CREATORS_EVENT so the menu, byline and
+  // native "Mark as" list all move together. creatorsVersion just forces the
+  // byline to re-derive when a name changes (the marks themselves didn't).
+  const [creatorMe, setCreatorMe] = useState(() => creatorMeName());
+  const [creators, setCreators] = useState<Creator[]>(() => loadCreators());
+  const [creatorsVersion, setCreatorsVersion] = useState(0);
+  useEffect(() => {
+    const onChange = () => { setCreatorMe(creatorMeName()); setCreators(loadCreators()); setCreatorsVersion((v) => v + 1); };
+    window.addEventListener(CREATORS_EVENT, onChange);
+    return () => window.removeEventListener(CREATORS_EVENT, onChange);
+  }, []);
+  const addCreator = () => saveCreators([...loadCreators(), { id: newCreatorId(), name: '' }]);
+  const updateCreatorName = (id: string, name: string) => saveCreators(loadCreators().map((c) => (c.id === id ? { ...c, name } : c)));
+  const removeCreator = (id: string) => saveCreators(loadCreators().filter((c) => c.id !== id));
+
+  // Keep the managed byline block current inside the STORED note content (so it
+  // exports/prints with the file). syncByline is idempotent, so once the stored
+  // content matches this no-ops — it only writes when the creator name or the
+  // note's provenance marks actually changed. Byline is prose-only (md/html);
+  // code, txt and docx notes are left untouched.
+  const bylineFormat = (ext: string) => { const k = formatKind(ext || '.md'); return k === 'md' || k === 'html'; };
+  useEffect(() => {
+    if (!note || note.isTrash || isCodeNote || !bylineFormat(noteExt)) return;
+    const desired = syncByline(note.content);
+    if (desired !== note.content) updateNote(note.id, { content: desired });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.id, note?.content, noteExt, isCodeNote, creatorsVersion]);
+
   // In-app preview: a sandboxed iframe rendered over the editor. srcDoc is
   // debounced so typing doesn't reload the frame every keystroke. sandbox has
   // NO allow-same-origin, so the preview (which runs the note's own scripts)
@@ -143,19 +222,21 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   useEffect(() => {
     if (!mdSource || !note) return;
     if (lastMdCommitRef.current !== null && note.content === lastMdCommitRef.current) return;
-    setMdText(htmlToMarkdown(note.content));
+    // Byline is a managed block, not something the user hand-edits — keep it out
+    // of the raw markdown surface; syncByline re-adds it when edits commit.
+    setMdText(htmlToMarkdown(stripByline(note.content)));
     lastMdCommitRef.current = note.content;
   }, [mdSource, note?.content]);
   const handleMdChange = (text: string) => {
     if (!note) return;
     setMdText(text);
-    const html = markdownToHtml(text);
-    lastMdCommitRef.current = html;
-    updateNote(note.id, { content: html });
+    const stored = syncByline(markdownToHtml(text));
+    lastMdCommitRef.current = stored;
+    updateNote(note.id, { content: stored });
   };
   const toggleMdSource = () => {
     if (!mdSource && note) {
-      setMdText(htmlToMarkdown(note.content));
+      setMdText(htmlToMarkdown(stripByline(note.content)));
       lastMdCommitRef.current = note.content;
     }
     setMdSource((v) => !v);
@@ -271,12 +352,11 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   // File-menu flyout (Export as / Send to), and the author's own display name.
   const [fileSub, setFileSub] = useState<'export' | 'send' | null>(null);
-  const [authorName, setAuthorName] = useState(() => localStorage.getItem('valx-author-me') || '');
   useEffect(() => { if (openMenu !== 'file') setFileSub(null); }, [openMenu]);
-  // Author highlighting — which provenance marks are dimmed (hidden). Human
-  // (unmarked) text is never marked, so only ai/web/paste are toggleable.
-  const [hiddenAuthors, setHiddenAuthors] = useState<Set<'paste' | 'ai' | 'web'>>(new Set());
-  const toggleAuthor = (a: 'paste' | 'ai' | 'web') =>
+  // Provenance highlighting — which marks are dimmed (hidden). Your own writing
+  // is never marked; paste/ai/web/human are the toggleable kinds.
+  const [hiddenAuthors, setHiddenAuthors] = useState<Set<'paste' | 'ai' | 'web' | 'human'>>(new Set());
+  const toggleAuthor = (a: 'paste' | 'ai' | 'web' | 'human') =>
     setHiddenAuthors((prev) => { const n = new Set(prev); n.has(a) ? n.delete(a) : n.add(a); return n; });
   const anyChromeMenuOpen = tableMenu || openMenu !== null || historyOpen || isFindVisible || showPreview;
   // Windowed: the iA-Writer chrome is persistent. Fullscreen: it auto-hides for
@@ -433,6 +513,18 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // Left is the default now (undefined === left), matching the iA-Writer look.
   const align = note.align ?? 'left';
   const alignClass = align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
+
+  // Byline (prose md/html only): a read-only "By … · with … · Source:" line
+  // under the title. It's rendered from the note body (byline stripped so it
+  // isn't shown twice) plus the global creator name; the same data is what the
+  // sync effect stores into the file. creatorMe/creatorsVersion are in the dep
+  // path via state so a name change re-derives it. The editor is fed the
+  // stripped body so the managed block never lands inside the editable surface.
+  const bylineEligible = !isCodeNote && !note.isTrash && bylineFormat(noteExt);
+  const editorBody = bylineEligible ? stripByline(note.content) : note.content;
+  const bctx = bylineEligible ? deriveByline(editorBody) : null;
+  void creatorMe; // re-derive byline on primary-name change
+  const showByline = !!bctx && !bylineIsEmpty(bctx);
 
   const handlePrint = () => {
     setIsShareOpen(false);
@@ -671,11 +763,12 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
 
 
   return (
-    <div 
+    <div
       className={`flex-1 bg-white dark:bg-black vx-editor-opaque flex flex-col h-full overflow-hidden relative ${[...hiddenAuthors].map((a) => 'vx-hide-' + a).join(' ')} ${className}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onMouseMove={bumpWcHover}
     >
       
       {/* Toast */}
@@ -840,28 +933,51 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             )}
           </div>
 
-          {/* AUTHORS — dim/show provenance highlights (paste/AI/web). */}
+          {/* CREATORS — the primary creator name + extra human authors (each
+              becomes a "Mark as" label and a byline credit), plus the
+              provenance-highlight toggles. */}
           <div className="relative z-50">
-            <button onClick={() => setOpenMenu((m) => (m === 'authors' ? null : 'authors'))} onMouseEnter={() => openMenu && setOpenMenu('authors')} className={menuBtnCls('authors')}>Authors</button>
-            {openMenu === 'authors' && (
-              <div className={menuPopCls}>
-                <div className={sectionCls}>Me</div>
+            <button onClick={() => setOpenMenu((m) => (m === 'creators' ? null : 'creators'))} onMouseEnter={() => openMenu && setOpenMenu('creators')} className={menuBtnCls('creators')}>Creators</button>
+            {openMenu === 'creators' && (
+              <div className={`${menuPopCls} min-w-64`}>
+                <div className={sectionCls}>Creator</div>
                 <div className="px-3 pb-2 pt-0.5">
                   <input
-                    value={authorName}
-                    onChange={(e) => { setAuthorName(e.target.value); localStorage.setItem('valx-author-me', e.target.value); }}
+                    value={creatorMe}
+                    onChange={(e) => setCreatorMeName(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
-                    placeholder="Your name"
+                    placeholder="Your name (replaces “Me”)"
                     className="w-full bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-md px-2 py-1 text-sm text-slate-900 dark:text-white outline-none focus:border-[#32CD32] transition-colors"
                   />
                 </div>
                 <div className={dividerCls} />
-                <div className={sectionCls}>Highlight by author</div>
-                {([['ai', 'AI'], ['web', 'Reference'], ['paste', 'Pasted']] as const).map(([a, label]) => (
+                <div className={`${sectionCls} flex items-center justify-between`}>
+                  <span>Human authors</span>
+                  <button onClick={(e) => { e.stopPropagation(); addCreator(); }} title="Add author" className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-400 hover:text-[#32CD32] transition-colors"><Plus size={14} /></button>
+                </div>
+                {creators.length === 0 ? (
+                  <div className="px-3 pb-1.5 pt-0.5 text-[11px] text-slate-400 dark:text-slate-500 leading-snug">Add co-authors to credit them and mark their words.</div>
+                ) : (
+                  creators.map((c) => (
+                    <div key={c.id} className="px-3 pb-1.5 pt-0.5 flex items-center gap-1.5">
+                      <input
+                        value={c.name}
+                        onChange={(e) => updateCreatorName(c.id, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Author name"
+                        className="flex-1 min-w-0 bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-md px-2 py-1 text-sm text-slate-900 dark:text-white outline-none focus:border-[#32CD32] transition-colors"
+                      />
+                      <button onClick={(e) => { e.stopPropagation(); removeCreator(c.id); }} title="Remove author" className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-400 hover:text-red-500 transition-colors shrink-0"><X size={14} /></button>
+                    </div>
+                  ))
+                )}
+                <div className={dividerCls} />
+                <div className={sectionCls}>Highlight by source</div>
+                {([['human', 'Human authors'], ['ai', 'AI'], ['web', 'Reference'], ['paste', 'Pasted']] as const).map(([a, label]) => (
                   <button key={a} onClick={() => toggleAuthor(a)} className={itemCls}><Check size={14} className={!hiddenAuthors.has(a) ? 'text-[#32CD32]' : 'opacity-0'} /> {label}</button>
                 ))}
                 <div className={dividerCls} />
-                <div className="px-3 py-1 text-[11px] text-slate-400 dark:text-slate-500 leading-snug max-w-52">Your own writing is never marked — only pasted, AI, and web-sourced text.</div>
+                <div className="px-3 py-1 text-[11px] text-slate-400 dark:text-slate-500 leading-snug max-w-64">Your own writing is never marked. Select text and use “Mark as” (right-click) to credit an author, AI, or a website.</div>
               </div>
             )}
           </div>
@@ -1015,7 +1131,11 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         </div>
       ) : (
         <div className={`vx-editor-scroll flex-1 min-w-0 overflow-y-auto px-8 sm:px-12 lg:px-24 py-12 print-area transition-colors ${isFullscreen ? 'pt-12' : 'pt-[80px]'} ${savedFlash !== null ? 'save-glow' : ''}`}>
-          <div className={`mx-auto w-full max-w-3xl transition-all duration-300`}>
+          {/* iA-Writer breathing room: the title starts well down the page so a
+              fresh note feels like paper rolled into a typewriter. It's plain
+              top padding on the scroll content, so it only shows at the very
+              start — scrolling into the body reclaims it. */}
+          <div className={`mx-auto w-full max-w-3xl pt-[12vh] transition-all duration-300`}>
             {/* Textarea (not input) so a long file name wraps and the field grows
                 to show it in full. field-sizing:content does the growing natively. */}
             <textarea
@@ -1027,8 +1147,20 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               disabled={note.isTrash}
               spellCheck
               style={{ fieldSizing: 'content' } as any}
-              className={`w-full ${alignClass} text-4xl font-bold leading-tight resize-none overflow-hidden border-none outline-none mb-6 placeholder-slate-400 dark:placeholder-neutral-800 bg-transparent disabled:opacity-50 text-slate-900 dark:text-white`}
+              className={`w-full ${alignClass} text-4xl font-bold leading-tight resize-none overflow-hidden border-none outline-none ${showByline ? 'mb-2' : 'mb-6'} placeholder-slate-400 dark:placeholder-neutral-800 bg-transparent disabled:opacity-50 text-slate-900 dark:text-white`}
             />
+            {showByline && bctx && (
+              <div className={`vx-byline-view ${alignClass} mb-7 text-sm text-slate-400 dark:text-slate-500 flex flex-wrap items-center gap-x-1.5 gap-y-1 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : ''}`}>
+                {bctx.by && <span>By&nbsp;<span className="font-medium text-slate-500 dark:text-slate-300">{bctx.by}</span></span>}
+                {bctx.authors.length > 0 && (<><span className="opacity-50">·</span><span>with {bctx.authors.join(', ')}</span></>)}
+                {bctx.ai && (<><span className="opacity-50">·</span><span>AI-assisted</span></>)}
+                {bctx.sources.length > 0 && (
+                  <><span className="opacity-50">·</span><span>Source:&nbsp;{bctx.sources.map((s, i) => (
+                    <span key={i} title={s.url || undefined}>{i > 0 ? ', ' : ''}{s.site}</span>
+                  ))}</span></>
+                )}
+              </div>
+            )}
             {isMdNote && mdSource ? (
               <div className="relative vx-mdsrc">
                 <pre
@@ -1048,8 +1180,8 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             ) : (
               <RichTextEditor
                 className={alignClass}
-                value={note.content}
-                onChange={content => updateNote(note.id, { content })}
+                value={editorBody}
+                onChange={content => updateNote(note.id, { content: bylineEligible ? syncByline(content) : content })}
                 onTextFileDrop={setDroppedTextFiles}
                 placeholder="Start writing... (Drag & drop text, images, audio, video here)"
                 disabled={note.isTrash}
@@ -1107,10 +1239,17 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         </div>
       )}
 
-      {/* Word-count widget — corner pill, current / goal (goal optional). */}
+      {/* Word-count widget — corner pill, current / goal (goal optional). Fades
+          while typing; peeks back on pointer move / when the goal is reached. */}
       {wcOn && !showPreview && (
-        <div className="absolute bottom-3 right-4 z-30 px-2.5 py-1 rounded-md bg-slate-100/85 dark:bg-neutral-900/85 backdrop-blur-sm text-[11px] font-medium text-slate-500 dark:text-slate-400 tabular-nums select-none pointer-events-none shadow-sm">
-          {wordCount(note.content).toLocaleString()}{wcGoal > 0 ? ` / ${wcGoal.toLocaleString()}` : ''} Words
+        <div className={`absolute bottom-3 right-4 z-30 px-2.5 py-1 rounded-md bg-slate-100/85 dark:bg-neutral-900/85 backdrop-blur-sm text-[11px] font-medium tabular-nums select-none pointer-events-none shadow-sm transition-opacity duration-500 ${(!wcTyping || wcHover || goalCheer) ? 'opacity-100' : 'opacity-0'} ${goalReached ? 'text-[#32CD32]' : 'text-slate-500 dark:text-slate-400'}`}>
+          {wcCount.toLocaleString()}{wcGoal > 0 ? ` / ${wcGoal.toLocaleString()}` : ''} Words
+        </div>
+      )}
+      {/* Goal reached: a brief, quiet cheer at the bottom. */}
+      {wcOn && goalCheer && !showPreview && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-full bg-[#32CD32]/15 text-[#1f9e1f] dark:text-[#32CD32] text-xs font-semibold shadow-sm select-none pointer-events-none animate-in fade-in slide-in-from-bottom-2">
+          You've written enough.
         </div>
       )}
 

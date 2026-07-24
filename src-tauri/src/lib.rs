@@ -19,6 +19,7 @@ use base64::Engine;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
@@ -26,6 +27,27 @@ use tauri_plugin_fs::FsExt;
 #[cfg(windows)]
 mod native_mark_as;
 mod onedrive;
+
+// Ordered (label, kind) pairs for the native "Mark as" submenu. The renderer
+// owns the ordering/labels (creator → human authors → AI → Other Website) and
+// pushes them here via set_mark_as_items whenever the Creators settings change;
+// native_mark_as reads this to (re)build the menu on each right-click.
+pub(crate) struct MarkAsItems(pub(crate) Arc<Mutex<Vec<(String, String)>>>);
+
+fn default_mark_as_items() -> Vec<(String, String)> {
+    vec![
+        ("Me".into(), "me".into()),
+        ("AI".into(), "ai".into()),
+        ("Other Website…".into(), "web".into()),
+    ]
+}
+
+#[tauri::command]
+fn set_mark_as_items(state: tauri::State<MarkAsItems>, items: Vec<(String, String)>) {
+    if let Ok(mut guard) = state.0.lock() {
+        *guard = items;
+    }
+}
 
 #[derive(Serialize)]
 pub(crate) struct DiskFile {
@@ -155,16 +177,19 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .manage(MarkAsItems(Arc::new(Mutex::new(default_mark_as_items()))))
         .invoke_handler(tauri::generate_handler![
             read_directory,
             set_workspace_root,
+            set_mark_as_items,
             onedrive::start_oauth,
             onedrive::sync_onedrive,
         ])
         .setup(|app| {
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
-                native_mark_as::install(&window);
+                let items = app.state::<MarkAsItems>().0.clone();
+                native_mark_as::install(&window, items);
             }
             Ok(())
         })

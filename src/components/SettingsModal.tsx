@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Settings as SettingsIcon, SpellCheck, Type, Check, Info, Hash, History, Cloud, Layers, Target } from 'lucide-react';
+import { X, Settings as SettingsIcon, SpellCheck, Type, Check, Info, Hash, History, Cloud, Layers, Target, Volume2 } from 'lucide-react';
+import { LS_TYPEWRITER } from '../lib/typewriter';
 
 // ---------------------------------------------------------------------------
 // Settings dialog (opened from the sidebar gear). Two knobs today:
@@ -104,6 +105,7 @@ export function SettingsModal({ isOpen, onClose, oneDriveConnected, oneDriveAcco
   const [wordCountOn, setWordCountOn] = useState<boolean>(() => localStorage.getItem(LS_WORDCOUNT) !== 'false');
   const [wordGoal, setWordGoal] = useState<number>(() => parseInt(localStorage.getItem(LS_WORDCOUNT_GOAL) || '0', 10) || 0);
   const [transparency, setTransparency] = useState<boolean>(() => localStorage.getItem(LS_TRANSPARENCY) !== 'false');
+  const [typewriter, setTypewriter] = useState<boolean>(() => localStorage.getItem(LS_TYPEWRITER) === 'true');
   const [historyInterval, setHistoryInterval] = useState<number>(() => {
     const v = parseInt(localStorage.getItem(LS_HISTORY_INTERVAL) || '', 10);
     return Number.isFinite(v) && v > 0 ? v : DEFAULT_HISTORY_INTERVAL;
@@ -179,6 +181,12 @@ export function SettingsModal({ isOpen, onClose, oneDriveConnected, oneDriveAcco
     setTransparency(next);
     localStorage.setItem(LS_TRANSPARENCY, String(next));
     applyTransparency(next);
+  };
+
+  const toggleTypewriter = () => {
+    const next = !typewriter;
+    setTypewriter(next);
+    localStorage.setItem(LS_TYPEWRITER, String(next));
   };
 
   const toggleLineCounter = () => {
@@ -353,6 +361,32 @@ export function SettingsModal({ isOpen, onClose, oneDriveConnected, oneDriveAcco
                   className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform flex items-center justify-center ${transparency ? 'translate-x-5' : 'translate-x-0'}`}
                 >
                   {transparency && <Check size={12} className="text-[#32CD32]" />}
+                </span>
+              </button>
+            </div>
+          </section>
+
+          {/* Typewriter sounds */}
+          <section>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Volume2 size={15} className="text-[#32CD32]" />
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Typewriter sounds</h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Play an old-school key clack as you type. Shift+Enter rings the carriage-return bell for the next line.
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={typewriter}
+                onClick={toggleTypewriter}
+                className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${typewriter ? 'bg-[#32CD32]' : 'bg-slate-200 dark:bg-neutral-700'}`}
+                title={typewriter ? 'On' : 'Off'}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform flex items-center justify-center ${typewriter ? 'translate-x-5' : 'translate-x-0'}`}>
+                  {typewriter && <Check size={12} className="text-[#32CD32]" />}
                 </span>
               </button>
             </div>

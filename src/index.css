@@ -68,6 +68,17 @@
   border: 1px solid color-mix(in srgb, var(--vx-hair) 50%, transparent);
 }
 
+/* Fill the window exactly. Without an explicit height chain the app root's
+   100vh can disagree with the native webview's client area on a borderless
+   (decorations:false) Windows window when maximized, leaving a strip of
+   uncovered window at the bottom. Pinning html/body/#root to 100% + clipping
+   overflow makes the editor cover the client area edge-to-edge. */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
 body {
   font-family: var(--font-sans);
   background:
@@ -241,11 +252,13 @@ body {
   filter: drop-shadow(0 0 8px rgba(255, 40, 90, 0.4)) drop-shadow(0 0 16px rgba(60, 80, 255, 0.25));
 }
 
-/* Authors menu — hiding a provenance type reverts those marks to plain text
-   (the texture highlight is removed; the words themselves stay). */
+/* Creators menu — hiding a provenance type reverts those marks to plain text
+   (the texture highlight is removed; the words themselves stay). Human-author
+   marks share the same sd-texture gradient as paste/AI/web. */
 .vx-hide-paste .rich-editor mark.vx-slop[data-slop="paste"],
 .vx-hide-ai .rich-editor mark.vx-slop[data-slop="ai"],
-.vx-hide-web .rich-editor mark.vx-slop[data-slop="web"] {
+.vx-hide-web .rich-editor mark.vx-slop[data-slop="web"],
+.vx-hide-human .rich-editor mark.vx-slop[data-slop="human"] {
   background: none;
   -webkit-background-clip: border-box;
   background-clip: border-box;
@@ -409,15 +422,6 @@ body {
 @keyframes vx-menu-pop {
   from { opacity: 0; transform: scale(0.94) translateY(-4px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-/* Onboarding slideshow slide transition */
-.slide-in {
-  animation: slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-}
-@keyframes slide-in {
-  from { opacity: 0; transform: translateX(24px); }
-  to { opacity: 1; transform: translateX(0); }
 }
 
 /* World Mode: linked-node glow (colour set via inline --glow var so a node

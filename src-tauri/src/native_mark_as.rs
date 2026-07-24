@@ -12,6 +12,7 @@
 // adds three extra command items to the menu WebView2 was already building,
 // and emits a "mark-as" window event back to JS when one is clicked.
 
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, WebviewWindow, Wry};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2ContextMenuRequestedEventArgs, ICoreWebView2Environment9, ICoreWebView2_11,
@@ -20,9 +21,9 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
 use webview2_com::{ContextMenuRequestedEventHandler, CustomItemSelectedEventHandler};
 use windows::core::{Interface, HSTRING};
 
-const MARK_AS_ITEMS: [(&str, &str); 3] = [("Me", "me"), ("AI", "ai"), ("Other Website…", "web")];
+type Items = Arc<Mutex<Vec<(String, String)>>>;
 
-pub fn install(window: &WebviewWindow<Wry>) {
+pub fn install(window: &WebviewWindow<Wry>, items: Items) {
     let emit_target = window.clone();
     let _ = window.with_webview(move |webview| {
         let core: ICoreWebView2_11 = match unsafe { webview.controller().CoreWebView2() }.and_then(|c| c.cast()) {
@@ -35,11 +36,13 @@ pub fn install(window: &WebviewWindow<Wry>) {
         };
 
         let emit_target2 = emit_target.clone();
+        let items = items.clone();
         let handler = ContextMenuRequestedEventHandler::create(Box::new(move |_sender, args| {
             if let Some(args) = args {
                 // ponytail: a failed injection just leaves the native menu
                 // without "Mark as" for this click — never worth crashing over.
-                let _ = unsafe { inject_mark_as(&env, &args, &emit_target2) };
+                let list = items.lock().map(|g| g.clone()).unwrap_or_default();
+                let _ = unsafe { inject_mark_as(&env, &args, &emit_target2, &list) };
             }
             Ok(())
         }));
@@ -54,6 +57,7 @@ unsafe fn inject_mark_as(
     env: &ICoreWebView2Environment9,
     args: &ICoreWebView2ContextMenuRequestedEventArgs,
     window: &WebviewWindow<Wry>,
+    list: &[(String, String)],
 ) -> windows::core::Result<()> {
     let target = args.ContextMenuTarget()?;
     let mut has_selection = windows::core::BOOL(0);
@@ -69,14 +73,14 @@ unsafe fn inject_mark_as(
     )?;
     let children = submenu.Children()?;
 
-    for (label, kind) in MARK_AS_ITEMS {
+    for (label, kind) in list {
         let item = env.CreateContextMenuItem(
-            &HSTRING::from(label),
+            &HSTRING::from(label.as_str()),
             None,
             COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_COMMAND,
         )?;
         let window = window.clone();
-        let kind = kind.to_string();
+        let kind = kind.clone();
         let handler = CustomItemSelectedEventHandler::create(Box::new(move |_item, _unused| {
             let _ = window.emit("mark-as", kind.clone());
             Ok(())

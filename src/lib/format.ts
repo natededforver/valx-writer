@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { SLOP_MARK_RE } from './slop';
+import { BYLINE_RE } from './byline';
 
 export type MediaKind = 'image' | 'audio' | 'video' | 'file';
 export interface MediaAttachment {
@@ -172,6 +173,10 @@ export function htmlToMarkdown(html: string): string {
   // media tags above), but restore INLINE ('S') — the 'P' restore's newline
   // padding would put every marked word on its own line.
   md = md.replace(SLOP_MARK_RE, (m) => stash.put('S', m));
+  // The byline <aside> rides through verbatim as a block (like media tags) so
+  // its markup — including the source <a> links inside — survives the .md
+  // round-trip untouched, ready for stripByline/rebuild on the next load.
+  md = md.replace(BYLINE_RE, (m) => stash.put('P', m));
   // Code blocks first — their content must ride through every transform below
   // untouched (a fence documenting `**x**` or a pipe table must stay literal).
   md = md.replace(/<pre[^>]*>\s*(?:<code[^>]*>)?([\s\S]*?)(?:<\/code>)?\s*<\/pre>/gi, (_m, body) =>
@@ -229,6 +234,9 @@ export function markdownToHtml(raw: string): string {
   // Slop marks stash before the escape/transform passes and restore verbatim —
   // their inner text is already entity-encoded editor HTML.
   text = text.replace(SLOP_MARK_RE, (m) => stash.put('P', m));
+  // Byline <aside> stashed BEFORE the legacy sniff — its <span>/<a> children
+  // would otherwise look like a raw-HTML note and short-circuit the whole parse.
+  text = text.replace(BYLINE_RE, (m) => stash.put('P', m));
   // With media stashed away, any remaining tag means this file predates the
   // markdown conversion and already holds editor HTML.
   if (LEGACY_HTML_RE.test(text)) return raw;

@@ -61,6 +61,13 @@ export function onNativeMarkAs(cb: (kind: string) => void): () => void {
   };
 }
 
+/** Push the ordered "Mark as" menu items (label, kind) to the native Windows
+ *  context menu (native_mark_as.rs). No-op outside Tauri. */
+export function pushMarkAsItems(items: [string, string][]): void {
+  if (!isTauri) return;
+  invoke('set_mark_as_items', { items }).catch(() => {});
+}
+
 // --- backend implementation --------------------------------------------------
 
 async function setWorkspaceRoot(root: string): Promise<void> {

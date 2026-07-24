@@ -2,8 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Note, FilterState } from '../types';
 import { Bookmark, ChevronDown, ChevronRight } from 'lucide-react';
 import { wordCount } from '../lib/format';
-
-export type NoteSort = 'modified' | 'oldest' | 'title';
+import { NoteSort, sortNotes } from '../lib/noteSort';
 
 export interface NoteListOpts {
   sort?: NoteSort;
@@ -33,15 +32,7 @@ export function filterNotesForContainer(notes: Note[], filter: FilterState, opts
     const set = new Set(opts.bookmarkedIds ?? []);
     filtered = filtered.filter(n => set.has(n.id));
   }
-  const sorted = [...filtered];
-  if (opts.sort === 'title') {
-    sorted.sort((a, b) => (a.title || 'Untitled Note').localeCompare(b.title || 'Untitled Note'));
-  } else if (opts.sort === 'oldest') {
-    sorted.sort((a, b) => a.updatedAt - b.updatedAt);
-  } else {
-    sorted.sort((a, b) => b.updatedAt - a.updatedAt);
-  }
-  return sorted;
+  return sortNotes(filtered, opts.sort);
 }
 
 interface NoteDropdownListProps {
@@ -53,6 +44,9 @@ interface NoteDropdownListProps {
   onToggleBookmark?: (id: string) => void;
   onOpenNote?: (id: string) => void;
   emptyLabel?: string;
+  /** Active sort — a row shows the created date while sorting by it, so the
+   *  order the list is in is the order of the dates you can see. */
+  sort?: NoteSort;
 }
 
 /** Compact note rows rendered inside an expanded All Notes / group dropdown. */
@@ -65,7 +59,9 @@ export function NoteDropdownList({
   onToggleBookmark,
   onOpenNote,
   emptyLabel = 'No notes',
+  sort = 'modified-desc',
 }: NoteDropdownListProps) {
+  const showCreated = sort.startsWith('created');
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const bookmarkedSet = useMemo(() => new Set(bookmarkedIds), [bookmarkedIds]);
 
@@ -148,8 +144,11 @@ export function NoteDropdownList({
               {note.title || 'Untitled Note'}
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                {formatDate(note.updatedAt)}
+              <span
+                className="text-[10px] text-slate-400 dark:text-slate-500"
+                title={showCreated ? 'Created' : 'Last edited'}
+              >
+                {formatDate(showCreated ? note.createdAt ?? note.updatedAt : note.updatedAt)}
               </span>
               <span className="text-[10px] text-slate-400 dark:text-slate-500">
                 {wordCount(note.content)} words
@@ -177,6 +176,7 @@ interface BookmarkedNotesPanelProps {
   onOpenNote?: (id: string) => void;
   expanded?: boolean;
   onToggleExpanded?: () => void;
+  sort?: NoteSort;
 }
 
 /** Foldable bookmark rail in the sidebar. */
@@ -190,11 +190,14 @@ export function BookmarkedNotesPanel({
   onOpenNote,
   expanded = true,
   onToggleExpanded,
+  sort = 'modified-desc',
 }: BookmarkedNotesPanelProps) {
   const bookmarkedSet = useMemo(() => new Set(bookmarkedIds), [bookmarkedIds]);
+  // Bookmarks used to be pinned to recently-edited regardless of the sidebar's
+  // sort; they follow the same order as every other list now.
   const bookmarkedNotes = useMemo(
-    () => notes.filter(n => !n.isTrash && bookmarkedSet.has(n.id)).sort((a, b) => b.updatedAt - a.updatedAt),
-    [notes, bookmarkedSet]
+    () => sortNotes(notes.filter(n => !n.isTrash && bookmarkedSet.has(n.id)), sort),
+    [notes, bookmarkedSet, sort]
   );
 
   return (
@@ -219,6 +222,7 @@ export function BookmarkedNotesPanel({
             onToggleBookmark={onToggleBookmark}
             onOpenNote={onOpenNote}
             emptyLabel="No bookmarks yet"
+            sort={sort}
           />
         </div>
       )}

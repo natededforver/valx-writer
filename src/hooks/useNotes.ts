@@ -63,7 +63,7 @@ async function decodeDiskContent(fileName: string, raw: string, binary?: boolean
 interface FilemapEntry { key: string; dir: string; file: string }
 type Filemap = Record<string, FilemapEntry>;
 type TrashMap = Record<string, string>; // fileName in .trash -> note id
-interface NoteMeta { updatedAt: number; isTrash: boolean; align?: 'left' | 'center' | 'right' }
+interface NoteMeta { updatedAt: number; createdAt?: number; isTrash: boolean; align?: 'left' | 'center' | 'right' }
 type MetaMap = Record<string, NoteMeta>;
 
 const META_KEY = 'valx-notes-metadata';
@@ -125,7 +125,7 @@ export function useNotes() {
 
   const rememberMeta = (n: Note) => {
     const meta = loadMeta();
-    meta[n.id] = { updatedAt: n.updatedAt, isTrash: n.isTrash, align: n.align };
+    meta[n.id] = { updatedAt: n.updatedAt, createdAt: n.createdAt, isTrash: n.isTrash, align: n.align };
     saveMeta(meta);
   };
 
@@ -375,6 +375,11 @@ export function useNotes() {
       if (m) updatedAt = mtime && mtime > m.updatedAt + EXTERNAL_EDIT_EPSILON_MS ? mtime : m.updatedAt;
       else updatedAt = mtime ?? now;
 
+      // Birth time is the honest "date created", but a file copied or synced
+      // into the workspace gets a fresh one — so a createdAt we already
+      // recorded wins over whatever the filesystem reports today.
+      const createdAt = m?.createdAt ?? preferred.btime ?? updatedAt;
+
       const htmlContent = await decodeDiskContent(preferred.name, preferred.content, preferred.binary);
       const note: SyncNote = {
         id,
@@ -382,6 +387,7 @@ export function useNotes() {
         content: htmlContent,
         tags: parseTags(splitExt(preferred.name).base, htmlContent),
         updatedAt,
+        createdAt,
         isTrash: m?.isTrash || false,
         folderId: preferred.path ? preferred.path : null,
         fileKey: key,
@@ -409,7 +415,8 @@ export function useNotes() {
           extraTrashNotes.push({
             id: sibId, title: base, content: sibHtml,
             tags: parseTags(base, sibHtml),
-            updatedAt: other.mtime ?? now, isTrash: true, folderId: null,
+            updatedAt: other.mtime ?? now, createdAt: other.btime ?? other.mtime ?? now,
+            isTrash: true, folderId: null,
           });
         }
       }
@@ -450,6 +457,7 @@ export function useNotes() {
         id, title, content: trashHtml,
         tags: parseTags(title, trashHtml),
         updatedAt: m?.updatedAt ?? f.mtime ?? now,
+        createdAt: m?.createdAt ?? f.btime ?? f.mtime ?? now,
         isTrash: true, folderId: null,
         align: m?.align,
       });
@@ -542,7 +550,7 @@ export function useNotes() {
     if (!isLoaded) return;
     const meta = loadMeta();
     const live = new Set(notes.map((n) => n.id));
-    for (const n of notes) meta[n.id] = { updatedAt: n.updatedAt, isTrash: n.isTrash, align: n.align };
+    for (const n of notes) meta[n.id] = { updatedAt: n.updatedAt, createdAt: n.createdAt, isTrash: n.isTrash, align: n.align };
     for (const key of Object.keys(meta)) if (!live.has(key)) delete meta[key];
     saveMeta(meta);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -660,12 +668,14 @@ export function useNotes() {
   };
 
   const createNote = (title: string, content: string, folderId?: string | null): SyncNote => {
+    const now = Date.now();
     const note: SyncNote = {
       id: newId(),
       title,
       content,
       tags: parseTags(title, content),
-      updatedAt: Date.now(),
+      updatedAt: now,
+      createdAt: now,
       isTrash: false,
       folderId: folderId || null,
     };

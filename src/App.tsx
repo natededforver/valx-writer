@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNotes } from './hooks/useNotes';
 import { useOneDrive } from './hooks/useOneDrive';
 import { isTauri, pushMarkAsItems } from './lib/desktop';
+import { dismissSplash } from './lib/splash';
 import { markAsItems, CREATORS_EVENT } from './lib/creators';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
@@ -65,6 +66,10 @@ export default function App() {
     const stored = localStorage.getItem('bear-theme-dark');
     return stored === null ? true : stored === 'true';
   });
+
+  // The desktop window is created hidden behind the logo splash. Reveal it
+  // once React has committed the first frame, so the app never appears blank.
+  useEffect(() => { void dismissSplash(); }, []);
 
   // Resizable sidebar. NoteList is no longer a separate rail (it lives inside
   // the sidebar), so there's only one resize handle now.

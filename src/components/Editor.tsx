@@ -364,6 +364,23 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const chromeVisible = topHover || anyChromeMenuOpen;
   const chromeShown = !isFullscreen || chromeVisible;
 
+  // Toggling the sidebar off drops straight into fullscreen. Snapping the
+  // chrome away in the usual 300ms reads as a glitch, so the entry into
+  // fullscreen (and only that) gets a long fade — the bar dissolves instead of
+  // leaving. Reverts to the snappy timing afterwards, so hover reveal/hide
+  // stays responsive.
+  const SLOW_FADE_MS = 1600;
+  const [slowFade, setSlowFade] = useState(false);
+  useEffect(() => {
+    if (!isFullscreen) { setSlowFade(false); return; }
+    setSlowFade(true);
+    const t = setTimeout(() => setSlowFade(false), SLOW_FADE_MS);
+    return () => clearTimeout(t);
+  }, [isFullscreen]);
+  // Applied to the chrome and to the writing surface's top padding, so the
+  // text rises at the same rate the bar fades instead of jumping under it.
+  const chromeFadeCls = slowFade ? 'duration-[1600ms]' : 'duration-300';
+
   // Shared class strings for the menu bar dropdowns.
   const menuBtnCls = (id: string) => `px-2.5 flex items-center text-[13px] rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors ${openMenu === id ? 'bg-black/5 dark:bg-white/10 text-slate-900 dark:text-white' : ''}`;
   const menuPopCls = 'vx-menu-pop absolute top-8 left-0 z-50 min-w-52 bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1';
@@ -796,7 +813,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           auto-hides in fullscreen (reveal on top-edge hover / while a menu is open). */}
       <div
         onMouseLeave={() => setTopHover(false)}
-        className={`absolute top-0 inset-x-0 z-50 vx-glass-strong transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${chromeShown ? 'translate-y-0' : '-translate-y-full'}`}
+        className={`absolute top-0 inset-x-0 z-50 vx-glass-strong transition-[transform,opacity] ${chromeFadeCls} ease-[cubic-bezier(0.16,1,0.3,1)] ${chromeShown ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}
       >
         {/* Title bar — sidebar toggle · centered doc title (drag region) · window controls */}
         <div className="h-9 flex items-center px-1.5 gap-1 text-slate-400 dark:text-slate-500">
@@ -1083,7 +1100,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       {/* Editor Area — code notes get a full-width source editor; prose notes
           keep the centered rich-text column. */}
       {isCodeNote ? (
-        <div className={`flex-1 min-h-0 flex flex-col ${isFullscreen ? 'pt-10' : 'pt-[76px]'} ${savedFlash !== null ? 'save-glow' : ''}`}>
+        <div className={`flex-1 min-h-0 flex flex-col transition-[padding] ${chromeFadeCls} ease-[cubic-bezier(0.16,1,0.3,1)] ${isFullscreen ? 'pt-10' : 'pt-[76px]'} ${savedFlash !== null ? 'save-glow' : ''}`}>
           <div className="px-6 pt-4 pb-2 flex-shrink-0">
             <textarea
               rows={1}
@@ -1130,7 +1147,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           </div>
         </div>
       ) : (
-        <div className={`vx-editor-scroll flex-1 min-w-0 overflow-y-auto px-8 sm:px-12 lg:px-24 py-12 print-area transition-colors ${isFullscreen ? 'pt-12' : 'pt-[80px]'} ${savedFlash !== null ? 'save-glow' : ''}`}>
+        <div className={`vx-editor-scroll flex-1 min-w-0 overflow-y-auto px-8 sm:px-12 lg:px-24 py-12 print-area transition-[color,padding] ${chromeFadeCls} ease-[cubic-bezier(0.16,1,0.3,1)] ${isFullscreen ? 'pt-12' : 'pt-[80px]'} ${savedFlash !== null ? 'save-glow' : ''}`}>
           {/* iA-Writer breathing room: the title starts well down the page so a
               fresh note feels like paper rolled into a typewriter. It's plain
               top padding on the scroll content, so it only shows at the very

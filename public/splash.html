@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Valx</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+      body { display: grid; place-items: center; }
+      /* Slow breathe so a long workspace scan still looks alive. */
+      img { width: 200px; height: 200px; animation: breathe 2.2s ease-in-out infinite; }
+      @keyframes breathe {
+        0%, 100% { transform: scale(1);    opacity: 0.92; }
+        50%      { transform: scale(1.05); opacity: 1; }
+      }
+      @media (prefers-reduced-motion: reduce) { img { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <img src="./valx-splash.png" alt="Valx" />
+  </body>
+</html>

@@ -55,6 +55,9 @@ pub(crate) struct DiskFile {
     pub(crate) path: String,
     pub(crate) content: String,
     pub(crate) mtime: Option<f64>,
+    // Birth time, where the filesystem records one (NTFS does). Feeds the
+    // "date created" sort in the sidebar; None falls back to mtime there.
+    pub(crate) btime: Option<f64>,
     // true when `content` is base64 (binary formats — currently just .docx)
     // instead of lossy-UTF8 text. See BINARY_EXTS below.
     pub(crate) binary: bool,
@@ -121,13 +124,13 @@ pub(crate) fn walk(
             } else {
                 String::from_utf8_lossy(&bytes).into_owned()
             };
-            let mtime = entry
-                .metadata()
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_millis() as f64);
-            files.push(DiskFile { name, path: base.to_string(), content, mtime, binary });
+            let meta = entry.metadata().ok();
+            let epoch_ms = |t: std::time::SystemTime| {
+                t.duration_since(UNIX_EPOCH).ok().map(|d| d.as_millis() as f64)
+            };
+            let mtime = meta.as_ref().and_then(|m| m.modified().ok()).and_then(epoch_ms);
+            let btime = meta.as_ref().and_then(|m| m.created().ok()).and_then(epoch_ms);
+            files.push(DiskFile { name, path: base.to_string(), content, mtime, btime, binary });
         }
     }
     Ok(())

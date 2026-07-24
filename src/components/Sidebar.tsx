@@ -2,15 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Note, FilterState, Folder } from '../types';
 import { FileText, Trash2, Hash, Moon, Sun, Plus, Folder as FolderIcon, Cloud, RefreshCw, Repeat, Settings, Search, X, ChevronDown, ChevronRight, ArrowDownUp, Bookmark, Check } from 'lucide-react';
 import { sessionGreeting } from '../lib/greeting';
-import { filterNotesForContainer, NoteDropdownList, BookmarkedNotesPanel, NoteSort } from './NoteList';
+import { filterNotesForContainer, NoteDropdownList, BookmarkedNotesPanel } from './NoteList';
+import { NoteSort, NOTE_SORTS, SORT_LABELS, IS_DATE_SORT, normalizeSort, compareTitles } from '../lib/noteSort';
 
 const LS_NOTE_SORT = 'valx-note-sort';
 const LS_NOTE_BOOKMARKED_ONLY = 'valx-note-bookmarked-only';
-const SORT_LABELS: Record<NoteSort, string> = {
-  modified: 'Recently edited',
-  oldest: 'Oldest first',
-  title: 'Title A–Z',
-};
 import { searchNotes, SearchHit } from '../lib/search';
 
 interface SidebarProps {
@@ -70,7 +66,7 @@ export function Sidebar({
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set(['all', 'bookmarks']));
   // Note list sort + bookmarked-only filter (persisted). Applied to every
   // container list (All Notes, folders, tags, trash) through one opts object.
-  const [sort, setSort] = useState<NoteSort>(() => (localStorage.getItem(LS_NOTE_SORT) as NoteSort) || 'modified');
+  const [sort, setSort] = useState<NoteSort>(() => normalizeSort(localStorage.getItem(LS_NOTE_SORT)));
   const [bookmarkedOnly, setBookmarkedOnly] = useState(() => localStorage.getItem(LS_NOTE_BOOKMARKED_ONLY) === 'true');
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   useEffect(() => { localStorage.setItem(LS_NOTE_SORT, sort); }, [sort]);
@@ -164,7 +160,9 @@ export function Sidebar({
   const [greet] = useState(() => sessionGreeting());
 
   const allNotes = useMemo(() => filterNotesForContainer(notes, { type: 'all' }, listOpts), [notes, listOpts]);
-  const sortedFolders = useMemo(() => [...folders].sort((a, b) => a.name.localeCompare(b.name)), [folders]);
+  // Same numeric collation as the note lists, so "10. Chapter" follows
+  // "2. Chapter" in the folder rail too.
+  const sortedFolders = useMemo(() => [...folders].sort((a, b) => compareTitles(a.name, b.name)), [folders]);
 
   const renderSearchResult = (hit: SearchHit, i: number) => (
     <button
@@ -227,16 +225,21 @@ export function Sidebar({
               {sortMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setSortMenuOpen(false)} />
-                  <div className="vx-menu-pop absolute top-8 left-0 z-50 w-44 bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1">
-                    {(Object.keys(SORT_LABELS) as NoteSort[]).map((key) => (
-                      <button
-                        key={key}
-                        onClick={() => { setSort(key); setSortMenuOpen(false); }}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left text-slate-700 dark:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/5 transition-colors"
-                      >
-                        <Check size={14} className={sort === key ? 'text-[#32CD32] shrink-0' : 'opacity-0 shrink-0'} />
-                        <span>{SORT_LABELS[key]}</span>
-                      </button>
+                  <div className="vx-menu-pop absolute top-8 left-0 z-50 w-56 bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1">
+                    {NOTE_SORTS.map((key, i) => (
+                      <React.Fragment key={key}>
+                        {/* Divider between the date sorts and the title sorts. */}
+                        {i > 0 && IS_DATE_SORT(NOTE_SORTS[i - 1]) && !IS_DATE_SORT(key) && (
+                          <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
+                        )}
+                        <button
+                          onClick={() => { setSort(key); setSortMenuOpen(false); }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left text-slate-700 dark:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/5 transition-colors"
+                        >
+                          <Check size={14} className={sort === key ? 'text-[#32CD32] shrink-0' : 'opacity-0 shrink-0'} />
+                          <span className="whitespace-nowrap">{SORT_LABELS[key]}</span>
+                        </button>
+                      </React.Fragment>
                     ))}
                   </div>
                 </>
@@ -305,6 +308,7 @@ export function Sidebar({
                     onToggleBookmark={onToggleBookmark}
                     onOpenNote={onOpenNote}
                     emptyLabel="No notes yet"
+                    sort={sort}
                   />
                 </div>
               )}
@@ -321,6 +325,7 @@ export function Sidebar({
                 onOpenNote={onOpenNote}
                 expanded={expandedKeys.has('bookmarks')}
                 onToggleExpanded={() => toggleExpanded('bookmarks')}
+                sort={sort}
               />
             )}
 
@@ -383,6 +388,7 @@ export function Sidebar({
                             onToggleBookmark={onToggleBookmark}
                             onOpenNote={onOpenNote}
                             emptyLabel="No notes in this folder"
+                            sort={sort}
                           />
                         </div>
                       )}
@@ -446,6 +452,7 @@ export function Sidebar({
                               onToggleBookmark={onToggleBookmark}
                               onOpenNote={onOpenNote}
                               emptyLabel="No notes with this tag"
+                              sort={sort}
                             />
                           </div>
                         )}
@@ -486,6 +493,7 @@ export function Sidebar({
                     onToggleBookmark={onToggleBookmark}
                     onOpenNote={onOpenNote}
                     emptyLabel="Trash is empty"
+                    sort={sort}
                   />
                 </div>
               )}

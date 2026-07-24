@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Valx Prose Writer",
-  "version": "0.2.1",
+  "version": "1.0.3",
   "identifier": "com.valx.prose-writer",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -19,7 +19,22 @@
         "resizable": true,
         "transparent": true,
         "decorations": false,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "visible": false
+      },
+      {
+        "label": "splash",
+        "title": "Valx",
+        "url": "splash.html",
+        "width": 260,
+        "height": 260,
+        "center": true,
+        "transparent": true,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false
       }
     ],
     "security": {
@@ -42,7 +57,12 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "icons/nsis-header.bmp",
+        "uninstallerHeaderImage": "icons/nsis-header.bmp",
+        "sidebarImage": "icons/nsis-sidebar.bmp"
       }
     }
   }

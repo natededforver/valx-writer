@@ -18,6 +18,9 @@ export interface DiskFile {
   content: string;
   /** last-modified time in ms — the freshness signal for externally edited files */
   mtime?: number;
+  /** creation time in ms, when the platform records one (Tauri only — the web
+   *  File System Access API exposes no birth time) */
+  btime?: number;
   /** true when `content` is base64, not text — currently only .docx (Tauri only; the web reader never sets this) */
   binary?: boolean;
 }

@@ -9,6 +9,11 @@ export interface Note {
   content: string;
   tags: string[];
   updatedAt: number;
+  /** When the note first existed — the file's birth time on disk for imported
+   *  notes, Date.now() for ones made in-app. Optional: notes from before this
+   *  was tracked (and the web backend, which exposes no birth time) have none,
+   *  and sort by updatedAt instead. */
+  createdAt?: number;
   isTrash: boolean;
   folderId?: string | null;
   /** Per-note body text alignment; undefined = left (the default). */

@@ -519,7 +519,8 @@ export function Sidebar({
                   className={`flex-1 flex items-center gap-2 px-3 py-2 text-sm transition-colors ${isTrash ? 'bg-slate-900/8 dark:bg-white/8 text-slate-900 dark:text-white font-medium' : dragOverTrash ? 'text-red-600' : 'text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-slate-100 font-medium hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
                 >
                   <Chevron expanded={expandedKeys.has('trash')} />
-                  <Trash2 size={16} className={isTrash ? 'text-slate-900 dark:text-white' : ''} />
+                  {/* No section icon here: the row already carries the 🗑️
+                      Empty-bin button, and the label alone reads cleaner. */}
                   <span className="flex-1 text-left">Trash</span>
                   <span className="text-[10px] text-slate-400 dark:text-slate-400 tabular-nums">
                     {trashedNotes.length}

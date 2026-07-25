@@ -3,7 +3,8 @@ import {
   buildTableHtml, getCellFromSelection, moveCell as tableMoveCell,
   addRow, addColumn, deleteRow, deleteColumn, deleteTable, isTableEmpty,
 } from '../lib/tableEditing';
-import { Plus, Minus, Trash2, BookPlus, EyeOff, Scissors, Copy, ClipboardPaste, Tag } from 'lucide-react';
+import { Plus, Minus, BookPlus, EyeOff, Scissors, Copy, ClipboardPaste, Tag } from 'lucide-react';
+import { BinIcon } from './BinIcon';
 import { JumpTarget } from '../types';
 import { parseTrailingMdLink } from '../lib/noteLinks';
 import { slopWrapText, wordSpans, SlopType } from '../lib/slop';
@@ -16,6 +17,7 @@ import {
 } from '../lib/spellcheck';
 import { SPELLCHECK_EVENT } from '../lib/prefs';
 import { markAsItems } from '../lib/creators';
+import { loadForbidden, forbiddenPhrases, forbiddenSpans, FORBIDDEN_EVENT } from '../lib/forbidden';
 
 interface RichTextEditorProps {
   value: string;
@@ -338,6 +340,37 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     else registry.delete('vx-tag');
   };
 
+  // Forbidden words — greyed out wherever they appear. Same zero-DOM-mutation
+  // Highlight API pattern as the tags above, and for the same reason twice
+  // over: the caret never has to fight a wrapper element, and the greying can
+  // never leak into the note's HTML and reach the .md on disk. Take a word off
+  // the list and the grey is simply not painted on the next pass.
+  //
+  // Matching runs per text node, so a multi-word entry is found when its words
+  // sit in one run of text — which is the normal case. A phrase interrupted by
+  // formatting ("very <b>unique</b>") is two nodes and stays unmatched.
+  const paintForbidden = () => {
+    const H = (window as any).Highlight;
+    const registry = (CSS as any).highlights;
+    const editor = editorRef.current;
+    if (!H || !registry || !editor) return;
+    const phrases = forbiddenPhrases(loadForbidden());
+    if (phrases.length === 0) { registry.delete('vx-forbidden'); return; }
+    const ranges: Range[] = [];
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      for (const span of forbiddenSpans((node as Text).data, phrases)) {
+        const r = document.createRange();
+        r.setStart(node, span.start);
+        r.setEnd(node, span.end);
+        ranges.push(r);
+      }
+    }
+    if (ranges.length) registry.set('vx-forbidden', new H(...ranges));
+    else registry.delete('vx-forbidden');
+  };
+
   // Checked task items: strike through the line's text (checkbox itself is a
   // real interactive control now — see handleClick). Same zero-DOM-mutation
   // Highlight API pattern as paintTagHighlights above, so typing right after
@@ -593,6 +626,16 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     handleInput();
   };
 
+  /** Commit the source dialog: mark the parked range as 'web' carrying the site
+   *  (and link, if given) so syncByline can list it under "Source:". The site
+   *  is what stops markSelectionAs reopening the dialog. */
+  const submitWebDialog = () => {
+    const site = webSite.trim();
+    if (!site) return;
+    setWebDialog(false);
+    markSelectionAs('web', { site, url: webUrl.trim() || undefined });
+  };
+
   // The DOM shows the display form of media URLs (asset protocol under Tauri);
   // `value` stays canonical (/__media/…). The two rewrites round-trip exactly,
   // so this equality check keeps holding while typing (no innerHTML resets).
@@ -606,6 +649,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     }
     paintTagHighlights();
     paintTaskHighlights();
+    paintForbidden();
     scheduleSpellPaint();
   }, [value]);
 
@@ -634,6 +678,15 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
       window.removeEventListener(SPELLCHECK_EVENT, repaint);
       window.removeEventListener(DICTIONARY_EVENT, repaint);
     };
+  }, []);
+
+  // Editing the forbidden list repaints for the same reason: the words on
+  // screen didn't change, the verdicts about them did. Undebounced — the list
+  // changes once per click, not once per keystroke.
+  useEffect(() => {
+    const repaint = () => paintForbidden();
+    window.addEventListener(FORBIDDEN_EVENT, repaint);
+    return () => window.removeEventListener(FORBIDDEN_EVENT, repaint);
   }, []);
 
   // Search-result navigation: select + scroll to the occurrence-th match of
@@ -820,6 +873,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
       onChange(mediaCanonicalHtml(editorRef.current.innerHTML));
       paintTagHighlights();
       paintTaskHighlights();
+      paintForbidden();
       scheduleSpellPaint();
     }
   }, [onChange, markTyping]);
@@ -1616,7 +1670,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
             title="Delete table"
             onMouseDown={withCell((c) => { const t = c.closest('table') as HTMLTableElement | null; if (t) deleteTable(t, editorRef.current, handleInput); })}
           >
-            <Trash2 size={13} /> Table
+            <BinIcon size={13} /> Table
           </button>
         </div>
       )}
@@ -1628,7 +1682,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
           title="Remove media"
           onMouseDown={(e) => { e.preventDefault(); deleteMedia(); }}
         >
-          <Trash2 size={14} />
+          <BinIcon size={14} />
         </button>
       )}
 
@@ -1637,6 +1691,12 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
           <div
             className="vx-pop w-80 rounded-xl bg-white dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 shadow-xl p-4"
             onMouseDown={(e) => e.stopPropagation()}
+            // The site name is the only required field, so Enter submits from
+            // either input rather than making the user reach for the button.
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.stopPropagation(); setWebDialog(false); }
+              if (e.key === 'Enter' && webSite.trim()) { e.preventDefault(); submitWebDialog(); }
+            }}
           >
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Where is this content from?</h3>
             <input
@@ -1657,7 +1717,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
               <button
                 className="px-3 py-1.5 rounded-md bg-[#32CD32]/15 text-[#1f9e1f] dark:text-[#32CD32] hover:bg-[#32CD32]/25 disabled:opacity-40"
                 disabled={!webSite.trim()}
-                onClick={() => { setWebDialog(false); markSelectionAs('web', { site: webSite.trim(), url: webUrl.trim() || undefined }); }}
+                onClick={submitWebDialog}
               >
                 Mark
               </button>

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Note, FilterState, Folder } from '../types';
-import { FileText, Trash2, Hash, Moon, Sun, Plus, Folder as FolderIcon, Cloud, RefreshCw, Repeat, SlidersHorizontal, Search, X, ChevronDown, ChevronRight, ArrowDownUp, Bookmark, Check } from 'lucide-react';
+import { FileText, Hash, Moon, Sun, Plus, Folder as FolderIcon, Cloud, RefreshCw, Repeat, SlidersHorizontal, Search, X, ChevronDown, ChevronRight, ArrowDownUp, Bookmark, Check } from 'lucide-react';
+import { BinIcon } from './BinIcon';
 import { sessionGreeting } from '../lib/greeting';
 import { filterNotesForContainer, NoteDropdownList, BookmarkedNotesPanel } from './NoteList';
 import { NoteSort, NOTE_SORTS, SORT_LABELS, IS_DATE_SORT, normalizeSort, compareTitles } from '../lib/noteSort';
@@ -418,7 +419,7 @@ export function Sidebar({
                           className="opacity-0 group-hover:opacity-100 p-1 mr-1 text-slate-400 hover:text-[#32CD32] transition-all"
                           title="Delete folder"
                         >
-                          <Trash2 size={14} />
+                          <BinIcon size={14} />
                         </button>
                       </div>
                       {isExpanded && (
@@ -535,7 +536,7 @@ export function Sidebar({
                     title={`Empty bin — permanently delete ${trashedNotes.length} note${trashedNotes.length === 1 ? '' : 's'}`}
                     className="mr-1 px-1.5 py-1 rounded text-[13px] leading-none hover:bg-red-500/10 transition-colors shrink-0"
                   >
-                    <span aria-hidden>🗑️</span>
+                    <BinIcon size={13} />
                   </button>
                 )}
               </div>

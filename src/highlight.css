@@ -16,6 +16,19 @@
   text-decoration: line-through;
 }
 
+/* Forbidden words (Words > Forbidden Words…) — greyed down rather than struck
+   or flagged, so the word stays readable but stops carrying weight on the page.
+   Highlight styles only accept a small handful of properties, colour among
+   them, so this is deliberately just a colour change.
+   One grey for both themes, the same call ::highlight(vx-tag) makes above. It
+   sits between the two text colours — lighter than the near-black on the light
+   surface, darker than the near-white on the dark one — so it recedes either
+   way. Note that a prefers-color-scheme query would be wrong here: the theme is
+   a .dark class the user toggles (App.tsx), not the OS setting. */
+::highlight(vx-forbidden) {
+  color: #8b939e;
+}
+
 /* Misspellings, from the app's own checker (src/lib/spellcheck.ts) — the OS
    webview's native underline is off. Same wavy red the platform draws, so it
    reads as a spelling error and not as app styling. */

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X, BookA, Trash2, Plus } from 'lucide-react';
+import { X, BookA, Plus } from 'lucide-react';
+import { BinIcon } from './BinIcon';
 import { userWords, addWord, removeWord, DICTIONARY_EVENT } from '../lib/spellcheck';
 
 // ---------------------------------------------------------------------------
@@ -68,7 +69,7 @@ export function DictionaryModal() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-1">
+        <div className="vx-list-scroll flex-1 min-h-0 max-h-56 overflow-y-auto py-1">
           {words.length === 0 ? (
             <p className="px-4 py-6 text-center text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
               No words yet. Right-click a word the spellchecker flags and choose
@@ -83,7 +84,7 @@ export function DictionaryModal() {
                   title={`Remove “${w}”`}
                   className="p-1 rounded text-slate-300 dark:text-neutral-700 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
                 >
-                  <Trash2 size={14} />
+                  <BinIcon size={14} />
                 </button>
               </div>
             ))

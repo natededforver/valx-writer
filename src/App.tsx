@@ -10,6 +10,7 @@ import { Editor } from './components/Editor';
 import { FormatConverter } from './components/FormatConverter';
 import { SettingsModal } from './components/SettingsModal';
 import { DictionaryModal } from './components/DictionaryModal';
+import { ForbiddenModal } from './components/ForbiddenModal';
 import { LS_TRANSPARENCY, applyTransparency, applySpacing, prefOn } from './lib/prefs';
 import { FilterState, JumpTarget } from './types';
 import { SearchHit } from './lib/search';
@@ -413,6 +414,10 @@ export default function App() {
       {/* User dictionary manager — opens on the 'valx-open-dictionary' event
           the Edit menu fires, so nothing has to thread state down to it. */}
       <DictionaryModal />
+
+      {/* Forbidden words — same event-driven pattern, fired by Words >
+          Forbidden Words…. Both lists are global, so neither needs a note. */}
+      <ForbiddenModal />
 
       {syncToast && <div className="vx-toast">{syncToast}</div>}
     </div>

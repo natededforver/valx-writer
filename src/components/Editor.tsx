@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Note, JumpTarget } from '../types';
 import { plainText } from '../lib/search';
-import { Trash2, RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, SlidersHorizontal, BookA, SpellCheck, Languages } from 'lucide-react';
+import { RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, SlidersHorizontal, BookA, SpellCheck, Languages, Ban } from 'lucide-react';
+import { BinIcon } from './BinIcon';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '../lib/desktop';
 import { accel, isMac } from '../lib/platform';
@@ -508,11 +509,14 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           </div>
         )}
       </div>
-      {/* Dictionary is a dialog, not a list — it opens straight from the row
-          rather than pretending to be a third flyout. */}
+      {/* Dictionary and Forbidden Words are dialogs, not lists — they open
+          straight from their row rather than pretending to be flyouts. */}
       <div onMouseEnter={() => setWordsSub(null)}>
         <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-open-dictionary')); }} className={itemCls}>
           <BookA size={15} className="opacity-60" /> Dictionary…
+        </button>
+        <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-open-forbidden')); }} className={itemCls}>
+          <Ban size={15} className="opacity-60" /> Forbidden Words…
         </button>
       </div>
     </div>
@@ -1154,7 +1158,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                     <div className={dividerCls} />
                     {onOpenPreferences && <button onClick={() => { setOpenMenu(null); onOpenPreferences(); }} className={itemCls}><SlidersHorizontal size={15} className="opacity-60" /> Preferences…<span className={shortcutCls}>{accel('Ctrl ,')}</span></button>}
                     <div className={dividerCls} />
-                    <button onClick={() => { moveToTrash(note.id); setOpenMenu(null); }} className={itemCls}><Trash2 size={15} className="opacity-60" /> Move to Trash</button>
+                    <button onClick={() => { moveToTrash(note.id); setOpenMenu(null); }} className={itemCls}><BinIcon size={15} className="opacity-60" /> Move to Trash</button>
                   </>
                 ) : (
                   <>

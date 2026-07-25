@@ -251,38 +251,47 @@ body {
   color: black !important;
 }
 
-/* Scrollbars are hidden app-wide (wheel/keyboard scrolling still works) — the
-   editor's writing surface is the ONE place a scrollbar remains, reskinned
-   minimal: thin, trackless, rounded thumb that only tints in on hover. */
+/* Scrollbars are hidden app-wide (wheel/keyboard scrolling still works). Two
+   places keep one, reskinned minimal — thin, trackless, rounded thumb that only
+   tints in on hover: the editor's writing surface, and the word lists in the
+   Dictionary / Forbidden Words dialogs. Those lists are capped short so the
+   popup can't grow with the list, which makes the bar the only thing telling
+   you there is more below — without it a long list looks truncated. */
 * {
   scrollbar-width: none;
 }
 *::-webkit-scrollbar {
   display: none;
 }
-.vx-editor-scroll {
+.vx-editor-scroll,
+.vx-list-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(120, 120, 120, 0.35) transparent;
 }
-.vx-editor-scroll::-webkit-scrollbar {
+.vx-editor-scroll::-webkit-scrollbar,
+.vx-list-scroll::-webkit-scrollbar {
   display: block;
   width: 8px;
   height: 8px;
 }
-.vx-editor-scroll::-webkit-scrollbar-track {
+.vx-editor-scroll::-webkit-scrollbar-track,
+.vx-list-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
-.vx-editor-scroll::-webkit-scrollbar-thumb {
+.vx-editor-scroll::-webkit-scrollbar-thumb,
+.vx-list-scroll::-webkit-scrollbar-thumb {
   background: rgba(120, 120, 120, 0.28);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.vx-editor-scroll::-webkit-scrollbar-thumb:hover {
+.vx-editor-scroll::-webkit-scrollbar-thumb:hover,
+.vx-list-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(120, 120, 120, 0.5);
   background-clip: padding-box;
 }
-.vx-editor-scroll::-webkit-scrollbar-button {
+.vx-editor-scroll::-webkit-scrollbar-button,
+.vx-list-scroll::-webkit-scrollbar-button {
   display: none;
 }
 
@@ -344,91 +353,111 @@ body {
 }
 
 /* Slop detector — words pasted from outside (or marked AI / Other Websites)
-   carry the red/blue gradient texture. Static background + static glow only:
-   no animation, so thousands of marked words cost nothing per frame. */
+   are coloured along the sd-texture ramp. Static colour only: no animation and
+   no image, so thousands of marked words cost nothing per frame. */
 .rich-editor mark.vx-slop {
-  /* The texture paints the GLYPHS themselves — the letterforms are the only
-     thing drawing the image, and there is no swatch behind them. This is the
-     original method, with one value changed: the tile is 80px, not 480px.
+  /* Marked words are painted by ORDINARY TEXT RENDERING, in an opaque colour.
+     Nothing else. That is the whole point of this rule, so read on before
+     reaching for anything cleverer.
 
-     That single number is what made marked words disappear. Marks wrap PER
-     WORD and each mark is its own painting area, so with a 480px tile a
-     ~51x25px word maps onto the far top-left of the image and WebKit does not
-     paint the clipped text at all — computed style still reports
-     `background-clip: text`, the texture still 200s, and the glyphs are simply
-     never drawn. Because the fill is transparent, "not painted" means the
-     user's words are gone. Verified by isolation: same rule, same single
-     layer, 480px invisible in both themes, 80px vivid in both.
+     Every previous version drew the words by clipping a background to the
+     glyphs (background-clip: text + color: transparent). It looks better — real
+     grain inside each letterform — but it makes the letterforms the only thing
+     painting the words, so any paint the engine declines to do doesn't cost the
+     texture, it erases the user's writing. That failure shipped repeatedly, and
+     each round the trigger looked different, so each fix targeted a different
+     knob and none of them held:
 
-     The flat wash layer that used to sit over the texture was masking this —
-     it painted opaque pixels of its own, so the glyphs showed, but it also
-     bleached the hues toward the surface colour. With the tile fixed the wash
-     is unnecessary, so the raw texture colours come through.
+       · background-attachment: fixed  (WebView2, marks set via innerHTML)
+       · the 480px tile                (blamed for WKWebView; not the cause)
+       · the PNG failing to load       (a real hazard, but not this one)
 
-     No background-attachment: fixed — a fixed background clipped to text fails
-     to paint in WebView2 when the mark is inserted via innerHTML on note load.
-     Default (scroll) attachment paints reliably. */
-  background: url('../sd-texture.png') 0 0 / 80px auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  padding: 2px 0;
-  /* Marks wrap per word, so a marked run is many adjacent <mark>s; cloning the
-     decoration keeps padding correct on every fragment. */
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
+     What finally settled it: in the packaged macOS app the marks paint and then
+     vanish on the very next repaint. Not on load — after. Under Safari on the
+     same WebKit, over http, every one of those variants paints and keeps
+     painting through a forced restyle, filtered ancestor included. The
+     difference is the app window itself (transparent: true + macOSPrivateApi),
+     which puts WKWebView on a non-opaque compositing path. That is not
+     something CSS gets to opt out of, and it is why this kept coming back
+     wearing a new disguise.
+
+     So the mechanism is gone rather than tuned. There is no paint path left
+     that can drop these words: a wrong colour is the worst failure available.
+
+     The cost is honest — the mottling WITHIN one word is gone. It was already
+     nearly invisible at reading size, which is exactly why the tile had to
+     shrink to 80px to get any variation: at a ~50px word against an 80px tile
+     what actually read was one colour per word, walking the ramp across the
+     run. That is what the cycle below reproduces, in a form that cannot fail.
+
+     sd-texture.png is now unreferenced and drops out of the bundle. It is still
+     in the repo; see the note in the handoff before deleting it. */
+  color: #c2185b;
+  /* Belt and braces: some editor states set a fill colour, and a transparent
+     fill is the one thing that could still hide these words. */
+  -webkit-text-fill-color: currentColor;
+  /* <mark>'s UA style is a yellow highlight — that has to go explicitly. */
+  background: none;
 }
 
-/* Spread the texture across the run. Every mark is its own painting area
-   anchored at its own origin, so without this each word would draw the very
-   same corner of the image and a marked sentence would come out one flat
-   colour. Walking the origin along a fixed cycle gives each successive word a
-   different region, so a run reads as one continuous sheet of texture that the
-   words are cut out of.
-   background-attachment: fixed would do this in one line and is the obvious
-   thing to reach for — it does not paint at all under WKWebView when the
-   background is clipped to text, and it is the same declaration WebView2 chokes
-   on. The cycle is plain CSS and works on both. */
-.rich-editor mark.vx-slop:nth-of-type(8n+1) { background-position: 0 0; }
-.rich-editor mark.vx-slop:nth-of-type(8n+2) { background-position: -46px -12px; }
-.rich-editor mark.vx-slop:nth-of-type(8n+3) { background-position: -92px -25px; }
-.rich-editor mark.vx-slop:nth-of-type(8n+4) { background-position: -19px -33px; }
-.rich-editor mark.vx-slop:nth-of-type(8n+5) { background-position: -65px -7px; }
-.rich-editor mark.vx-slop:nth-of-type(8n+6) { background-position: -111px -19px; }
-.rich-editor mark.vx-slop:nth-of-type(8n+7) { background-position: -33px -28px; }
-.rich-editor mark.vx-slop:nth-of-type(8n+8) { background-position: -78px -40px; }
+/* Walk the sd-texture ramp across the run — crimson through purple to indigo.
+   Marks wrap PER WORD, so successive words step along the ramp and a marked
+   sentence reads as one coloured sweep rather than a flat block. Eight steps,
+   the same cycle length the texture offsets used. */
+.rich-editor mark.vx-slop:nth-of-type(8n+1) { color: #c2185b; }
+.rich-editor mark.vx-slop:nth-of-type(8n+2) { color: #ad1457; }
+.rich-editor mark.vx-slop:nth-of-type(8n+3) { color: #8e24aa; }
+.rich-editor mark.vx-slop:nth-of-type(8n+4) { color: #7b1fa2; }
+.rich-editor mark.vx-slop:nth-of-type(8n+5) { color: #5e35b1; }
+.rich-editor mark.vx-slop:nth-of-type(8n+6) { color: #4527a0; }
+.rich-editor mark.vx-slop:nth-of-type(8n+7) { color: #3949ab; }
+.rich-editor mark.vx-slop:nth-of-type(8n+8) { color: #303f9f; }
 
-.rich-editor mark.vx-slop:first-of-type {
-  border-radius: 3px 0 0 3px;
-  padding-left: 2px;
-}
+/* Dark workspace: the same ramp lifted clear of the background. The light
+   values sit at roughly 20–30% luminance and read as near-black on #0a0a0a —
+   which is how "invisible marks" looked the time it really was a contrast
+   problem rather than a paint one. */
+.dark .rich-editor mark.vx-slop:nth-of-type(8n+1) { color: #f06292; }
+.dark .rich-editor mark.vx-slop:nth-of-type(8n+2) { color: #ec407a; }
+.dark .rich-editor mark.vx-slop:nth-of-type(8n+3) { color: #ba68c8; }
+.dark .rich-editor mark.vx-slop:nth-of-type(8n+4) { color: #ab47bc; }
+.dark .rich-editor mark.vx-slop:nth-of-type(8n+5) { color: #9575cd; }
+.dark .rich-editor mark.vx-slop:nth-of-type(8n+6) { color: #7e57c2; }
+.dark .rich-editor mark.vx-slop:nth-of-type(8n+7) { color: #7986cb; }
+.dark .rich-editor mark.vx-slop:nth-of-type(8n+8) { color: #5c6bc0; }
 
-.rich-editor mark.vx-slop:last-of-type {
-  border-radius: 0 3px 3px 0;
-  padding-right: 2px;
-}
-
-/* Glow on marked paragraphs — a soft halo that helps the textured glyphs read
-   against the page without touching their colour. */
-.rich-editor p:has(mark.vx-slop) {
-  filter: drop-shadow(0 0 6px rgba(255, 40, 90, 0.18)) drop-shadow(0 0 14px rgba(60, 80, 255, 0.12));
-}
+/* No radius/padding rules and no paragraph glow any more. Both existed to prop
+   up a background that no longer exists: the radii rounded the ends of a swatch,
+   the padding gave it room, and the drop-shadow was what made clipped glyphs
+   stand out. Colour does that job now. The glow is also the one remaining
+   compositing effect that sat over marked text, and this whole rule is about
+   not asking WKWebView's compositor for favours. */
 
 /* Creators menu — hiding a provenance type reverts those marks to plain text
-   (the texture highlight is removed; the words themselves stay). Human-author
-   marks share the same sd-texture gradient as paste/AI/web. */
+   (the colour goes; the words themselves stay). Human-author marks share the
+   same ramp as paste/AI/web. */
 .vx-hide-paste .rich-editor mark.vx-slop[data-slop="paste"],
 .vx-hide-ai .rich-editor mark.vx-slop[data-slop="ai"],
 .vx-hide-web .rich-editor mark.vx-slop[data-slop="web"],
 .vx-hide-human .rich-editor mark.vx-slop[data-slop="human"] {
-  /* Outranks the base rule on specificity, so the texture goes AND the glyphs
-     get their own colour back. The colour + fill reset is load-bearing: the
-     base rule leaves the text transparent, so without it a hidden mark would
-     clip a background that is no longer there and render as invisible text. */
-  background: none;
+  /* Four classes — a tie with the dark ramp rules (.dark + .rich-editor +
+     .vx-slop + :nth-of-type) and one more than the light ones, and this comes
+     later in the file, so it wins in both themes. Reverting colour is now the
+     whole job: there is no background left to clear. */
   color: inherit;
   -webkit-text-fill-color: currentColor;
-  padding: 0;
+}
+
+/* Turning "Human authors" off greys out everything that is NOT marked — that
+   is, the writer's own words. The other three toggles hide a provenance type;
+   this one answers the opposite question, "what here isn't mine?", by letting
+   the marked words keep their colour while the rest recedes.
+   Two classes, so every mark rule outranks it (the base rule is 3, the ramp
+   steps are 4) and marked words keep their own colour untouched. Human marks
+   are the exception on purpose: the rule above resolves them to `inherit`,
+   which is now this grey, so they read as the plain text they became. */
+.vx-hide-human .rich-editor {
+  color: #8b939e;
 }
 
 

@@ -1,4 +1,4 @@
-# macOS handoff — ship Valx 1.0.6 for Mac
+# macOS handoff — ship Valx 1.0.7 for Mac
 
 Written for a model starting **cold** on a Mac. Assume no memory of the Windows
 session. Everything needed is here or cited by `file:line`.
@@ -132,6 +132,90 @@ category headers. Verified by inspection; do not go looking for labels to strip.
 
 ---
 
+## 1.7 The 1.0.7 changes (added after the 1.0.6 handoff)
+
+Four more changes landed on `main`, all platform-neutral. Same rule as above:
+nothing to port, but two of them have macOS-specific risk called out below.
+
+### 1.7.1 Word/letter spacing sliders — Format menu
+
+New prefs in `src/lib/prefs.ts`: `LS_WORD_SPACING`, `LS_LETTER_SPACING`,
+`WORD_SPACING_RANGE` (0–16px, step 0.5), `LETTER_SPACING_RANGE` (−1–6px, step
+0.1), plus:
+
+```ts
+wordSpacing(): number
+letterSpacing(): number
+applySpacing(): void                       // writes the two CSS variables
+setSpacing(key: string, px: number): number  // clamps, saves, applies, emits
+```
+
+The sliders write CSS custom properties (`--vx-word-spacing`,
+`--vx-letter-spacing`) on `:root`; `src/index.css` consumes them **on
+`.rich-editor` only** so the writing surface changes and the note title does
+not. `applySpacing()` runs on boot from `src/App.tsx` alongside
+`applyTransparency`, which is what makes the setting survive a restart.
+
+Deliberately not React-driven: dragging a handle repaints via the CSS variable
+and never re-renders the note. If you "fix" that by threading the value through
+props, you reintroduce a re-render per drag frame.
+
+The Format menu now also shows the sliders for **code notes and markdown
+source**, which previously said "Nothing to format in a code file." — that
+message is gone because spacing does apply to them.
+
+### 1.7.2 Menu bar with no note open
+
+`src/components/Editor.tsx` — the null-note branch used to render only a drag
+strip; it now renders a reduced menu bar: **File** (Open File / Open Folder /
+Preferences), **Format** (spacing sliders), **Words**, **View**. Edit and
+Creators are **absent, not disabled**, as are File's save/export/print/trash
+rows — they need a note to act on.
+
+To avoid two menu bars drifting apart, the shared pieces are defined **once**,
+above the early return, as `spacingSliders`, `wordsMenuPop`, `viewWindowItems`
+and `viewToggleItems`, and both bars render the same fragments. If you add a
+global toggle, add it to the fragment — not to one bar.
+
+### 1.7.3 Slop detector — texture now paints the glyphs
+
+**Read this before touching it; it reverses a documented decision.**
+
+The provenance mark no longer sits on a texture highlight. The texture now
+**replaces the glyph colour** (`background-clip: text` + `color: transparent`)
+in `src/index.css`, so a marked run reads as text *made of* `sd-texture.png`.
+
+That is the approach a previous commit reverted, because with the glyphs as the
+only thing painting the image, anything that stops the paint leaves the words
+invisible — it bit WebView2 (marks inserted via `innerHTML` on note load) and
+WKWebView (thin strokes averaging into a dark workspace). It was reinstated on
+explicit request, with two guards:
+
+- the clip is inside `@supports ((-webkit-background-clip: text) or
+  (background-clip: text))`, so an unsupporting engine falls back to
+  `color: inherit` and the words stay their normal colour;
+- a flat lightness layer rides over the texture — darkening 28% on the light
+  surface, lightening 42% on the dark one — so glyph pixels keep contrast.
+  **The dark-mode wash is specifically what stops the old WKWebView
+  disappearing-text failure.** Do not remove it to "clean up" the gradient.
+
+The hide-provenance rules also reset `color` **and**
+`-webkit-text-fill-color`; without that a hidden mark clips a background that
+is no longer there and renders as invisible text.
+
+**macOS is the risk platform here.** Verify §4.8 carefully — this is the one
+change most likely to behave differently under WKWebView.
+
+### 1.7.4 Verified on Windows/Chromium
+
+All four were checked in the running app before shipping: spacing reaches
+`.rich-editor` (`6px`/`2.5px`) while the title stays `normal`; values persist
+across reload; the no-note bar shows exactly File/Format/Words/View; the slop
+glyphs render legibly in **both** light and dark, and hidden marks return to
+normal text. WebKit still needs its own pass.
+
+---
+
 ## 2. Preconditions
 
 ```bash
@@ -245,6 +329,35 @@ Chromium; pass = the layering reads as intended, not pixel-equality with Windows
 If Finder shows a stale icon that is Finder's cache, not the build — verify from
 the freshly-mounted DMG.
 
+**4.8 Slop detector under WKWebView — the highest-risk item in 1.0.7.** Mark
+some text as pasted/AI/web, then check in **both** light and dark:
+
+```js
+const m = document.querySelector('mark.vx-slop');
+const c = getComputedStyle(m);
+({ color: c.color, clip: c.webkitBackgroundClip || c.backgroundClip,
+   bg: c.backgroundImage.slice(0, 60) });
+```
+
+Pass = `clip` is `text`, `color` is transparent, **and the words are visibly
+legible on screen**. The computed values alone prove nothing here — the whole
+failure mode is "styles look right, glyphs invisible". Look at it.
+
+Then reload a note containing marks (the old WebView2 bug only appeared for
+marks restored via `innerHTML` on load, not freshly typed ones) and confirm they
+still paint. Finally toggle a provenance type off in Creators and confirm those
+words return to **normal visible text**, not blank space.
+
+If the glyphs are invisible on WKWebView, the guard to reach for is the
+lightness layer (raise the dark-mode wash above 42%), not deleting the clip —
+the clip is the requested design.
+
+**4.9 Spacing sliders.** Format > drag both. Text reflows live; the note title
+does not change. Quit and relaunch — the values must still be there.
+
+**4.10 Menu bar with no note.** Deselect every note. The bar shows
+File/Format/Words/View and no Edit/Creators; each menu opens and its items work.
+
 **4.6 macOS regressions from the merge** (these predate the new commits but the
 DMG ships them): traffic lights + inset behaviour, native menu bar, Cmd+Q /
 Cmd+W / Cmd+M, Preferences from the App menu.
@@ -275,10 +388,13 @@ git push origin origin/main:macos-port
 - **Do not add a second emoji** to the Trash header (§1.3).
 - **Do not edit `bundle.targets` in the base `tauri.conf.json`** (§3).
 - **Do not publish a GitHub release** unless asked (§3).
-- **Do not bump the version.** It is 1.0.6 in all three files
+- **Do not bump the version.** It is 1.0.7 in all three files
   (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`); the
-  Windows 1.0.6 installer is already built from this exact source, and the Mac
+  Windows 1.0.7 installer is already built from this exact source, and the Mac
   DMG must match it.
+- **Do not remove the slop lightness layer** or move the clip out of its
+  `@supports` guard (§1.7.3) — both exist to stop invisible text.
+- **Do not make the spacing sliders React-driven** (§1.7.1).
 - **Do not touch Windows paths** — `scripts/release.ps1`, the NSIS block,
   `public/main.ico`.
 - **Do not add a Claude co-author trailer** to any commit in this repo.

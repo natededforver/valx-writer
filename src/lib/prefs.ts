@@ -81,6 +81,46 @@ export function setHistoryInterval(mins: number): number {
   return clamped;
 }
 
+// ---------------------------------------------------------------------------
+// Writing-surface spacing. Stored in px, 0 meaning "leave the typeface alone".
+// These reach the editor as CSS custom properties rather than React state: the
+// sliders then repaint the text directly, with no re-render of the note while
+// the handle is being dragged.
+// ---------------------------------------------------------------------------
+export const LS_WORD_SPACING = 'valx-word-spacing';
+export const LS_LETTER_SPACING = 'valx-letter-spacing';
+export const SPACING_EVENT = 'valx-spacing-changed';
+
+export const WORD_SPACING_RANGE = { min: 0, max: 16, step: 0.5 };
+export const LETTER_SPACING_RANGE = { min: -1, max: 6, step: 0.1 };
+
+const readPx = (key: string): number => {
+  const v = parseFloat(localStorage.getItem(key) || '');
+  return Number.isFinite(v) ? v : 0;
+};
+
+export const wordSpacing = (): number => readPx(LS_WORD_SPACING);
+export const letterSpacing = (): number => readPx(LS_LETTER_SPACING);
+
+/** Push the saved spacing onto the document as CSS variables. Called on boot so
+ *  the saved choice is in place before the first paint, and after every move. */
+export function applySpacing(): void {
+  const s = document.documentElement.style;
+  s.setProperty('--vx-word-spacing', `${wordSpacing()}px`);
+  s.setProperty('--vx-letter-spacing', `${letterSpacing()}px`);
+}
+
+/** Write one of the two spacing prefs, clamped to its slider's range. Returns
+ *  the stored value so the caller can hold the clamped number, not the raw. */
+export function setSpacing(key: string, px: number): number {
+  const range = key === LS_WORD_SPACING ? WORD_SPACING_RANGE : LETTER_SPACING_RANGE;
+  const v = Math.min(range.max, Math.max(range.min, Number(px) || 0));
+  localStorage.setItem(key, String(v));
+  applySpacing();
+  window.dispatchEvent(new CustomEvent(SPACING_EVENT, { detail: { key, value: v } }));
+  return v;
+}
+
 /** Toggles the .vx-opaque class (index.css) that flattens the sidebar and
  *  window titlebar's glass effect to a solid background. Called on boot so the
  *  saved choice — opaque by default — is applied before the first paint. */

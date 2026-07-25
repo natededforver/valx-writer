@@ -16,6 +16,8 @@ import {
   LS_SPELLCHECK_ON, SPELLCHECK_EVENT,
   HISTORY_INTERVAL_EVENT, historyInterval, wordGoal, prefOn, setPref,
   emitWordCount, applyTransparency,
+  LS_WORD_SPACING, LS_LETTER_SPACING, WORD_SPACING_RANGE, LETTER_SPACING_RANGE,
+  wordSpacing, letterSpacing, setSpacing,
 } from '../lib/prefs';
 import { LANGUAGES, spellLang, setSpellLang } from '../lib/spellcheck';
 import { Creator, CREATORS_EVENT, creatorMeName, setCreatorMeName, loadCreators, saveCreators, newCreatorId } from '../lib/creators';
@@ -121,6 +123,11 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // Spellcheck language. Not a setToggle case — it's a pick-one, and
   // setSpellLang already persists it and tells open editors to re-check.
   const [lang, setLang] = useState(() => spellLang());
+  // Spacing sliders. State mirrors localStorage only so the labels and handles
+  // track the drag; the text itself repaints from the CSS variables setSpacing
+  // writes, which is why dragging doesn't re-render the note.
+  const [wordSp, setWordSp] = useState(() => wordSpacing());
+  const [letterSp, setLetterSp] = useState(() => letterSpacing());
   const setToggle = (
     key: string,
     event: string,
@@ -437,6 +444,106 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const subPopCls = 'vx-menu-pop absolute left-full top-0 -mt-1 ml-1 z-50 min-w-44 max-h-72 overflow-auto bg-white dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 shadow-xl rounded-lg py-1';
   const shortcutCls = 'ml-auto text-[10px] text-slate-400 dark:text-slate-500 tabular-nums pl-4';
 
+  // ---------------------------------------------------------------------------
+  // Menu fragments shared by the two menu bars — the full one over an open note,
+  // and the reduced one shown with no note open. Defined here, above the
+  // null-note early return, so both branches render the SAME markup instead of
+  // two copies that drift apart.
+  // ---------------------------------------------------------------------------
+
+  // Format > spacing. A global writing-surface setting, not per-note formatting,
+  // so it is offered with or without a note open. onMouseDown must NOT be
+  // prevented here the way the format buttons do it — that would kill the drag.
+  const spacingSliders = (
+    <div className="px-3 py-1.5 space-y-2.5 w-60" onClick={(e) => e.stopPropagation()}>
+      {([
+        ['Letter spacing', LS_LETTER_SPACING, LETTER_SPACING_RANGE, letterSp, setLetterSp],
+        ['Word spacing', LS_WORD_SPACING, WORD_SPACING_RANGE, wordSp, setWordSp],
+      ] as const).map(([label, key, range, value, setValue]) => (
+        <label key={key} className="block select-none">
+          <span className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+            <span>{label}</span>
+            <span className="tabular-nums">{value.toFixed(1)}px</span>
+          </span>
+          <input
+            type="range"
+            min={range.min}
+            max={range.max}
+            step={range.step}
+            value={value}
+            onChange={(e) => setValue(setSpacing(key, parseFloat(e.target.value)))}
+            className="w-full accent-[#32CD32] cursor-pointer"
+          />
+        </label>
+      ))}
+    </div>
+  );
+
+  // Words menu — spelling, language, dictionary. Every item is a global
+  // preference, so this popup is identical in both menu bars.
+  const wordsMenuPop = (
+    <div className={menuPopCls} onMouseDown={(e) => e.preventDefault()}>
+      <div className="relative" onMouseEnter={() => setWordsSub('spelling')}>
+        <button onClick={() => setWordsSub((s) => (s === 'spelling' ? null : 'spelling'))} className={`${itemCls} ${wordsSub === 'spelling' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><SpellCheck size={15} className="opacity-60" /> Spelling<ChevronRight size={14} className="ml-auto opacity-50" /></button>
+        {wordsSub === 'spelling' && (
+          <div className={subPopCls}>
+            <button onClick={() => setToggle(LS_SPELLCHECK_ON, SPELLCHECK_EVENT, !spellOn, setSpellOn)} className={itemCls}>
+              <Check size={14} className={spellOn ? 'text-[#32CD32]' : 'opacity-0'} /> Check spelling while typing
+            </button>
+            <button onClick={() => setToggle(LS_AUTOCAP, AUTOCAP_EVENT, !autoCap, setAutoCap)} className={itemCls}>
+              <Check size={14} className={autoCap ? 'text-[#32CD32]' : 'opacity-0'} /> Auto-capitalize
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="relative" onMouseEnter={() => setWordsSub('language')}>
+        <button onClick={() => setWordsSub((s) => (s === 'language' ? null : 'language'))} className={`${itemCls} ${wordsSub === 'language' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Languages size={15} className="opacity-60" /> Language<ChevronRight size={14} className="ml-auto opacity-50" /></button>
+        {wordsSub === 'language' && (
+          <div className={subPopCls}>
+            {Object.entries(LANGUAGES).map(([key, label]) => (
+              <button key={key} onClick={() => { setSpellLang(key); setLang(key); }} className={itemCls}>
+                <Check size={14} className={lang === key ? 'text-[#32CD32]' : 'opacity-0'} /> {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {/* Dictionary is a dialog, not a list — it opens straight from the row
+          rather than pretending to be a third flyout. */}
+      <div onMouseEnter={() => setWordsSub(null)}>
+        <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-open-dictionary')); }} className={itemCls}>
+          <BookA size={15} className="opacity-60" /> Dictionary…
+        </button>
+      </div>
+    </div>
+  );
+
+  // View items that don't need a note: the window itself, then the global
+  // counters and appearance toggles.
+  const viewWindowItems = (
+    <>
+      <button onClick={() => { toggleFullscreen(); setOpenMenu(null); }} className={itemCls}>{isFullscreen ? <Minimize2 size={15} className="opacity-60" /> : <Maximize2 size={15} className="opacity-60" />} {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}<span className={shortcutCls}>{isMac ? '⌘↩' : 'F11'}</span></button>
+      {onToggleSidebar && <button onClick={() => { onToggleSidebar(); setOpenMenu(null); }} className={itemCls}><ArrowLeft size={15} className="opacity-60" /> {sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}</button>}
+    </>
+  );
+  const viewToggleItems = (
+    <>
+      <button onClick={() => setToggle(LS_WORDCOUNT, '', !wcOn, setWcOn, emitWordCount)} className={itemCls}>
+        <Check size={14} className={wcOn ? 'text-[#32CD32]' : 'opacity-0'} /> Word count
+      </button>
+      <button onClick={() => setToggle(LS_LINE_COUNTER, LINE_COUNTER_EVENT, !lineCounter, setLineCounter)} className={itemCls}>
+        <Check size={14} className={lineCounter ? 'text-[#32CD32]' : 'opacity-0'} /> Line numbers
+      </button>
+      <div className={dividerCls} />
+      <button onClick={() => setToggle(LS_TRANSPARENCY, '', !transparency, setTransparency, applyTransparency)} className={itemCls}>
+        <Check size={14} className={transparency ? 'text-[#32CD32]' : 'opacity-0'} /> Transparency
+      </button>
+      <button onClick={() => setToggle(LS_TYPEWRITER, TYPEWRITER_EVENT, !typewriter, setTypewriter)} className={itemCls}>
+        <Check size={14} className={typewriter ? 'text-[#32CD32]' : 'opacity-0'} /> Typewriter sounds
+      </button>
+    </>
+  );
+
   // Window controls (Tauri). No-ops in the browser preview (isTauri false).
   // Drawn on Windows/Linux only: macOS keeps its native decorations and gets
   // real traffic lights overlaid on this same bar (titleBarStyle "Overlay" in
@@ -619,8 +726,13 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Slim chrome strip so the window stays draggable/closable with no note open. */}
-        <div className="hidden md:flex absolute top-0 inset-x-0 h-10 items-center px-3 z-40 vx-glass-strong" style={{ paddingLeft: trafficLightInset || undefined }}>
+        {/* Chrome strip so the window stays draggable/closable with no note
+            open — and a menu bar, so the settings that aren't about a note
+            (open a file, spacing, spelling, the window itself) stay reachable
+            before anything is selected. Menus that need a note to act on —
+            Edit and Creators, plus File's save/export/print/trash rows — are
+            simply absent rather than present-but-dead. */}
+        <div className="hidden md:flex absolute top-0 inset-x-0 h-10 items-center px-1.5 gap-0.5 z-40 vx-glass-strong" style={{ paddingLeft: trafficLightInset || undefined }}>
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
@@ -630,6 +742,46 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               {sidebarOpen ? <ArrowLeft size={18} /> : <ArrowRight size={18} />}
             </button>
           )}
+
+          {/* FILE — only the rows that don't need a note. */}
+          <div className="relative z-50 h-full flex items-center">
+            <button onClick={() => setOpenMenu((m) => (m === 'file' ? null : 'file'))} onMouseEnter={() => openMenu && setOpenMenu('file')} className={`${menuBtnCls('file')} h-7`}>File</button>
+            {openMenu === 'file' && (
+              <div className={menuPopCls}>
+                <button onClick={() => { setOpenMenu(null); handleOpenFile(); }} className={itemCls}><FileUp size={15} className="opacity-60" /> Open File…<span className={shortcutCls}>{accel('Ctrl O')}</span></button>
+                {onOpenFolder && <button onClick={() => { setOpenMenu(null); onOpenFolder(); }} className={itemCls}><FolderOpen size={15} className="opacity-60" /> Open Folder…<span className={shortcutCls}>{accel('Ctrl Shift O')}</span></button>}
+                {onOpenPreferences && (
+                  <>
+                    <div className={dividerCls} />
+                    <button onClick={() => { setOpenMenu(null); onOpenPreferences(); }} className={itemCls}><SlidersHorizontal size={15} className="opacity-60" /> Preferences…<span className={shortcutCls}>{accel('Ctrl ,')}</span></button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* FORMAT — just the spacing sliders; the rest needs a selection. */}
+          <div className="relative z-50 h-full flex items-center">
+            <button onClick={() => setOpenMenu((m) => (m === 'format' ? null : 'format'))} onMouseEnter={() => openMenu && setOpenMenu('format')} className={`${menuBtnCls('format')} h-7`}>Format</button>
+            {openMenu === 'format' && <div className={menuPopCls}>{spacingSliders}</div>}
+          </div>
+
+          <div className="relative z-50 h-full flex items-center">
+            <button onClick={() => setOpenMenu((m) => (m === 'words' ? null : 'words'))} onMouseEnter={() => openMenu && setOpenMenu('words')} className={`${menuBtnCls('words')} h-7`}>Words</button>
+            {openMenu === 'words' && wordsMenuPop}
+          </div>
+
+          <div className="relative z-50 h-full flex items-center">
+            <button onClick={() => setOpenMenu((m) => (m === 'view' ? null : 'view'))} onMouseEnter={() => openMenu && setOpenMenu('view')} className={`${menuBtnCls('view')} h-7`}>View</button>
+            {openMenu === 'view' && (
+              <div className={menuPopCls}>
+                {viewWindowItems}
+                <div className={dividerCls} />
+                {viewToggleItems}
+              </div>
+            )}
+          </div>
+
           <div data-tauri-drag-region className="flex-1 h-full" />
           {showCaptionButtons && (
             <div className="flex items-center -mr-2 shrink-0">
@@ -1043,30 +1195,27 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               <button onClick={() => setOpenMenu((m) => (m === 'format' ? null : 'format'))} onMouseEnter={() => openMenu && setOpenMenu('format')} className={menuBtnCls('format')}>Format</button>
               {openMenu === 'format' && (
                 <div className={menuPopCls}>
-                  {isCodeNote ? (
-                    /* Code notes have nothing to format — everything that used
-                       to sit here (syntax highlighting) is a View concern. */
-                    <div className="px-3 py-1.5 text-[11px] text-slate-400 dark:text-slate-500">Nothing to format in a code file.</div>
-                  ) : (
+                  {/* Code files and markdown source have no rich formatting to
+                      offer — but the spacing sliders below still apply to them,
+                      so the menu is never empty. */}
+                  {!isCodeNote && !mdSource && (
                     <>
-                      {!mdSource && (
-                        <>
-                          {([['bold', 'Bold', 'Ctrl B'], ['italic', 'Italic', 'Ctrl I'], ['strikeThrough', 'Strikethrough', 'Ctrl Shift X'], ['checkbox', 'Insert checkbox', '']] as const).map(([cmd, label, sc]) => (
-                            <button key={cmd} onMouseDown={(e) => e.preventDefault()} onClick={() => window.dispatchEvent(new CustomEvent('valx-format', { detail: cmd }))} className={itemCls}>{label}{sc && <span className={shortcutCls}>{accel(sc)}</span>}</button>
-                          ))}
-                          <div className={dividerCls} />
-                          {([[undefined, 'Left'], ['center', 'Center'], ['right', 'Right']] as const).map(([val, label]) => {
-                            const active = (note.align ?? undefined) === val || (val === undefined && !note.align);
-                            return (
-                              <button key={label} onMouseDown={(e) => e.preventDefault()} onClick={() => updateNote(note.id, { align: val })} className={itemCls}><Check size={14} className={active ? 'text-[#32CD32]' : 'opacity-0'} /> {label}</button>
-                            );
-                          })}
-                          <div className={dividerCls} />
-                          <button onMouseDown={(e) => e.preventDefault()} onClick={() => { setTableMenu(true); setTHover({ r: 0, c: 0 }); setOpenMenu(null); }} className={itemCls}><Table size={15} className="opacity-60" /> Insert table…</button>
-                        </>
-                      )}
+                      {([['bold', 'Bold', 'Ctrl B'], ['italic', 'Italic', 'Ctrl I'], ['strikeThrough', 'Strikethrough', 'Ctrl Shift X'], ['checkbox', 'Insert checkbox', '']] as const).map(([cmd, label, sc]) => (
+                        <button key={cmd} onMouseDown={(e) => e.preventDefault()} onClick={() => window.dispatchEvent(new CustomEvent('valx-format', { detail: cmd }))} className={itemCls}>{label}{sc && <span className={shortcutCls}>{accel(sc)}</span>}</button>
+                      ))}
+                      <div className={dividerCls} />
+                      {([[undefined, 'Left'], ['center', 'Center'], ['right', 'Right']] as const).map(([val, label]) => {
+                        const active = (note.align ?? undefined) === val || (val === undefined && !note.align);
+                        return (
+                          <button key={label} onMouseDown={(e) => e.preventDefault()} onClick={() => updateNote(note.id, { align: val })} className={itemCls}><Check size={14} className={active ? 'text-[#32CD32]' : 'opacity-0'} /> {label}</button>
+                        );
+                      })}
+                      <div className={dividerCls} />
+                      <button onMouseDown={(e) => e.preventDefault()} onClick={() => { setTableMenu(true); setTHover({ r: 0, c: 0 }); setOpenMenu(null); }} className={itemCls}><Table size={15} className="opacity-60" /> Insert table…</button>
+                      <div className={dividerCls} />
                     </>
                   )}
+                  {spacingSliders}
                 </div>
               )}
             </div>
@@ -1077,44 +1226,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               These used to trail the Edit menu, which had become a grab bag. */}
           <div className="relative z-50">
             <button onClick={() => setOpenMenu((m) => (m === 'words' ? null : 'words'))} onMouseEnter={() => openMenu && setOpenMenu('words')} className={menuBtnCls('words')}>Words</button>
-            {openMenu === 'words' && (
-              <div className={menuPopCls} onMouseDown={(e) => e.preventDefault()}>
-                {/* Spelling → flyout */}
-                <div className="relative" onMouseEnter={() => setWordsSub('spelling')}>
-                  <button onClick={() => setWordsSub((s) => (s === 'spelling' ? null : 'spelling'))} className={`${itemCls} ${wordsSub === 'spelling' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><SpellCheck size={15} className="opacity-60" /> Spelling<ChevronRight size={14} className="ml-auto opacity-50" /></button>
-                  {wordsSub === 'spelling' && (
-                    <div className={subPopCls}>
-                      <button onClick={() => setToggle(LS_SPELLCHECK_ON, SPELLCHECK_EVENT, !spellOn, setSpellOn)} className={itemCls}>
-                        <Check size={14} className={spellOn ? 'text-[#32CD32]' : 'opacity-0'} /> Check spelling while typing
-                      </button>
-                      <button onClick={() => setToggle(LS_AUTOCAP, AUTOCAP_EVENT, !autoCap, setAutoCap)} className={itemCls}>
-                        <Check size={14} className={autoCap ? 'text-[#32CD32]' : 'opacity-0'} /> Auto-capitalize
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {/* Language → flyout */}
-                <div className="relative" onMouseEnter={() => setWordsSub('language')}>
-                  <button onClick={() => setWordsSub((s) => (s === 'language' ? null : 'language'))} className={`${itemCls} ${wordsSub === 'language' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Languages size={15} className="opacity-60" /> Language<ChevronRight size={14} className="ml-auto opacity-50" /></button>
-                  {wordsSub === 'language' && (
-                    <div className={subPopCls}>
-                      {Object.entries(LANGUAGES).map(([key, label]) => (
-                        <button key={key} onClick={() => { setSpellLang(key); setLang(key); }} className={itemCls}>
-                          <Check size={14} className={lang === key ? 'text-[#32CD32]' : 'opacity-0'} /> {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {/* Dictionary is a dialog, not a list — it opens straight from
-                    the row rather than pretending to be a third flyout. */}
-                <div onMouseEnter={() => setWordsSub(null)}>
-                  <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-open-dictionary')); }} className={itemCls}>
-                    <BookA size={15} className="opacity-60" /> Dictionary…
-                  </button>
-                </div>
-              </div>
-            )}
+            {openMenu === 'words' && wordsMenuPop}
           </div>
 
           {/* VIEW */}
@@ -1122,8 +1234,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             <button onClick={() => setOpenMenu((m) => (m === 'view' ? null : 'view'))} onMouseEnter={() => openMenu && setOpenMenu('view')} className={menuBtnCls('view')}>View</button>
             {openMenu === 'view' && (
               <div className={menuPopCls}>
-                <button onClick={() => { toggleFullscreen(); setOpenMenu(null); }} className={itemCls}>{isFullscreen ? <Minimize2 size={15} className="opacity-60" /> : <Maximize2 size={15} className="opacity-60" />} {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}<span className={shortcutCls}>{isMac ? '⌘↩' : 'F11'}</span></button>
-                {onToggleSidebar && <button onClick={() => { onToggleSidebar(); setOpenMenu(null); }} className={itemCls}><ArrowLeft size={15} className="opacity-60" /> {sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}</button>}
+                {viewWindowItems}
                 <div className={dividerCls} />
                 {/* Markdown source moved here from Format: it swaps what the
                     editor SHOWS, it doesn't change the note's formatting. */}
@@ -1135,19 +1246,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                 {isCodeNote && <button onClick={() => { setSyntaxViewer((v) => !v); setOpenMenu(null); }} className={itemCls}><Check size={14} className={syntaxViewer ? 'text-[#32CD32]' : 'opacity-0'} /> Syntax highlighting</button>}
                 {canPreview && <button onClick={() => { setShowPreview((v) => !v); setOpenMenu(null); }} className={itemCls}><Eye size={15} className="opacity-60" /> {showPreview ? 'Hide preview' : 'Preview'}</button>}
                 <div className={dividerCls} />
-                <button onClick={() => setToggle(LS_WORDCOUNT, '', !wcOn, setWcOn, emitWordCount)} className={itemCls}>
-                  <Check size={14} className={wcOn ? 'text-[#32CD32]' : 'opacity-0'} /> Word count
-                </button>
-                <button onClick={() => setToggle(LS_LINE_COUNTER, LINE_COUNTER_EVENT, !lineCounter, setLineCounter)} className={itemCls}>
-                  <Check size={14} className={lineCounter ? 'text-[#32CD32]' : 'opacity-0'} /> Line numbers
-                </button>
-                <div className={dividerCls} />
-                <button onClick={() => setToggle(LS_TRANSPARENCY, '', !transparency, setTransparency, applyTransparency)} className={itemCls}>
-                  <Check size={14} className={transparency ? 'text-[#32CD32]' : 'opacity-0'} /> Transparency
-                </button>
-                <button onClick={() => setToggle(LS_TYPEWRITER, TYPEWRITER_EVENT, !typewriter, setTypewriter)} className={itemCls}>
-                  <Check size={14} className={typewriter ? 'text-[#32CD32]' : 'opacity-0'} /> Typewriter sounds
-                </button>
+                {viewToggleItems}
                 <div className={dividerCls} />
                 {!note.isTrash && <button onClick={() => { openHistory(); setOpenMenu(null); }} className={itemCls}><History size={15} className="opacity-60" /> Version history</button>}
               </div>

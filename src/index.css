@@ -219,6 +219,12 @@ body {
 
 .rich-editor {
   caret-color: transparent; /* native caret hidden; the .vx-caret overlay draws it */
+  /* Format > spacing sliders (prefs.ts sets the variables). Unset falls back to
+     `normal`, so a fresh install renders exactly as it did before the sliders
+     existed. Deliberately scoped to the writing surface: the note title keeps
+     its own typography, the same split the two font variables already make. */
+  word-spacing: var(--vx-word-spacing, normal);
+  letter-spacing: var(--vx-letter-spacing, normal);
 }
 
 /* Text caret — an ordinary bar, in the brand green and thicker than the
@@ -341,25 +347,20 @@ body {
    carry the red/blue gradient texture. Static background + static glow only:
    no animation, so thousands of marked words cost nothing per frame. */
 .rich-editor mark.vx-slop {
-  /* The texture sits BEHIND the words, not inside their glyphs.
+  /* The texture is painted OVER the words as a film, not behind them as a
+     highlight — the marked run should look stained by the texture rather than
+     sitting on a swatch of it. The film is the ::after below; the mark itself
+     carries no background.
 
-     It used to be clipped to the text (background-clip: text + a transparent
-     colour), which makes the words themselves the only thing painting the
-     gradient — and therefore makes them vanish outright whenever that paint
-     doesn't happen. Two ways that bit: WebView2 skipped it for marks inserted
-     via innerHTML on note load, and on WKWebView the words read as invisible
-     against a dark workspace, since the glyph strokes are thin and this
-     texture averages ~30% luminance. A highlight cannot fail that way: the
-     text keeps its own colour and stays legible even if the image never
-     loads at all.
-
-     The flat layer over the texture washes it toward the surface colour so
-     the inherited text colour holds its contrast — lightening in light mode,
-     darkening in dark. */
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.62)),
-    url('../sd-texture.png');
-  background-size: auto, 480px auto;
+     Note for anyone tempted to clip the texture to the glyphs instead
+     (background-clip: text): that was tried and reverted. It makes the words
+     the only thing painting the texture, so they vanish outright when that
+     paint doesn't happen — WebView2 skipped it for marks inserted via
+     innerHTML on note load, and on WKWebView the thin glyph strokes read as
+     invisible against a dark workspace. An overlay can't fail that way: the
+     text keeps its own colour underneath and stays legible even if the image
+     never loads. */
+  background: none;
   color: inherit;
   padding: 2px 0;
   /* Marks wrap per word, so a marked run is many adjacent <mark>s; cloning the
@@ -367,10 +368,39 @@ body {
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
-.dark .rich-editor mark.vx-slop {
-  background-image:
-    linear-gradient(rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.42)),
-    url('../sd-texture.png');
+
+/* The texture REPLACES the glyph colour: the letterforms themselves are what
+   paints it, so a marked run reads as text made of the texture rather than
+   text sitting on it.
+
+   This is the approach that was reverted once before, for a real reason — with
+   the glyphs as the only thing painting the image, anything that stops the
+   paint leaves the words invisible. Two guards against that repeat:
+
+     · the clip lives behind @supports, so a browser that can't do it keeps the
+       `color: inherit` above and the words simply stay their normal colour;
+     · a flat lightness layer rides over the texture (darkening on the light
+       surface, lightening on the dark one) so the glyph pixels keep contrast
+       against the page instead of averaging into it — the dark-mode wash is
+       what made thin strokes disappear on WKWebView last time.
+
+   If words ever come back invisible on a platform, suspect the paint, not the
+   markup: check that the texture 200s and that the clip is actually applied. */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .rich-editor mark.vx-slop {
+    background-image:
+      linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)),
+      url('../sd-texture.png');
+    background-size: auto, 480px auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .dark .rich-editor mark.vx-slop {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.42)),
+      url('../sd-texture.png');
+  }
 }
 
 .rich-editor mark.vx-slop:first-of-type {
@@ -397,10 +427,13 @@ body {
 .vx-hide-ai .rich-editor mark.vx-slop[data-slop="ai"],
 .vx-hide-web .rich-editor mark.vx-slop[data-slop="web"],
 .vx-hide-human .rich-editor mark.vx-slop[data-slop="human"] {
-  /* Wins over the .dark variant on specificity (4 classes to 3), so this
-     clears both layers in either theme. */
+  /* Outranks both the base rule and its @supports twin on specificity, so the
+     texture goes AND the glyphs get their own colour back — without the colour
+     reset a hidden mark would clip a background that is no longer there and
+     render as invisible text. */
   background: none;
   color: inherit;
+  -webkit-text-fill-color: currentColor;
   padding: 0;
 }
 

@@ -10,7 +10,7 @@ import { Editor } from './components/Editor';
 import { FormatConverter } from './components/FormatConverter';
 import { SettingsModal } from './components/SettingsModal';
 import { DictionaryModal } from './components/DictionaryModal';
-import { LS_TRANSPARENCY, applyTransparency, prefOn } from './lib/prefs';
+import { LS_TRANSPARENCY, applyTransparency, applySpacing, prefOn } from './lib/prefs';
 import { FilterState, JumpTarget } from './types';
 import { SearchHit } from './lib/search';
 import { linkHrefForNote } from './lib/noteLinks';
@@ -132,6 +132,7 @@ export default function App() {
   // so an unset key means opaque (prefOn handles the ship-defaults).
   useEffect(() => {
     applyTransparency(prefOn(LS_TRANSPARENCY));
+    applySpacing();
   }, []);
 
   // Sync active note logic

@@ -312,9 +312,10 @@ body {
 /* Greeting (sidebar header) — the one place the Blue Screen face is used.
    The logo's split-glow look: a sharp PINK ghost of the word offset to the
    right and sitting BEHIND the glyphs (last shadow → furthest back, so it only
-   peeks out on the right edge), and a soft YELLOW outer glow hugging the main
-   text (the two blurred shadows, kept translucent so it reads as a light
-   filter rather than a solid outline). */
+   peeks out on the right edge), and — on the light surface only — a soft YELLOW
+   outer glow hugging the main text (the two blurred shadows, kept translucent so
+   it reads as a light filter rather than a solid outline). Dark mode deliberately
+   has no glow; see .dark .vx-greeting below. */
 .vx-greeting {
   font-family: 'Blue Screen', var(--font-sans);
   letter-spacing: 0.01em;
@@ -325,12 +326,11 @@ body {
     1.5px 0 0 #ff8fce;
 }
 .dark .vx-greeting {
-  /* Lift the core off black; the pink ghost + yellow glow stay identical. */
-  color: #efe9ff;
-  text-shadow:
-    0 0 7px rgba(255, 244, 180, 0.9),
-    0 0 15px rgba(255, 240, 160, 0.55),
-    1.5px 0 0 #ff8fce;
+  /* On black the yellow glow washed the hues out, so dark mode drops it and
+     keeps colour instead: the core goes brand lime (the same #32cd32 the links
+     and caret use) and the pink ghost is left to read on its own. */
+  color: #32cd32;
+  text-shadow: 1.5px 0 0 #ff8fce;
 }
 
 /* Links in notes — internal note links and external URLs alike (including the

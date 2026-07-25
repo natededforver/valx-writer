@@ -49,3 +49,10 @@ base64 = "0.22"
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-single-instance = "2"
+
+# macOS only: one message to the underlying WKWebView to turn off its
+# Safari-style link preview (see lib.rs). Already in the tree via tauri/wry, so
+# this pins the same version rather than pulling anything new in. Not listed for
+# Windows, which has no WKWebView and builds unchanged.
+[target."cfg(target_os = \"macos\")".dependencies]
+objc2 = "0.6"

@@ -192,6 +192,27 @@ pub fn run() {
             // app's own in-window menu bar covers the rest on every platform.
             #[cfg(target_os = "macos")]
             macos_menu::install(app.handle());
+            // WKWebView's own link preview fires on a force-click and puts a
+            // Safari result card over the note — it had been matching ordinary
+            // words in the prose (a stray "sjd" resolved to a school's website)
+            // and interrupting the editor's right-click menu. The renderer
+            // cannot switch it off: preventDefault on `contextmenu` suppresses
+            // the native MENU, but the preview panel is not the menu and comes
+            // up regardless. It is a WKWebView property, so it has to be set
+            // here. Tauri only exposes allow_link_preview on the webview
+            // BUILDER and these windows are declared in tauri.conf.json, hence
+            // reaching the live webview through with_webview instead.
+            #[cfg(target_os = "macos")]
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.with_webview(|webview| {
+                    use objc2::msg_send;
+                    use objc2::runtime::AnyObject;
+                    let wv = webview.inner() as *mut AnyObject;
+                    unsafe {
+                        let _: () = msg_send![wv, setAllowsLinkPreview: false];
+                    }
+                });
+            }
             Ok(())
         })
         .build(tauri::generate_context!())

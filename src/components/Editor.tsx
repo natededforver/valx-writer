@@ -1055,7 +1055,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                             <button key={cmd} onMouseDown={(e) => e.preventDefault()} onClick={() => window.dispatchEvent(new CustomEvent('valx-format', { detail: cmd }))} className={itemCls}>{label}{sc && <span className={shortcutCls}>{accel(sc)}</span>}</button>
                           ))}
                           <div className={dividerCls} />
-                                    {([[undefined, 'Left'], ['center', 'Center'], ['right', 'Right']] as const).map(([val, label]) => {
+                          {([[undefined, 'Left'], ['center', 'Center'], ['right', 'Right']] as const).map(([val, label]) => {
                             const active = (note.align ?? undefined) === val || (val === undefined && !note.align);
                             return (
                               <button key={label} onMouseDown={(e) => e.preventDefault()} onClick={() => updateNote(note.id, { align: val })} className={itemCls}><Check size={14} className={active ? 'text-[#32CD32]' : 'opacity-0'} /> {label}</button>
@@ -1161,7 +1161,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             <button onClick={() => setOpenMenu((m) => (m === 'creators' ? null : 'creators'))} onMouseEnter={() => openMenu && setOpenMenu('creators')} className={menuBtnCls('creators')}>Creators</button>
             {openMenu === 'creators' && (
               <div className={`${menuPopCls} min-w-64`}>
-                <div className="px-3 pb-2 pt-0.5">
+                <div className="px-3 pb-2 pt-1.5">
                   <input
                     value={creatorMe}
                     onChange={(e) => setCreatorMeName(e.target.value)}

@@ -38,6 +38,14 @@
   font-style: normal;
   font-display: swap;
 }
+/* Valuex — the house typeface, the default writing-surface face. */
+@font-face {
+  font-family: 'Valuex';
+  src: url('./assets/fonts/Valuex-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 @font-face {
   font-family: 'Blue Screen';
   src: url('./assets/fonts/BlueScreen.ttf') format('truetype');
@@ -53,7 +61,7 @@
   --font-sans: 'Valx Helvetica', Helvetica, Arial, 'Segoe UI', Roboto, sans-serif;
   /* The writing surface. Kept separate from --font-sans so UI chrome and prose
      never drift onto the same typeface. */
-  --vx-editor-font: 'Valx Mono', 'Lucida Console', Consolas, monospace;
+  --vx-editor-font: 'Valuex', 'Valx Mono', 'Lucida Console', Consolas, monospace;
   /* Brand green, sampled from the app logo. */
   --vx-brand: #315f30;
   --vx-surface: #ffffff;
@@ -291,17 +299,28 @@ body {
   scrollbar-color: rgba(120, 120, 120, 0.35) transparent;
 }
 
-/* Greeting (sidebar header) — the one place the Blue Screen face is used, in
-   the brand green so the wordmark reads as branding rather than as UI text. */
+/* Greeting (sidebar header) — the one place the Blue Screen face is used.
+   The logo's split-glow look: a sharp PINK ghost of the word offset to the
+   right and sitting BEHIND the glyphs (last shadow → furthest back, so it only
+   peeks out on the right edge), and a soft YELLOW outer glow hugging the main
+   text (the two blurred shadows, kept translucent so it reads as a light
+   filter rather than a solid outline). */
 .vx-greeting {
   font-family: 'Blue Screen', var(--font-sans);
-  color: var(--vx-brand);
   letter-spacing: 0.01em;
+  color: #3a2a63;
+  text-shadow:
+    0 0 6px rgba(255, 242, 170, 0.95),
+    0 0 13px rgba(255, 238, 150, 0.6),
+    1.5px 0 0 #ff8fce;
 }
 .dark .vx-greeting {
-  /* The brand green is too dark to read on black — lift it toward the logo's
-     lighter green while keeping the same hue. */
-  color: #6cc46a;
+  /* Lift the core off black; the pink ghost + yellow glow stay identical. */
+  color: #efe9ff;
+  text-shadow:
+    0 0 7px rgba(255, 244, 180, 0.9),
+    0 0 15px rgba(255, 240, 160, 0.55),
+    1.5px 0 0 #ff8fce;
 }
 
 /* Links in notes — internal note links and external URLs alike (including the

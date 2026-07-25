@@ -347,74 +347,56 @@ body {
    carry the red/blue gradient texture. Static background + static glow only:
    no animation, so thousands of marked words cost nothing per frame. */
 .rich-editor mark.vx-slop {
-  /* The texture is painted OVER the words as a film, not behind them as a
-     highlight — the marked run should look stained by the texture rather than
-     sitting on a swatch of it. The film is the ::after below; the mark itself
-     carries no background.
+  /* The texture paints the GLYPHS themselves — the letterforms are the only
+     thing drawing the image, and there is no swatch behind them. This is the
+     original method, with one value changed: the tile is 80px, not 480px.
 
-     Note for anyone tempted to clip the texture to the glyphs instead
-     (background-clip: text): that was tried and reverted. It makes the words
-     the only thing painting the texture, so they vanish outright when that
-     paint doesn't happen — WebView2 skipped it for marks inserted via
-     innerHTML on note load, and on WKWebView the thin glyph strokes read as
-     invisible against a dark workspace. An overlay can't fail that way: the
-     text keeps its own colour underneath and stays legible even if the image
-     never loads. */
-  background: none;
-  color: inherit;
+     That single number is what made marked words disappear. Marks wrap PER
+     WORD and each mark is its own painting area, so with a 480px tile a
+     ~51x25px word maps onto the far top-left of the image and WebKit does not
+     paint the clipped text at all — computed style still reports
+     `background-clip: text`, the texture still 200s, and the glyphs are simply
+     never drawn. Because the fill is transparent, "not painted" means the
+     user's words are gone. Verified by isolation: same rule, same single
+     layer, 480px invisible in both themes, 80px vivid in both.
+
+     The flat wash layer that used to sit over the texture was masking this —
+     it painted opaque pixels of its own, so the glyphs showed, but it also
+     bleached the hues toward the surface colour. With the tile fixed the wash
+     is unnecessary, so the raw texture colours come through.
+
+     No background-attachment: fixed — a fixed background clipped to text fails
+     to paint in WebView2 when the mark is inserted via innerHTML on note load.
+     Default (scroll) attachment paints reliably. */
+  background: url('../sd-texture.png') 0 0 / 80px auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
   padding: 2px 0;
   /* Marks wrap per word, so a marked run is many adjacent <mark>s; cloning the
-     decoration keeps padding and radius correct on every fragment. */
+     decoration keeps padding correct on every fragment. */
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
 
-/* The texture REPLACES the glyph colour: the letterforms themselves are what
-   paints it, so a marked run reads as text made of the texture rather than
-   text sitting on it.
-
-   This is the approach that was reverted once before, for a real reason — with
-   the glyphs as the only thing painting the image, anything that stops the
-   paint leaves the words invisible. Two guards against that repeat:
-
-     · the clip lives behind @supports, so a browser that can't do it keeps the
-       `color: inherit` above and the words simply stay their normal colour;
-     · a flat lightness layer rides over the texture (darkening on the light
-       surface, lightening on the dark one) so the glyph pixels keep contrast
-       against the page instead of averaging into it — the dark-mode wash is
-       what made thin strokes disappear on WKWebView last time.
-
-   If words ever come back invisible on a platform, suspect the paint, not the
-   markup: check that the texture 200s and that the clip is actually applied. */
-@supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  .rich-editor mark.vx-slop {
-    background-image:
-      linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)),
-      url('../sd-texture.png');
-    /* 80px, not the 480px this used to be. Marks wrap PER WORD, and every mark
-       is its own background painting area anchored at 0 0 — so at 480px a
-       25px-tall word only ever sampled the texture's top-left corner and came
-       out a flat, dull crimson, identical whatever the word said. Sizing the
-       tile near one word's width makes each mark span several colour bands of
-       the image instead, which is what makes the run read as textured rather
-       than merely red. Keep `repeat`: a word wider than the tile would
-       otherwise have unpainted glyphs, i.e. invisible text. */
-    background-size: auto, 80px auto;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-  .dark .rich-editor mark.vx-slop {
-    /* 0.22, down from 0.42. The wash exists so thin strokes keep contrast
-       against the dark workspace, but at 0.42 it bleached the texture to a
-       flat pastel and the colours stopped reading at all. 0.22 still lifts the
-       glyphs clear of black while leaving the hue intact — do not raise it back
-       without checking the colours survive. */
-    background-image:
-      linear-gradient(rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.22)),
-      url('../sd-texture.png');
-  }
-}
+/* Spread the texture across the run. Every mark is its own painting area
+   anchored at its own origin, so without this each word would draw the very
+   same corner of the image and a marked sentence would come out one flat
+   colour. Walking the origin along a fixed cycle gives each successive word a
+   different region, so a run reads as one continuous sheet of texture that the
+   words are cut out of.
+   background-attachment: fixed would do this in one line and is the obvious
+   thing to reach for — it does not paint at all under WKWebView when the
+   background is clipped to text, and it is the same declaration WebView2 chokes
+   on. The cycle is plain CSS and works on both. */
+.rich-editor mark.vx-slop:nth-of-type(8n+1) { background-position: 0 0; }
+.rich-editor mark.vx-slop:nth-of-type(8n+2) { background-position: -46px -12px; }
+.rich-editor mark.vx-slop:nth-of-type(8n+3) { background-position: -92px -25px; }
+.rich-editor mark.vx-slop:nth-of-type(8n+4) { background-position: -19px -33px; }
+.rich-editor mark.vx-slop:nth-of-type(8n+5) { background-position: -65px -7px; }
+.rich-editor mark.vx-slop:nth-of-type(8n+6) { background-position: -111px -19px; }
+.rich-editor mark.vx-slop:nth-of-type(8n+7) { background-position: -33px -28px; }
+.rich-editor mark.vx-slop:nth-of-type(8n+8) { background-position: -78px -40px; }
 
 .rich-editor mark.vx-slop:first-of-type {
   border-radius: 3px 0 0 3px;
@@ -426,9 +408,8 @@ body {
   padding-right: 2px;
 }
 
-/* Glow on marked paragraphs. Softer than it was: the glow used to be the main
-   thing making clipped-to-text marks stand out, and now the highlight itself
-   carries that weight — at the old strength it haloed every highlight box. */
+/* Glow on marked paragraphs — a soft halo that helps the textured glyphs read
+   against the page without touching their colour. */
 .rich-editor p:has(mark.vx-slop) {
   filter: drop-shadow(0 0 6px rgba(255, 40, 90, 0.18)) drop-shadow(0 0 14px rgba(60, 80, 255, 0.12));
 }
@@ -440,10 +421,10 @@ body {
 .vx-hide-ai .rich-editor mark.vx-slop[data-slop="ai"],
 .vx-hide-web .rich-editor mark.vx-slop[data-slop="web"],
 .vx-hide-human .rich-editor mark.vx-slop[data-slop="human"] {
-  /* Outranks both the base rule and its @supports twin on specificity, so the
-     texture goes AND the glyphs get their own colour back — without the colour
-     reset a hidden mark would clip a background that is no longer there and
-     render as invisible text. */
+  /* Outranks the base rule on specificity, so the texture goes AND the glyphs
+     get their own colour back. The colour + fill reset is load-bearing: the
+     base rule leaves the text transparent, so without it a hidden mark would
+     clip a background that is no longer there and render as invisible text. */
   background: none;
   color: inherit;
   -webkit-text-fill-color: currentColor;

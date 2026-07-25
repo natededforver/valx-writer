@@ -38,11 +38,15 @@
   font-style: normal;
   font-display: swap;
 }
-/* Valuex — the house typeface, the default writing-surface face. */
+/* Valuex — the house typeface: the writing-surface face AND the UI face.
+   Only a Regular weight exists, so the face claims the whole 400–700 range: a
+   `font-bold` anywhere in the UI then resolves to these regular glyphs instead
+   of the browser faux-bolding them, which keeps the chrome uniformly non-bold
+   as intended. */
 @font-face {
   font-family: 'Valuex';
   src: url('./assets/fonts/Valuex-Regular.ttf') format('truetype');
-  font-weight: 400;
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
@@ -58,7 +62,7 @@
    app root has the `font-sans` utility, which would otherwise pin every
    descendant to Tailwind's default stack regardless of what `body` says. */
 :root {
-  --font-sans: 'Valx Helvetica', Helvetica, Arial, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Valuex', 'Valx Helvetica', Helvetica, Arial, 'Segoe UI', Roboto, sans-serif;
   /* The writing surface. Kept separate from --font-sans so UI chrome and prose
      never drift onto the same typeface. */
   --vx-editor-font: 'Valuex', 'Valx Mono', 'Lucida Console', Consolas, monospace;

@@ -391,14 +391,27 @@ body {
     background-image:
       linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)),
       url('../sd-texture.png');
-    background-size: auto, 480px auto;
+    /* 80px, not the 480px this used to be. Marks wrap PER WORD, and every mark
+       is its own background painting area anchored at 0 0 — so at 480px a
+       25px-tall word only ever sampled the texture's top-left corner and came
+       out a flat, dull crimson, identical whatever the word said. Sizing the
+       tile near one word's width makes each mark span several colour bands of
+       the image instead, which is what makes the run read as textured rather
+       than merely red. Keep `repeat`: a word wider than the tile would
+       otherwise have unpainted glyphs, i.e. invisible text. */
+    background-size: auto, 80px auto;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
   .dark .rich-editor mark.vx-slop {
+    /* 0.22, down from 0.42. The wash exists so thin strokes keep contrast
+       against the dark workspace, but at 0.42 it bleached the texture to a
+       flat pastel and the colours stopped reading at all. 0.22 still lifts the
+       glyphs clear of black while leaving the hue intact — do not raise it back
+       without checking the colours survive. */
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.42)),
+      linear-gradient(rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.22)),
       url('../sd-texture.png');
   }
 }

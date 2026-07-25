@@ -38,15 +38,11 @@
   font-style: normal;
   font-display: swap;
 }
-/* Valuex — the house typeface: the writing-surface face AND the UI face.
-   Only a Regular weight exists, so the face claims the whole 400–700 range: a
-   `font-bold` anywhere in the UI then resolves to these regular glyphs instead
-   of the browser faux-bolding them, which keeps the chrome uniformly non-bold
-   as intended. */
+/* Valuex — the house typeface, the default writing-surface face. */
 @font-face {
   font-family: 'Valuex';
   src: url('./assets/fonts/Valuex-Regular.ttf') format('truetype');
-  font-weight: 400 700;
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
@@ -58,11 +54,15 @@
   font-display: swap;
 }
 
-/* App-wide font. Overriding Tailwind's --font-sans is what makes it stick: the
-   app root has the `font-sans` utility, which would otherwise pin every
-   descendant to Tailwind's default stack regardless of what `body` says. */
+/* App-wide font (UI chrome + note titles). SF Pro is Apple's system face, so
+   -apple-system / BlinkMacSystemFont resolve to the real SF Pro on macOS with
+   no bundled file. Apple's licence forbids shipping the .ttf, so Windows can't
+   get SF Pro itself — it falls back to Segoe UI (the closest system sans), then
+   the bundled Helvetica. Overriding Tailwind's --font-sans is what makes it
+   stick: the app root has the `font-sans` utility, which would otherwise pin
+   every descendant to Tailwind's default stack regardless of what `body` says. */
 :root {
-  --font-sans: 'Valuex', 'Valx Helvetica', Helvetica, Arial, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'SF Pro', system-ui, 'Segoe UI', 'Valx Helvetica', Helvetica, Arial, Roboto, sans-serif;
   /* The writing surface. Kept separate from --font-sans so UI chrome and prose
      never drift onto the same typeface. */
   --vx-editor-font: 'Valuex', 'Valx Mono', 'Lucida Console', Consolas, monospace;

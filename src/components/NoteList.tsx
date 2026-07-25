@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Note, FilterState } from '../types';
-import { Bookmark, ChevronDown, ChevronRight, RotateCcw, Trash2 } from 'lucide-react';
+import { Bookmark, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { wordCount } from '../lib/format';
 import { NoteSort, sortNotes } from '../lib/noteSort';
 
@@ -152,7 +152,7 @@ export function NoteDropdownList({
                 list that can only destroy is a trap — the undo for landing
                 here by accident has to be reachable from the same row. */}
             {(onRestore || onDeletePerm) && (
-              <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 transition-opacity">
                 {onRestore && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onRestore(note.id); }}
@@ -166,9 +166,9 @@ export function NoteDropdownList({
                   <button
                     onClick={(e) => { e.stopPropagation(); onDeletePerm(note.id); }}
                     title="Delete permanently"
-                    className="p-0.5 rounded text-slate-400 hover:text-red-500 transition-colors"
+                    className="p-0.5 rounded text-[12px] leading-none hover:bg-red-500/10 transition-colors"
                   >
-                    <Trash2 size={12} />
+                    <span aria-hidden>🗑️</span>
                   </button>
                 )}
               </div>

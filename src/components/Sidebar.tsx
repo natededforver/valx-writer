@@ -531,10 +531,10 @@ export function Sidebar({
                 {onEmptyTrash && trashedNotes.length > 0 && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleEmptyTrash(); }}
-                    title={`Permanently delete ${trashedNotes.length} note${trashedNotes.length === 1 ? '' : 's'}`}
-                    className="mr-1 px-1.5 py-1 rounded text-[10px] font-medium text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+                    title={`Empty bin — permanently delete ${trashedNotes.length} note${trashedNotes.length === 1 ? '' : 's'}`}
+                    className="mr-1 px-1.5 py-1 rounded text-[13px] leading-none hover:bg-red-500/10 transition-colors shrink-0"
                   >
-                    Empty
+                    <span aria-hidden>🗑️</span>
                   </button>
                 )}
               </div>

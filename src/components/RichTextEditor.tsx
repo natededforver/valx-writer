@@ -581,11 +581,15 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     handleInput();
   };
 
-  const markSelectionAs = (type: 'me' | SlopType, opts?: { author?: string; site?: string; url?: string }) => {
+  /** Takes the raw menu kind (me · author:<id> · ai · web). 'web' with no site
+   *  yet opens the source dialog, which calls back with one. */
+  const markSelectionAs = (kind: string, opts?: { site?: string; url?: string }) => {
+    if (kind === 'web' && !opts?.site) { setWebSite(''); setWebUrl(''); setWebDialog(true); return; }
     const range = slopRangeRef.current;
     if (!range || !editorRef.current) return;
-    if (type === 'me') unwrapSlopInRange(range);
-    else wrapSlopInRange(range, type, opts);
+    const author = kind.startsWith('author:') ? kind.slice(7) : undefined;
+    if (kind === 'me') unwrapSlopInRange(range);
+    else wrapSlopInRange(range, author ? 'human' : (kind as SlopType), { author, ...opts });
     handleInput();
   };
 
@@ -1574,7 +1578,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
                 {markAsItems().map(([label, kind]) => (
                   <button
                     key={kind + label}
-                    onClick={() => { markSelectionAs(kind as any); setCtxMenu(null); }}
+                    onClick={() => { setCtxMenu(null); markSelectionAs(kind); }}
                     className={ctxItemCls}
                   >
                     <Tag size={15} className="opacity-60" /> <span className="truncate">{label}</span>

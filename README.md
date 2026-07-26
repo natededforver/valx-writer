@@ -141,10 +141,10 @@ machine that has none of them installed.
 
 | Face | Where | Credit |
 |---|---|---|
-| **Valuex** | The writing surface — the app's default prose face | Drawn by **tchkrv**, the house typeface, made for this app |
-| **Blue Screen** | The greeting in the sidebar, and nowhere else | © **[Billy Argel](https://www.billyargel.com/)**, 2021 |
-| Helvetica | UI chrome, sidebar, menus, dialogs | — |
-| Lucida Console | Monospace fallback for the writing surface | — |
+| **Valuex** | the app's default prose typeface | created by **tchkrv**, made specifically for this app. |
+| **Blue Screen** | The greeting in the top left corner of the sidebar, and the branding in external sources related to this app. | © **[Billy Argel](https://www.billyargel.com/)**, 2021 |
+| Segoe UI / SF Pro | UI chrome, sidebar, menus, dialogs | © **[Microsoft](https://learn.microsoft.com/en-us/typography/font-list/segoe-ui)** and  © **[Apple](https://developer.apple.com/fonts/)** |
+| Lucida Console | Fallback option if Valuex fails to load in text editor | © **[B&H](https://lucidafonts.com/)** |
 
 **Blue Screen is a personal-use font.** It is used here for a single decorative
 greeting. If you fork this app for anything commercial, buy a licence from

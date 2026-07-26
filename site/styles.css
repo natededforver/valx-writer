@@ -217,6 +217,27 @@ a { color: inherit; text-decoration: none; }
 .screenshot-placeholder:hover {
   transform: translateY(-4px);
 }
+/* A real shot, where a placeholder has been filled in. Same frame as the
+   placeholder above, but it takes the image's own aspect ratio rather than
+   forcing 16/10, and sits on the app's dark surface instead of near-white. */
+.screenshot-shot {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0b0b0b;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.03);
+  transition: transform 0.3s ease;
+  width: 100%;
+}
+.screenshot-shot:hover {
+  transform: translateY(-4px);
+}
+.screenshot-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .placeholder-text {
   color: var(--muted);
   font-size: 13px;

@@ -39,18 +39,18 @@ your text in their database. With Valx, you own everything, down to the software
 
 | | Valx | The usual subscription writing app |
 |---|---|---|
-| **Cost** | Free. No tier above this one. | Monthly/ Annual subscription forever Or, a one-time price but you'll get charged for major updates as if you haven't given them money already. |
+| **Cost** | Free Forever. | Monthly/ Annual subscription forever Or, a one-time price but you'll get charged for major updates as if you haven't given them money already. |
 | **Account** | None. There is no server to sign in to. | Required before the first keystroke. |
-| **Your files** | Plain `.md` / `.txt` / `.html` in a folder you picked. Readable by anything. | A proprietary database or cloud store. |
+| **Your files** | Plain `.md` / `.txt` / `.html` in a folder you picked. Readable by anything, for the next millennium and beyond. | A proprietary database or cloud store that you have to pay to access your files. |
 | **If it disappears** | Your notes are still sitting on your disk. | You export while you still can. |
-| **Export** | PDF, DOCX and ODT, in the free app. | Frequently the reason to upgrade. |
-| **Sync** | Your Drive / Dropbox / Mega / OneDrive folder, or none at all. | Their sync, their servers, their price. |
-| **Platforms** | Windows and macOS, same app. | Often Apple-only. |
-| **Size** | Under 7 MB — it borrows the OS's webview. | Hundreds of MB, because Electron ships a browser. |
-| **Telemetry** | None. | Usually opt-out at best. |
+| **Export** | PDF, MD, TXT, DOCX and ODT, in the app. | Frequently the reason for a subscription upgrade. |
+| **Sync** | Your Drive / Dropbox / Mega / OneDrive folder, or none at all. | Their sync, their servers, their price for access to even 3rd party cloud services that you already pay for. |
+| **Platforms** | Windows and macOS, same app. | The cleaner paid apps are often Mac-only. Sometimes, Windows will be 2nd priority with slow updates. |
+| **Size** | Under 8 to 20 MB — it borrows your OS's webview. | Hundreds of MB, because Electron ships a browser for your app to run inside it. |
+| **Telemetry** | None. The app collects no user information, everything stays local. | Usually, you have to ask and opt-out if they do collect data. |
 
-The one thing here you cannot buy elsewhere is **provenance** — the ability to
-mark, in the document itself, which words are yours and which are not.
+The one thing here you cannot buy elsewhere is **slop detector (provenance)** — the ability to
+mark in the document itself, which words are **yours** and which words came from other sources like other creators, AI and websites for free of cost.
 
 ## Features
 

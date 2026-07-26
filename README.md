@@ -49,8 +49,8 @@ your text in their database. With Valx, you own everything, down to the software
 | **Size** | Under 8 to 20 MB — it borrows your OS's webview. | Hundreds of MB, because Electron ships a browser for your app to run inside it. |
 | **Telemetry** | None. The app collects no user information, everything stays local. | Usually, you have to ask and opt-out if they do collect data. |
 
-The one thing here you cannot buy elsewhere is **slop detector (provenance)** — the ability to
-mark in the document itself, which words are **yours** and which words came from other sources like other creators, AI and websites for free of cost.
+The one thing here you cannot get elsewhere for free of cost is **slop detector (provenance)** — the ability to
+mark in the document itself, which words are **yours** and which words came from other sources like other creators, AI and websites.
 
 ## Features
 

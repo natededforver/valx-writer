@@ -1,16 +1,50 @@
 /* ---------------------------------------------------------------------------
    Valx Writer — landing site
    Open-space design: monumental type, engineered whitespace, quoted labels.
-   No external assets; system type stack keeps it fast and native.
-   Echoes the app UI: lime selection, rounded surfaces, lime glow on hover.
+   System type stack for body copy; Blue Screen for the monumental headings.
+   Dark surface throughout, matching the app's dark theme: the same near-black
+   the editor uses, lime selection, and the greeting's pink-ghost treatment on
+   every monumental heading.
 --------------------------------------------------------------------------- */
 
+/* Blue Screen — the same face the app's sidebar greeting uses, and the only
+   place the site loads a webfont. Personal-use licence (© Billy Argel); see the
+   Typography section of the README before using it commercially.
+   font-display:swap so the 735 KB never blocks first paint — the heading shows
+   in the system stack and re-renders when the face lands. */
+@font-face {
+  font-family: 'Blue Screen';
+  src: url('BlueScreen.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  --ink: #0a0a0a;
-  --paper: #ffffff;
+  --ink: #f2f2f2;          /* primary text on the dark surface */
+  --paper: #000000;        /* the app's own editor black */
+  --page: #0b0b0b;         /* one step up, for panels sitting on the black */
   --muted: #8a8a8a;
-  --hairline: #e8e8e8;
+  --hairline: #1f1f1f;
   --lime: #32cd32;
+  --ghost: #ff8fce;
+}
+
+/* The greeting treatment, lifted from .dark .vx-greeting in src/index.css: brand
+   lime with a sharp pink ghost offset right and sitting behind the glyphs. Dark
+   mode carries no yellow glow — on black it washed the hues out, which is the
+   whole reason the app dropped it there.
+   The app sets a 1.5px ghost at a 20px greeting; here it is 0.075em so the
+   proportion holds at a 160px heading instead of disappearing.
+   font-weight:400 is deliberate — Blue Screen ships one weight, and letting the
+   browser synthesise 800 smears the ghost into the glyphs. */
+.hero h1,
+.h-giant,
+.banner-sub {
+  font-family: 'Blue Screen', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 400;
+  color: var(--lime);
+  text-shadow: 0.075em 0 0 var(--ghost);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -48,7 +82,7 @@ a { color: inherit; text-decoration: none; }
 .nav {
   position: sticky;
   top: 0;
-  background: rgba(255, 255, 255, 0.86);
+  background: rgba(0, 0, 0, 0.82);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--hairline);
   z-index: 10;
@@ -60,7 +94,9 @@ a { color: inherit; text-decoration: none; }
   justify-content: space-between;
 }
 .nav .brand { display: flex; align-items: center; }
-.brand-logo { height: 38px; width: auto; display: block; }
+/* The wordmark, not the square app icon — the same greeting-effect header the
+   README uses. Its black field is baked in, which is seamless on the dark nav. */
+.brand-logo { height: 44px; width: auto; display: block; }
 .nav nav { display: flex; gap: 28px; align-items: center; }
 .nav nav a {
   font-size: 12px;
@@ -78,18 +114,31 @@ a { color: inherit; text-decoration: none; }
   padding: 8px 18px;
   transition: all 0.15s;
 }
-.nav nav a.cta:hover { background: var(--ink); color: #fff; }
+.nav nav a.cta:hover { background: var(--ink); color: var(--paper); }
+
+/* The wordmark is ~280px wide where the old square mark was ~40px, so on a phone
+   the bar has to wrap rather than push the CTA off the edge. */
+@media (max-width: 720px) {
+  .nav .wrap {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+  .brand-logo { height: 32px; }
+  .nav nav { gap: 18px; }
+}
 
 /* hero */
 .hero { padding: clamp(90px, 16vh, 200px) 0 clamp(60px, 10vh, 140px); }
 .hero h1 {
-  font-size: clamp(64px, 13vw, 190px);
-  line-height: 0.92;
-  letter-spacing: -0.04em;
-  font-weight: 800;
+  font-size: clamp(56px, 11vw, 160px);
+  line-height: 1.05;
+  letter-spacing: 0.01em;
   text-transform: uppercase;
 }
-.hero h1 .q { color: var(--muted); font-weight: 300; }
+.hero h1 .q { color: var(--muted); }
 .hero h1 .lime { color: var(--lime); }
 .hero .sub {
   margin-top: 40px;
@@ -119,16 +168,16 @@ a { color: inherit; text-decoration: none; }
   transition: all 0.15s;
 }
 /* Hover = the app's Ctrl+S "wink of green" glow. */
-.btn--solid { background: var(--ink); color: #fff; }
+.btn--solid { background: var(--ink); color: var(--paper); }
 .btn--solid:hover {
   background: var(--lime);
   border-color: var(--lime);
-  color: var(--ink);
+  color: var(--paper);
   box-shadow: 0 0 22px rgba(50, 205, 50, 0.35);
 }
 .btn--ghost:hover {
   background: var(--ink);
-  color: #fff;
+  color: var(--paper);
   box-shadow: 0 0 22px rgba(50, 205, 50, 0.28);
 }
 
@@ -204,13 +253,12 @@ a { color: inherit; text-decoration: none; }
 }
 .screenshot-placeholder {
   aspect-ratio: 16 / 10;
-  background: #f8f8f8;
+  background: var(--page);
   border: 1px solid var(--hairline);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.03);
   transition: transform 0.3s ease;
   width: 100%;
 }
@@ -219,19 +267,19 @@ a { color: inherit; text-decoration: none; }
 }
 /* A real shot, where a placeholder has been filled in. Same frame as the
    placeholder above, but it takes the image's own aspect ratio rather than
-   forcing 16/10. The shots are the light build, to match the rest of the page —
-   dark only appears where a feature needs it to read. */
+   forcing 16/10. The shots are the dark build, so the frame disappears into the
+   page and only the app's own window edge reads. */
 .screenshot-shot {
   border: 1px solid var(--hairline);
   border-radius: 12px;
   overflow: hidden;
-  background: #f4f4f5;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.03);
-  transition: transform 0.3s ease;
+  background: var(--page);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
   width: 100%;
 }
 .screenshot-shot:hover {
   transform: translateY(-4px);
+  box-shadow: 0 0 40px rgba(50, 205, 50, 0.10);
 }
 .screenshot-shot img {
   display: block;
@@ -249,12 +297,11 @@ a { color: inherit; text-decoration: none; }
 
 .h-giant {
   font-size: clamp(40px, 7vw, 96px);
-  letter-spacing: -0.035em;
-  font-weight: 800;
-  line-height: 1;
+  letter-spacing: 0.01em;
+  line-height: 1.08;
   text-transform: uppercase;
 }
-.h-giant .q { color: var(--muted); font-weight: 300; }
+.h-giant .q { color: var(--muted); }
 
 /* support — centered "free forever / donate to Ko-fi" block */
 .support {
@@ -328,9 +375,8 @@ a { color: inherit; text-decoration: none; }
 .banner-sub {
   margin-top: 18px;
   font-size: clamp(26px, 4.5vw, 52px);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
 }
 .banner-sub .lime { color: var(--lime); }
 
@@ -374,7 +420,7 @@ a { color: inherit; text-decoration: none; }
   max-width: 640px;
 }
 .dl-note code {
-  background: #f4f4f4;
+  background: var(--hairline);
   border-radius: 6px;
   padding: 2px 7px;
   font-size: 12px;
@@ -395,7 +441,7 @@ a { color: inherit; text-decoration: none; }
 .legal .effective { margin-top: 16px; }
 .legal section { margin-top: 44px; }
 .legal h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
-.legal p { margin-top: 12px; color: #4a4a4a; font-size: 15px; line-height: 1.8; }
+.legal p { margin-top: 12px; color: #b4b4b4; font-size: 15px; line-height: 1.8; }
 .legal-tabs { display: flex; gap: 22px; margin-top: 34px; flex-wrap: wrap; }
 .legal-tabs a {
   font-size: 12px;

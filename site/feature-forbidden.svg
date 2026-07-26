@@ -8,9 +8,9 @@
   @keyframes w0{0%,24%{opacity:0;transform:translateY(5px)}28.5%,93%{opacity:1;transform:none}98%,100%{opacity:0}}.w0{animation:w0 10s infinite}
   @keyframes w1{0%,29%{opacity:0;transform:translateY(5px)}33.5%,93%{opacity:1;transform:none}98%,100%{opacity:0}}.w1{animation:w1 10s infinite}
   @keyframes w2{0%,34%{opacity:0;transform:translateY(5px)}38.5%,93%{opacity:1;transform:none}98%,100%{opacity:0}}.w2{animation:w2 10s infinite}
-  @keyframes gvk{0%,27%{fill:#000}30%,93%{fill:#8b939e}98%,100%{fill:#8b939e}}.gv{fill:#8b939e;animation:gvk 10s infinite}
-  @keyframes gfk{0%,32%{fill:#000}35%,93%{fill:#8b939e}98%,100%{fill:#8b939e}}.gf{fill:#8b939e;animation:gfk 10s infinite}
-  @keyframes gsk{0%,37%{fill:#000}40%,93%{fill:#8b939e}98%,100%{fill:#8b939e}}.gs{fill:#8b939e;animation:gsk 10s infinite}
+  @keyframes gvk{0%,27%{fill:#ffffff}30%,93%{fill:#8b939e}98%,100%{fill:#8b939e}}.gv{fill:#8b939e;animation:gvk 10s infinite}
+  @keyframes gfk{0%,32%{fill:#ffffff}35%,93%{fill:#8b939e}98%,100%{fill:#8b939e}}.gf{fill:#8b939e;animation:gfk 10s infinite}
+  @keyframes gsk{0%,37%{fill:#ffffff}40%,93%{fill:#8b939e}98%,100%{fill:#8b939e}}.gs{fill:#8b939e;animation:gsk 10s infinite}
   @keyframes t{0%,4%{opacity:0;transform:translateY(6px)}8.5%,93%{opacity:1;transform:none}98%,100%{opacity:0}}.t{animation:t 10s infinite}
   @keyframes p1{0%,9%{opacity:0;transform:translateY(5px)}13.5%,93%{opacity:1;transform:none}98%,100%{opacity:0}}.p1{animation:p1 10s infinite}
   @keyframes p2{0%,10.5%{opacity:0;transform:translateY(5px)}15%,93%{opacity:1;transform:none}98%,100%{opacity:0}}.p2{animation:p2 10s infinite}
@@ -20,41 +20,41 @@
   @keyframes modal{0%,17%{opacity:0;transform:translateY(10px)}21.5%,93%{opacity:1;transform:none}98%,100%{opacity:0}}.modal{animation:modal 10s infinite}
   @keyframes cap{0%,52%{opacity:0;transform:translateY(6px)}56.5%,93%{opacity:1;transform:none}98%,100%{opacity:0}}.cap{animation:cap 10s infinite}
 </style>
-<rect width="1120" height="560" fill="#f4f4f5"/>
+<rect width="1120" height="560" fill="#0b0b0b"/>
 
-<rect x="60" y="24" width="1000" height="424" rx="14" fill="#ffffff" stroke="rgba(15,23,42,.10)"/>
-<text x="108" y="92" class="ui t" font-size="26" font-weight="700" fill="#0f172a">Interview — Okonjo</text>
-<text x="108" y="148" xml:space="preserve" class="prose p1" font-size="17"><tspan fill="#000">She was, </tspan><tspan class="gf">frankly</tspan><tspan fill="#000">, unimpressed by the</tspan></text>
-<text x="108" y="177" xml:space="preserve" class="prose p2" font-size="17"><tspan class="gs">state-of-the-art</tspan><tspan fill="#000"> gauges the ministry had</tspan></text>
-<text x="108" y="206" xml:space="preserve" class="prose p3" font-size="17"><tspan fill="#000">installed. They were </tspan><tspan class="gv">very</tspan><tspan fill="#000"> new, she said,</tspan></text>
-<text x="108" y="235" xml:space="preserve" class="prose p4" font-size="17"><tspan fill="#000">and </tspan><tspan class="gv">very</tspan><tspan fill="#000"> badly sited.</tspan></text>
+<rect x="60" y="24" width="1000" height="424" rx="14" fill="#000000" stroke="rgba(255,255,255,.09)"/>
+<text x="108" y="92" class="ui t" font-size="26" font-weight="700" fill="#ffffff">Interview — Okonjo</text>
+<text x="108" y="148" xml:space="preserve" class="prose p1" font-size="17"><tspan fill="#ffffff">She was, </tspan><tspan class="gf">frankly</tspan><tspan fill="#ffffff">, unimpressed by the</tspan></text>
+<text x="108" y="177" xml:space="preserve" class="prose p2" font-size="17"><tspan class="gs">state-of-the-art</tspan><tspan fill="#ffffff"> gauges the ministry had</tspan></text>
+<text x="108" y="206" xml:space="preserve" class="prose p3" font-size="17"><tspan fill="#ffffff">installed. They were </tspan><tspan class="gv">very</tspan><tspan fill="#ffffff"> new, she said,</tspan></text>
+<text x="108" y="235" xml:space="preserve" class="prose p4" font-size="17"><tspan fill="#ffffff">and </tspan><tspan class="gv">very</tspan><tspan fill="#ffffff"> badly sited.</tspan></text>
 
-<text x="108" y="324" class="ui note" font-size="13" fill="#64748b">The file on disk is untouched — the grey is painted over the text, never into it.</text>
+<text x="108" y="324" class="ui note" font-size="13" fill="#94a3b8">The file on disk is untouched — the grey is painted over the text, never into it.</text>
 
 <g class="modal">
-  <rect x="640" y="88" width="384" height="296" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
-  <line x1="640" y1="145" x2="1024" y2="145" stroke="#f1f5f9"/>
-  <text x="664" y="124" class="ui" font-size="16" font-weight="700" fill="#0f172a">Forbidden Words</text>
-  <text x="1000" y="124" text-anchor="end" class="ui" font-size="15" fill="#94a3b8">✕</text>
-  <rect x="656" y="158" width="350" height="34" rx="8" fill="rgba(15,23,42,.05)"/>
-  <text x="667" y="180" class="ui" font-size="14" fill="#94a3b8">Add a word or phrase…</text>
-  <line x1="640" y1="346" x2="1024" y2="346" stroke="#f1f5f9"/>
-  <text x="656" y="368" class="ui" font-size="11" fill="#94a3b8">3 words — greyed out where they appear, never changed or removed.</text>
+  <rect x="640" y="88" width="384" height="296" rx="12" fill="#000000" stroke="#262626"/>
+  <line x1="640" y1="145" x2="1024" y2="145" stroke="#171717"/>
+  <text x="664" y="124" class="ui" font-size="16" font-weight="700" fill="#ffffff">Forbidden Words</text>
+  <text x="1000" y="124" text-anchor="end" class="ui" font-size="15" fill="#64748b">✕</text>
+  <rect x="656" y="158" width="350" height="34" rx="8" fill="rgba(255,255,255,.05)"/>
+  <text x="667" y="180" class="ui" font-size="14" fill="#64748b">Add a word or phrase…</text>
+  <line x1="640" y1="346" x2="1024" y2="346" stroke="#171717"/>
+  <text x="656" y="368" class="ui" font-size="11" fill="#64748b">3 words — greyed out where they appear, never changed or removed.</text>
 </g>
   <g class="w0">
-      <text x="656" y="228" class="ui" font-size="14" fill="#334155">very</text>
+      <text x="656" y="228" class="ui" font-size="14" fill="#e2e8f0">very</text>
       <text x="1000" y="229" text-anchor="end" font-size="13">🗑️</text>
     </g>
   <g class="w1">
-      <text x="656" y="272" class="ui" font-size="14" fill="#334155">frankly</text>
+      <text x="656" y="272" class="ui" font-size="14" fill="#e2e8f0">frankly</text>
       <text x="1000" y="273" text-anchor="end" font-size="13">🗑️</text>
     </g>
   <g class="w2">
-      <text x="656" y="316" class="ui" font-size="14" fill="#334155">state-of-the-art</text>
+      <text x="656" y="316" class="ui" font-size="14" fill="#e2e8f0">state-of-the-art</text>
       <text x="1000" y="317" text-anchor="end" font-size="13">🗑️</text>
     </g>
 <g class="cap">
   <text x="24" y="516" class="ui" font-size="17" fill="#32cd32">Words &gt; Forbidden Words…</text>
-  <text x="24" y="540" class="ui" font-size="14" fill="#64748b">The words you are trying to stop reaching for go grey on sight. Whole-word, case-insensitive, phrases too — and it never reaches the .md.</text>
+  <text x="24" y="540" class="ui" font-size="14" fill="#94a3b8">The words you are trying to stop reaching for go grey on sight. Whole-word, case-insensitive, phrases too — and it never reaches the .md.</text>
 </g>
 </svg>

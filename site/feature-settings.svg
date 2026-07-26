@@ -14,45 +14,45 @@
   @keyframes th{0%,18%{opacity:0;transform:translateY(5px)}22.5%,93%{opacity:1;transform:none}98%,100%{opacity:0}}.th{animation:th 10s infinite}
   @keyframes cap{0%,44%{opacity:0;transform:translateY(6px)}48.5%,93%{opacity:1;transform:none}98%,100%{opacity:0}}.cap{animation:cap 10s infinite}
 </style>
-<rect width="1120" height="560" fill="#f4f4f5"/>
+<rect width="1120" height="560" fill="#0b0b0b"/>
 
 <g class="drawer">
-  <path d="M60 24h424a24 24 0 0 1 24 24v398a24 24 0 0 1 -24 24H60z" fill="#ffffff" stroke="rgba(15,23,42,.10)"/>
-  <line x1="60" y1="81" x2="508" y2="81" stroke="#f1f5f9"/>
+  <path d="M60 24h424a24 24 0 0 1 24 24v398a24 24 0 0 1 -24 24H60z" fill="#000000" stroke="rgba(255,255,255,.09)"/>
+  <line x1="60" y1="81" x2="508" y2="81" stroke="#171717"/>
   <text x="81" y="60" class="ui" font-size="14" fill="#32cd32">⚙</text>
-  <text x="103" y="60" class="ui" font-size="16" font-weight="700" fill="#0f172a">Preferences</text>
-  <text x="484" y="60" text-anchor="end" class="ui" font-size="15" fill="#94a3b8">✕</text>
-  <text x="81" y="112" class="ui" font-size="12" fill="#94a3b8">Everything here is stored on this machine.</text>
+  <text x="103" y="60" class="ui" font-size="16" font-weight="700" fill="#ffffff">Preferences</text>
+  <text x="484" y="60" text-anchor="end" class="ui" font-size="15" fill="#64748b">✕</text>
+  <text x="81" y="112" class="ui" font-size="12" fill="#64748b">Everything here is stored on this machine.</text>
 </g>
   <g class="s0">
       <text x="81" y="154" class="ui" font-size="14" fill="#32cd32">◎</text>
-      <text x="103" y="154" class="ui" font-size="14" font-weight="600" fill="#0f172a">Writing goal</text>
-      <text x="81" y="178" class="ui" font-size="12" fill="#64748b">Target for the word-count widget. 0 turns the goal off and</text>
-      <text x="81" y="196" class="ui" font-size="12" fill="#64748b">just shows the count.</text>
+      <text x="103" y="154" class="ui" font-size="14" font-weight="600" fill="#ffffff">Writing goal</text>
+      <text x="81" y="178" class="ui" font-size="12" fill="#94a3b8">Target for the word-count widget. 0 turns the goal off and</text>
+      <text x="81" y="196" class="ui" font-size="12" fill="#94a3b8">just shows the count.</text>
     </g>
   <g class="s1">
       <text x="81" y="258" class="ui" font-size="14" fill="#32cd32">⏱</text>
-      <text x="103" y="258" class="ui" font-size="14" font-weight="600" fill="#0f172a">Version history</text>
-      <text x="81" y="282" class="ui" font-size="12" fill="#64748b">How often a snapshot of the note is kept, so you can walk</text>
-      <text x="81" y="300" class="ui" font-size="12" fill="#64748b">a draft backwards.</text>
+      <text x="103" y="258" class="ui" font-size="14" font-weight="600" fill="#ffffff">Version history</text>
+      <text x="81" y="282" class="ui" font-size="12" fill="#94a3b8">How often a snapshot of the note is kept, so you can walk</text>
+      <text x="81" y="300" class="ui" font-size="12" fill="#94a3b8">a draft backwards.</text>
     </g>
   <g class="s2">
       <text x="81" y="362" class="ui" font-size="14" fill="#32cd32">☁</text>
-      <text x="103" y="362" class="ui" font-size="14" font-weight="600" fill="#0f172a">OneDrive</text>
-      <text x="81" y="386" class="ui" font-size="12" fill="#64748b">Sign in to sync directly. Conflicts resolve by newest</text>
-      <text x="81" y="404" class="ui" font-size="12" fill="#64748b">edit. No Valx account involved.</text>
+      <text x="103" y="362" class="ui" font-size="14" font-weight="600" fill="#ffffff">OneDrive</text>
+      <text x="81" y="386" class="ui" font-size="12" fill="#94a3b8">Sign in to sync directly. Conflicts resolve by newest</text>
+      <text x="81" y="404" class="ui" font-size="12" fill="#94a3b8">edit. No Valx account involved.</text>
     </g>
 
-<g class="lt"><rect x="620" y="84" width="400" height="150" rx="10" fill="#fff" stroke="rgba(15,23,42,.10)"/>
-    <line x1="716" y1="84" x2="716" y2="234" stroke="#f1f5f9"/>
-    <rect x="630" y="98" width="76" height="10" rx="5" fill="#3a2a63" opacity=".85"/>
-    <rect x="630" y="118" width="76" height="20" rx="6" fill="rgba(15,23,42,.08)"/>
-    <rect x="630" y="146" width="76" height="14" rx="4" fill="rgba(15,23,42,.08)"/>
+<g class="lt"><rect x="620" y="84" width="400" height="150" rx="10" fill="#fff" stroke="rgba(255,255,255,.09)"/>
+    <line x1="716" y1="84" x2="716" y2="234" stroke="#171717"/>
+    <rect x="630" y="98" width="76" height="10" rx="5" fill="#315f30" opacity=".85"/>
+    <rect x="630" y="118" width="76" height="20" rx="6" fill="rgba(255,255,255,.08)"/>
+    <rect x="630" y="146" width="76" height="14" rx="4" fill="rgba(255,255,255,.08)"/>
     <text x="736" y="118" class="ui" font-size="15" font-weight="700" fill="#000">The Longform Draft</text>
     <text x="736" y="146" class="prose" font-size="12" fill="#000">The river had not moved in a hundred</text>
     <text x="736" y="166" xml:space="preserve" class="prose" font-size="12"><tspan fill="#c2185b">Sources </tspan><tspan fill="#8e24aa">describe </tspan><tspan fill="#3949ab">the delta</tspan><tspan fill="#000"> as a</tspan></text>
     <text x="736" y="186" class="prose" font-size="12" fill="#000">shifting mosaic of channels that</text></g>
-<g class="dk"><rect x="620" y="264" width="400" height="150" rx="10" fill="#000" stroke="rgba(15,23,42,.10)"/>
+<g class="dk"><rect x="620" y="264" width="400" height="150" rx="10" fill="#000" stroke="rgba(255,255,255,.09)"/>
     <line x1="716" y1="264" x2="716" y2="414" stroke="#171717"/>
     <rect x="630" y="278" width="76" height="10" rx="5" fill="#32cd32" opacity=".85"/>
     <rect x="630" y="298" width="76" height="20" rx="6" fill="rgba(255,255,255,.08)"/>
@@ -61,9 +61,9 @@
     <text x="736" y="326" class="prose" font-size="12" fill="#fff">The river had not moved in a hundred</text>
     <text x="736" y="346" xml:space="preserve" class="prose" font-size="12"><tspan fill="#f06292">Sources </tspan><tspan fill="#ba68c8">describe </tspan><tspan fill="#7986cb">the delta</tspan><tspan fill="#fff"> as a</tspan></text>
     <text x="736" y="366" class="prose" font-size="12" fill="#fff">shifting mosaic of channels that</text></g>
-<text x="620" y="68" class="ui th" font-size="12" font-weight="700" fill="#64748b" letter-spacing="1.2">LIGHT BY DEFAULT, DARK ON A CLICK</text>
+<text x="620" y="68" class="ui th" font-size="12" font-weight="700" fill="#94a3b8" letter-spacing="1.2">LIGHT BY DEFAULT, DARK ON A CLICK</text>
 <g class="cap">
   <text x="24" y="516" class="ui" font-size="17" fill="#32cd32">Preferences, and a theme either way</text>
-  <text x="24" y="540" class="ui" font-size="14" fill="#64748b">Writing goal, version-history interval and OneDrive sign-in. Every setting stays on this machine — there is no server to hold it.</text>
+  <text x="24" y="540" class="ui" font-size="14" fill="#94a3b8">Writing goal, version-history interval and OneDrive sign-in. Every setting stays on this machine — there is no server to hold it.</text>
 </g>
 </svg>

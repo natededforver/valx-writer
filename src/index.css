@@ -324,11 +324,13 @@ body {
    peeks out on the right edge), and — on the light surface only — a soft YELLOW
    outer glow hugging the main text (the two blurred shadows, kept translucent so
    it reads as a light filter rather than a solid outline). Dark mode deliberately
-   has no glow; see .dark .vx-greeting below. */
+   has no glow; see .dark .vx-greeting below.
+   The core is the deep brand green (--vx-brand) on the light surface: the
+   yellow glow needs something dark to hug, and lime against it goes muddy. */
 .vx-greeting {
   font-family: 'Blue Screen', var(--font-sans);
   letter-spacing: 0.01em;
-  color: #3a2a63;
+  color: var(--vx-brand);
   text-shadow:
     0 0 6px rgba(255, 242, 170, 0.95),
     0 0 13px rgba(255, 238, 150, 0.6),

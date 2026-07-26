@@ -39,7 +39,7 @@ your text in their database. With Valx, you own everything, down to the software
 
 | | Valx | The usual subscription writing app |
 |---|---|---|
-| **Cost** | Free. No tier above this one. | Monthly forever, to keep opening your own writing. Or, a one-time price but you'll get charged for major updates as if you haven't given them money already. |
+| **Cost** | Free. No tier above this one. | Monthly/ Annual subscription forever Or, a one-time price but you'll get charged for major updates as if you haven't given them money already. |
 | **Account** | None. There is no server to sign in to. | Required before the first keystroke. |
 | **Your files** | Plain `.md` / `.txt` / `.html` in a folder you picked. Readable by anything. | A proprietary database or cloud store. |
 | **If it disappears** | Your notes are still sitting on your disk. | You export while you still can. |

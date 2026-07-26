@@ -256,7 +256,7 @@ packaging anything.
 
 ## Website
 
-The landing and download pages live in [site/](site/) as plain static HTML and CSS.
+The landing and download pages are in https://natededforver.github.io/valx-writer
 
 ## License
 

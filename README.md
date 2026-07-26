@@ -66,6 +66,8 @@ mark, in the document itself, which words are yours and which are not.
 - Auto-capitalize handles the start of your sentences and stays out of everything else.
 - The caret is lime and sits on the text's own box, so you always know where you are — including on an empty line.
 
+<img src="site/feature-slash.svg" alt="The slash menu open in a note, listing Heading 1, Bullet List, Checked List, Table and Divider with the markdown each one writes" width="820" />
+
 *Elsewhere: a live-markdown surface this complete is usually the paid tier, and the typographic controls usually aren't offered at all.*
 
 ### Words
@@ -76,6 +78,8 @@ mark, in the document itself, which words are yours and which are not.
 - **Forbidden Words** — a list of the words you are trying to stop reaching for. Every match goes grey in the editor.
 - Forbidden matching is whole-word and case-insensitive, ignores punctuation, and handles multi-word phrases.
 - The greying is painted over your text, never into it. It never reaches the `.md` on disk.
+
+<img src="site/feature-forbidden.svg" alt="The Forbidden Words dialog, with each listed word greyed out where it appears in the note behind it" width="820" />
 
 *Elsewhere: bundled multilingual spellcheck is rare in a free app, and a personal "stop using this word" list is close to unheard of.*
 
@@ -99,6 +103,8 @@ mark, in the document itself, which words are yours and which are not.
 - Link notes to each other; clicking a link opens the note, not a browser.
 - Trash asks before it deletes for good, and holds per-note delete alongside Empty Trash.
 
+<img src="site/feature-organize.svg" alt="The Valx sidebar with folders, tags and a search that jumps to the matching word inside each note" width="820" />
+
 *Elsewhere: standard — but here it runs over a plain folder you can also open in Finder, Explorer or `git`.*
 
 ### Files and formats
@@ -107,6 +113,8 @@ mark, in the document itself, which words are yours and which are not.
 - Convert one note — or an entire workspace — between `.md`, `.txt`, `.html` and `.docx` in a click.
 - Export to PDF, DOCX or ODT. Tables and file attachments survive the round trip.
 - Drag images, audio and video straight into a note. They are referenced from disk, never inflated into the note itself.
+
+<img src="site/feature-formats.svg" alt="The Convert Format dialog converting a whole workspace between markdown, plain text and HTML, and the files it writes to disk" width="820" />
 
 *Elsewhere: bulk format conversion is usually a separate tool, and export is usually the upgrade prompt.*
 
@@ -123,6 +131,8 @@ mark, in the document itself, which words are yours and which are not.
 - Distraction-free mode fades the chrome away until you reach for the top edge.
 - Dark mode, transparency, word count and line numbers are all one click in View.
 - Frameless with app-drawn caption buttons on Windows; native decorations and traffic lights on macOS.
+
+<img src="site/feature-settings.svg" alt="The Preferences drawer beside the same note shown in the light and dark themes" width="820" />
 
 ## Typography
 

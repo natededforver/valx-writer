@@ -50,7 +50,7 @@ your text in their database. With Valx, you own everything, down to the software
 | **Telemetry** | None. The app collects no user information, everything stays local. | Usually, you have to ask and opt-out if they do collect data. |
 
 The one thing here you cannot get elsewhere for free of cost is **slop detector (provenance)** — the ability to
-mark in the document itself, which words are **yours** and which words came from other sources like other creators, AI and websites.
+mark in the document itself, which words are **yours** and which words came from other sources like, AI and other websites.
 
 ## Features
 

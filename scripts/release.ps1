@@ -1,4 +1,4 @@
-# -----------------------------------------------------------------------------
+﻿# -----------------------------------------------------------------------------
 # Valx Writer Windows release script — the counterpart to scripts/release.sh.
 #
 #   .\scripts\release.ps1             -> typecheck, build, package the installer

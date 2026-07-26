@@ -156,7 +156,8 @@ On macOS the UI resolves to Apple's own SF Pro through the system font stack.
 Apple's licence forbids redistributing it, so Windows falls back to Segoe UI.
 
 There is no font picker. The editor typeface is a fixed part of the app's
-identity — changing it is an edit to the `@font-face` rules, not a setting.
+identity — changing it is an edit to the `@font-face` rules, not a setting. Though, users can use **Format >** **Letter Spacing** and **Word Spacing**
+sliders to change the finer visual details of the text editor's typeface.
 
 ## Platform differences
 

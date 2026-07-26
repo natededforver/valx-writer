@@ -39,7 +39,7 @@ your text in their database. Valx wants a folder.
 
 | | Valx | The usual subscription writing app |
 |---|---|---|
-| **Cost** | Free. No tier above this one. | Monthly, forever, to keep opening your own writing. |
+| **Cost** | Free. No tier above this one. | Monthly forever, to keep opening your own writing. And you'll get charged for major updates as if you haven't given them money already. |
 | **Account** | None. There is no server to sign in to. | Required before the first keystroke. |
 | **Your files** | Plain `.md` / `.txt` / `.html` in a folder you picked. Readable by anything. | A proprietary database or cloud store. |
 | **If it disappears** | Your notes are still sitting on your disk. | You export while you still can. |
@@ -92,7 +92,7 @@ mark, in the document itself, which words are yours and which are not.
 - Toggle any provenance type out of view to read the document without it.
 - Turn **Human authors** off to invert the question — everything *unmarked* greys out, and only what came from elsewhere stays lit.
 
-*Elsewhere: nothing else on this list does this. It is the reason Valx exists.*
+*Elsewhere: no other writing app does this with 0 cost.*
 
 ### Organization
 

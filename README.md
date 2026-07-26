@@ -34,8 +34,8 @@ WebView2 on Windows, WKWebView on macOS. The Windows installer is under 7 MB.
 
 ## Why Valx
 
-Most writing apps that look this considered want a monthly fee, an account, and
-your text in their database. Valx wants a folder.
+Most writing apps that look and function like this want a monthly fee, an account, and
+your text in their database. With Valx, you own everything, down to the software's code itself.
 
 | | Valx | The usual subscription writing app |
 |---|---|---|

@@ -458,6 +458,22 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     return mark && editorRef.current?.contains(mark) ? mark : null;
   };
 
+  /** The checkbox that opens the caret's line, if any. Checklist items carry no
+   *  text marker to regex for — they start with an <input> — so Enter finds the
+   *  element by walking back to the line's start (the previous <br>). */
+  const checkboxOnLine = (): HTMLInputElement | null => {
+    const sel = window.getSelection();
+    let n: Node | null = sel?.focusNode ?? null;
+    while (n && n !== editorRef.current) {
+      for (let s: Node | null = n; s; s = s.previousSibling) {
+        if (s.nodeName === 'BR') return null;
+        if (s instanceof HTMLInputElement && s.type === 'checkbox') return s;
+      }
+      n = n.parentNode;
+    }
+    return null;
+  };
+
   const updateSlopEdit = () => {
     if (suppressUnwrapRef.current) return;
     const mark = slopMarkAtCaret();
@@ -1388,52 +1404,12 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
         handleInput();
         return;
       }
-      // Shift+Enter: soft line break within the current block (headings, lists, etc.).
-      // execCommand('insertLineBreak') is unreliable about where it leaves the caret
-      // (sometimes before the <br> it just inserted) — insert the <br> ourselves via
-      // Range APIs and place the caret explicitly, same idiom as the slop-mark split below.
-      if (e.shiftKey) {
-        e.preventDefault();
-        const sel = window.getSelection();
-        if (sel && sel.rangeCount > 0) {
-          const range = sel.getRangeAt(0);
-          range.deleteContents();
-          const br = document.createElement('br');
-          range.insertNode(br);
-          // insertNode on a range collapsed at the end of a text node splits off an
-          // empty trailing text node — drop it, it confuses the next insertText.
-          if (br.nextSibling && br.nextSibling.nodeType === Node.TEXT_NODE && !br.nextSibling.textContent) {
-            br.nextSibling.remove();
-          }
-          // A collapsed Range whose container is an element (or an empty text
-          // node) has no layout box — getClientRects() is empty — so Chromium's
-          // native caret doesn't visibly move even though selection state did,
-          // making shift+Enter look like it needs a second press to "take". A
-          // real text node always has a box, so anchor there: reuse the text
-          // that already follows the <br>, or — if nothing follows (a lone
-          // trailing <br> also doesn't render as an extra visual line) — add a
-          // zero-width space to anchor on and to keep the new line visible.
-          const caretRange = document.createRange();
-          if (br.nextSibling && br.nextSibling.nodeType === Node.TEXT_NODE) {
-            caretRange.setStart(br.nextSibling, 0);
-          } else {
-            const zwsp = document.createTextNode('​');
-            br.after(zwsp);
-            caretRange.setStart(zwsp, 1);
-          }
-          caretRange.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(caretRange);
-        }
-        handleInput();
-        return;
-      }
       // Inside a slop mark the native break lands INSIDE the <mark> (Chromium
       // normalizes any between-marks caret back into it), trapping every
       // following line in the mark. Split the mark at the caret and insert the
       // newline between the halves ourselves (the editor is white-space:
       // pre-wrap, so '\n' IS the native line-break representation).
-      const slopMark = slopMarkAtCaret();
+      const slopMark = e.shiftKey ? null : slopMarkAtCaret();
       if (slopMark) {
         e.preventDefault();
         const sel = window.getSelection()!;
@@ -1454,29 +1430,31 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
         return;
       }
       const selection = window.getSelection();
-      if (!selection || !selection.focusNode) return;
-      
-      let node = selection.focusNode;
-      let textBeforeCursor = '';
-      
-      if (node.nodeType === Node.TEXT_NODE) {
-          textBeforeCursor = (node.textContent || '').slice(0, selection.focusOffset);
-      } else {
-          const child = node.childNodes[selection.focusOffset - 1];
-          if (child) {
-              textBeforeCursor = child.textContent || '';
+      const node = selection?.focusNode;
+      let currentLine = '';
+      if (node) {
+          let textBeforeCursor = '';
+          if (node.nodeType === Node.TEXT_NODE) {
+              textBeforeCursor = (node.textContent || '').slice(0, selection!.focusOffset);
+          } else {
+              const child = node.childNodes[selection!.focusOffset - 1];
+              if (child) {
+                  textBeforeCursor = child.textContent || '';
+              }
           }
+          const lines = textBeforeCursor.split(/[\r\n]+/);
+          currentLine = lines[lines.length - 1];
       }
-      
-      const lines = textBeforeCursor.split(/[\r\n]+/);
-      const currentLine = lines[lines.length - 1];
-      
+      const lineText = currentLine.replace(/\u00A0/g, ' ');
+
       // Match list markers: +, -, >, or numbers like 1.
       // Use \s* or &nbsp; representation
-      const match = currentLine.replace(/\u00A0/g, ' ').match(/^\s*(\+|-|>|\d+\.)\s+(.*)$/);
-      
-      // Shift+Enter escapes list-continuation and falls through to the native <br>.
-      if (match && !e.shiftKey) {
+      const match = lineText.match(/^\s*(\+|-|>|\d+\.)\s+(.*)$/);
+
+      // Shift+Enter continues the list too \u2014 it used to short-circuit to a bare
+      // <br> above this point, which is what dropped the marker on soft breaks.
+      // The empty item below is the way out of a list, for both keys.
+      if (match) {
          if (!match[2].trim()) {
              // Empty list item, end the list
              e.preventDefault();
@@ -1485,7 +1463,7 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
              document.execCommand('insertHTML', false, '<br><br>');
              return;
          }
-         
+
          const symbol = match[1];
          let nextSymbol = symbol;
          if (/^\d+\.$/.test(symbol)) {
@@ -1496,7 +1474,70 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
          document.execCommand('insertHTML', false, `<br>${nextSymbol}&nbsp;`);
          return;
       }
-      
+
+      // Checklist items start with an <input>, not a text marker, so they never
+      // matched the regex above \u2014 neither key continued them. Same contract.
+      const task = node && checkboxOnLine();
+      if (task) {
+        e.preventDefault();
+        if (lineText.trim()) {
+          insertHtmlAtCaret('<br><input type="checkbox">&nbsp;');
+        } else {
+          // Empty item: drop the checkbox with its space, and end the list.
+          const caret = selection!.getRangeAt(0);
+          const dead = document.createRange();
+          dead.setStartBefore(task);
+          dead.setEnd(caret.endContainer, caret.endOffset);
+          dead.deleteContents();
+          selection!.removeAllRanges();
+          selection!.addRange(dead);
+          insertHtmlAtCaret('<br><br>');
+        }
+        handleInput();
+        return;
+      }
+
+      // Shift+Enter outside a list: soft line break within the current block.
+      // execCommand('insertLineBreak') is unreliable about where it leaves the caret
+      // (sometimes before the <br> it just inserted) \u2014 insert the <br> ourselves via
+      // Range APIs and place the caret explicitly, same idiom as the slop-mark split above.
+      if (e.shiftKey) {
+        e.preventDefault();
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          const br = document.createElement('br');
+          range.insertNode(br);
+          // insertNode on a range collapsed at the end of a text node splits off an
+          // empty trailing text node \u2014 drop it, it confuses the next insertText.
+          if (br.nextSibling && br.nextSibling.nodeType === Node.TEXT_NODE && !br.nextSibling.textContent) {
+            br.nextSibling.remove();
+          }
+          // A collapsed Range whose container is an element (or an empty text
+          // node) has no layout box \u2014 getClientRects() is empty \u2014 so Chromium's
+          // native caret doesn't visibly move even though selection state did,
+          // making shift+Enter look like it needs a second press to "take". A
+          // real text node always has a box, so anchor there: reuse the text
+          // that already follows the <br>, or \u2014 if nothing follows (a lone
+          // trailing <br> also doesn't render as an extra visual line) \u2014 add a
+          // zero-width space to anchor on and to keep the new line visible.
+          const caretRange = document.createRange();
+          if (br.nextSibling && br.nextSibling.nodeType === Node.TEXT_NODE) {
+            caretRange.setStart(br.nextSibling, 0);
+          } else {
+            const zwsp = document.createTextNode('\u200B');
+            br.after(zwsp);
+            caretRange.setStart(zwsp, 1);
+          }
+          caretRange.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(caretRange);
+        }
+        handleInput();
+        return;
+      }
+
       // Default: allow normal Enter key behavior for line breaks
       // Don't prevent default - let the browser handle it naturally
     }

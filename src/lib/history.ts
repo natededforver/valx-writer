@@ -44,6 +44,21 @@ export async function saveHistory(id: string, snaps: Snapshot[]): Promise<void> 
   try { await set(KEY(id), await gzipStr(JSON.stringify(snaps))); } catch { /* quota/idb error — drop */ }
 }
 
+/** Record `content` as the note's newest snapshot (no-op if unchanged).
+ *  Writes are serialized: the open/timer/revert callers fire independently and
+ *  their read-modify-write cycles would otherwise clobber each other. */
+let queue: Promise<unknown> = Promise.resolve();
+export function snapshotNote(id: string, content: string): Promise<void> {
+  queue = queue
+    .then(async () => {
+      const prev = await loadHistory(id);
+      const next = pushSnapshot(prev, content, Date.now());
+      if (next !== prev) await saveHistory(id, next);
+    })
+    .catch(() => {});
+  return queue as Promise<void>;
+}
+
 /** Drop a note's history entirely (called on permanent delete so it can't
  *  outlive the note). */
 export async function dropHistory(id: string): Promise<void> {

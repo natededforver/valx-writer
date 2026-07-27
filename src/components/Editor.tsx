@@ -23,7 +23,7 @@ import {
 import { LANGUAGES, spellLang, setSpellLang } from '../lib/spellcheck';
 import { Creator, CREATORS_EVENT, creatorMeName, setCreatorMeName, loadCreators, saveCreators, newCreatorId } from '../lib/creators';
 import { deriveByline, stripByline, syncByline, bylineIsEmpty } from '../lib/byline';
-import { Snapshot, pushSnapshot, loadHistory, saveHistory } from '../lib/history';
+import { Snapshot, loadHistory, snapshotNote } from '../lib/history';
 import html2pdf from 'html2pdf.js';
 import { asBlob } from 'html-docx-js-typescript';
 import { saveAs } from 'file-saver';
@@ -324,13 +324,16 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   }, []);
   useEffect(() => {
     if (!note || note.isTrash) return;
-    const id = setInterval(async () => {
+    const snap = () => {
       const cur = noteRef.current;
-      if (!cur || cur.isTrash) return;
-      const prev = await loadHistory(cur.id);
-      const next = pushSnapshot(prev, cur.content, Date.now());
-      if (next !== prev) await saveHistory(cur.id, next);
-    }, Math.max(1, historyIntervalMin) * 60_000);
+      if (cur && !cur.isTrash) void snapshotNote(cur.id, cur.content);
+    };
+    // Baseline the moment a note opens. Without it the timer was the ONLY
+    // writer, so nothing was ever recorded unless one note stayed open for a
+    // full uninterrupted interval — the panel was empty in every real session.
+    // Notes persist, so opening also captures whatever the last session left.
+    snap();
+    const id = setInterval(snap, Math.max(1, historyIntervalMin) * 60_000);
     return () => clearInterval(id);
   }, [note?.id, note?.isTrash, historyIntervalMin]);
   useEffect(() => { setHistoryOpen(false); }, [note?.id]);
@@ -342,7 +345,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const revertTo = async (snap: Snapshot) => {
     const cur = noteRef.current;
     if (!cur) return;
-    await saveHistory(cur.id, pushSnapshot(await loadHistory(cur.id), cur.content, Date.now()));
+    await snapshotNote(cur.id, cur.content);
     updateNote(cur.id, { content: snap.content });
     setHistoryOpen(false);
   };
@@ -527,7 +530,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const viewWindowItems = (
     <>
       <button onClick={() => { toggleFullscreen(); setOpenMenu(null); }} className={itemCls}>{isFullscreen ? <Minimize2 size={15} className="opacity-60" /> : <Maximize2 size={15} className="opacity-60" />} {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}<span className={shortcutCls}>{isMac ? '⌘↩' : 'F11'}</span></button>
-      {onToggleSidebar && <button onClick={() => { onToggleSidebar(); setOpenMenu(null); }} className={itemCls}><ArrowLeft size={15} className="opacity-60" /> {sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}</button>}
+      {/* No sidebar toggle here — the chrome's own arrow button already owns it. */}
     </>
   );
   const viewToggleItems = (

@@ -1447,23 +1447,20 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
       }
       const lineText = currentLine.replace(/\u00A0/g, ' ');
 
-      // Match list markers: +, -, >, or numbers like 1.
-      // Use \s* or &nbsp; representation
-      const match = lineText.match(/^\s*(\+|-|>|\d+\.)\s+(.*)$/);
+      // Match list markers: +, -, >, or numbers like 1. The space after the
+      // marker is optional so a marker you just typed still counts as one \u2014
+      // `body` is undefined when it's missing, which is how Enter tells the two
+      // apart below. (&nbsp; already normalised into lineText.)
+      const match = lineText.match(/^\s*(\+|-|>|\d+\.)(?:\s+(.*))?$/);
+      const body = match?.[2];
 
-      // Shift+Enter continues the list too \u2014 it used to short-circuit to a bare
-      // <br> above this point, which is what dropped the marker on soft breaks.
-      // The empty item below is the way out of a list, for both keys.
-      if (match) {
-         if (!match[2].trim()) {
-             // Empty list item, end the list
-             e.preventDefault();
-             document.execCommand('delete'); // delete space
-             for(let i=0; i<match[1].length; i++) document.execCommand('delete');
-             document.execCommand('insertHTML', false, '<br><br>');
-             return;
-         }
-
+      // The two keys carry different contracts, and conflating them is what made
+      // this feel broken: Shift+Enter means "same format, next line", so it
+      // continues the list ALWAYS \u2014 including the empty item you're sitting on
+      // the instant you type "1." and reach for it. Enter keeps the classic
+      // behaviour: continue an item with text, and let an empty one drop you out
+      // of the list (which is how you leave a list built with Shift+Enter).
+      if (match && (e.shiftKey || (body !== undefined && body.trim()))) {
          const symbol = match[1];
          let nextSymbol = symbol;
          if (/^\d+\.$/.test(symbol)) {
@@ -1474,16 +1471,24 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
          document.execCommand('insertHTML', false, `<br>${nextSymbol}&nbsp;`);
          return;
       }
+      if (match && body !== undefined) {
+         // Empty list item on Enter: strip the marker and end the list.
+         e.preventDefault();
+         document.execCommand('delete'); // delete space
+         for(let i=0; i<match[1].length; i++) document.execCommand('delete');
+         document.execCommand('insertHTML', false, '<br><br>');
+         return;
+      }
 
       // Checklist items start with an <input>, not a text marker, so they never
       // matched the regex above \u2014 neither key continued them. Same contract.
       const task = node && checkboxOnLine();
       if (task) {
         e.preventDefault();
-        if (lineText.trim()) {
+        if (e.shiftKey || lineText.trim()) {
           insertHtmlAtCaret('<br><input type="checkbox">&nbsp;');
         } else {
-          // Empty item: drop the checkbox with its space, and end the list.
+          // Empty item on Enter: drop the checkbox with its space, end the list.
           const caret = selection!.getRangeAt(0);
           const dead = document.createRange();
           dead.setStartBefore(task);

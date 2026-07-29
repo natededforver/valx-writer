@@ -133,15 +133,35 @@ fn read_directory(root: String) -> Result<DirListing, String> {
     Ok(DirListing { files, folders, missing: false })
 }
 
+// The workspace's own hidden directories. Allowing the root recursively does
+// not reach them: the scope is glob-matched, and `<root>/**` does not match a
+// path segment beginning with a dot. Notes therefore wrote fine while
+// attachments and the trash came back "forbidden path … not allowed on the
+// scope for `allow-mkdir`". They get their own patterns below.
+//
+// Must stay in sync with ATTACH_DIR in src/lib/format.ts and the trash folder
+// name in src/hooks/useNotes.ts.
+const HIDDEN_DIRS: [&str; 2] = [".attachments", ".trash"];
+
 #[tauri::command]
 fn set_workspace_root(app: tauri::AppHandle, root: String) -> Result<(), String> {
     let path = PathBuf::from(&root);
-    app.fs_scope()
-        .allow_directory(&path, true)
-        .map_err(|e| e.to_string())?;
-    app.asset_protocol_scope()
-        .allow_directory(&path, true)
-        .map_err(|e| e.to_string())?;
+    let fs_scope = app.fs_scope();
+    let asset_scope = app.asset_protocol_scope();
+
+    fs_scope.allow_directory(&path, true).map_err(|e| e.to_string())?;
+    asset_scope.allow_directory(&path, true).map_err(|e| e.to_string())?;
+
+    for hidden in HIDDEN_DIRS {
+        let dir = path.join(hidden);
+        // Created here so the pattern refers to something real and the first
+        // write doesn't have to. A failure is not fatal — a read-only or
+        // missing workspace is the caller's problem to report, not a reason to
+        // refuse to set the root.
+        let _ = fs::create_dir_all(&dir);
+        fs_scope.allow_directory(&dir, true).map_err(|e| e.to_string())?;
+        asset_scope.allow_directory(&dir, true).map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 

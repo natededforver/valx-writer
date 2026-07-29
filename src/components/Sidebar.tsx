@@ -218,8 +218,11 @@ export function Sidebar({
     if (ok) onEmptyTrash();
   };
 
+  // One hairline, on the edge that meets the editor. The other three sides are
+  // the window, and drawing on them put a box around the whole app — most
+  // visibly on a phone, where this panel IS the screen.
   return (
-    <div className={`vx-glass-strong text-slate-700 dark:text-slate-200 flex flex-col h-full min-h-0 ${className}`}>
+    <div className={`vx-glass-strong border-r border-black/[0.06] dark:border-white/[0.08] text-slate-700 dark:text-slate-200 flex flex-col h-full min-h-0 ${className}`}>
       {/* macOS: the sidebar is the window's left edge, so AppKit's traffic
           lights land here. Give them an empty title-bar-height strip of their
           own and let the whole column start below it — and make the strip a

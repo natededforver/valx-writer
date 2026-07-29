@@ -9,6 +9,7 @@ import { JumpTarget } from '../types';
 import { parseTrailingMdLink } from '../lib/noteLinks';
 import { slopWrapText, wordSpans, SlopType } from '../lib/slop';
 import { mediaDisplaySrc, mediaDisplayHtml, mediaCanonicalHtml, readClipboardText } from '../lib/desktop';
+import { isAndroid } from '../lib/platform';
 import { SlashMenu, SlashItem, SlashSyntaxItem, SlashMediaItem } from './SlashMenu';
 import { AttachmentItem } from '../hooks/useFileSystem';
 import { typewriterEnabled, playKey, playReturn } from '../lib/typewriter';
@@ -1611,7 +1612,13 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
         // backend) so it can own the language and offer "Add to Dictionary" —
         // neither of which WebView2's built-in checker exposes to the host.
         // Leaving the native one on would double-underline every word.
-        spellCheck={false}
+        //
+        // Android is the exception: spellcheck.rs is not compiled into that
+        // build (8 MB of dictionaries per ABI, to duplicate work the keyboard
+        // already does), so switching the native checker off there would leave
+        // the phone with no spellcheck at all. Gboard's is better on a phone
+        // anyway — it corrects as you type instead of only underlining.
+        spellCheck={isAndroid}
         className={`rich-editor w-full min-h-[60vh] text-lg leading-relaxed border-none outline-none focus:outline-none bg-transparent empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 dark:empty:before:text-slate-600 break-words ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
         style={{ whiteSpace: 'pre-wrap' }}
       />

@@ -20,6 +20,7 @@ import { writeText as clipboardWriteText, readText as clipboardReadText, readIma
 import { ATTACH_DIR, MEDIA_URL_PREFIX } from './format';
 import { canonicalMediaHtml, displayMediaHtml, displayMediaSrc } from './mediaUrl';
 import { KNOWN_EXT, serializeNote } from './exports';
+import { isAndroid } from './platform';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -92,6 +93,16 @@ async function setWorkspaceRoot(root: string): Promise<void> {
 }
 
 async function selectDirectory(): Promise<string | null> {
+  // Android has no directory picker to open — the dialog plugin only binds the
+  // file chooser, not SAF's tree picker — so the phone gets its one fixed
+  // workspace (<documents>/Valx, created by the backend) instead of a prompt.
+  // Same call site either way, so "Open Folder…" degrades to a no-op re-select
+  // rather than a dead menu item.
+  if (isAndroid) {
+    const dir = await invoke<string>('default_workspace');
+    workspaceRoot = dir;
+    return dir;
+  }
   const dir = await openDialog({ directory: true });
   if (typeof dir !== 'string' || !dir) return null;
   await setWorkspaceRoot(dir);
@@ -290,12 +301,34 @@ export async function inlineMediaAsDataUrls(html: string): Promise<string> {
 const writeExport = (path: string, data: Uint8Array | string) =>
   typeof data === 'string' ? writeTextFile(path, data) : writeFile(path, data);
 
+/**
+ * Where an export should be written.
+ *
+ * Desktop asks, with a save dialog. Android can't: the dialog plugin binds
+ * Android's file *chooser*, not its create-document flow, so save() there
+ * resolves to nothing and Export silently did nothing at all — the same shape
+ * of bug as Print. The phone writes into <workspace>/Exports instead and says
+ * where it went; that folder is under Documents, so a file manager or the
+ * share sheet of any other app can reach it.
+ */
+async function pickExportPath(title: string, ext: string, label: string): Promise<string | null> {
+  const name = `${sanitizeName(title || 'Note')}.${ext}`;
+  if (isAndroid) {
+    const root = currentRoot();
+    if (!root) return null;
+    const dir = `${root}/Exports`;
+    await mkdir(dir, { recursive: true }).catch(() => {});
+    return `${dir}/${name}`;
+  }
+  return (await saveDialog({
+    defaultPath: name,
+    filters: [{ name: label.toUpperCase(), extensions: [ext] }],
+  })) as string | null;
+}
+
 async function exportWithPandoc(htmlContent: string, format: string, defaultTitle: string) {
   const ext = KNOWN_EXT[format] || format;
-  const filePath = await saveDialog({
-    defaultPath: `${sanitizeName(defaultTitle || 'Note')}.${ext}`,
-    filters: [{ name: String(format).toUpperCase(), extensions: [ext] }],
-  });
+  const filePath = await pickExportPath(defaultTitle, ext, String(format));
   if (!filePath) return { success: false, canceled: true };
   try {
     const html = await inlineMediaAsDataUrls(htmlContent);
@@ -309,10 +342,7 @@ async function exportWithPandoc(htmlContent: string, format: string, defaultTitl
 // "Other format": any extension, saved as a portable text copy.
 async function exportCustom(htmlContent: string, rawExt: string, defaultTitle: string) {
   const ext = String(rawExt || '').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'txt';
-  const filePath = await saveDialog({
-    defaultPath: `${sanitizeName(defaultTitle || 'Note')}.${ext}`,
-    filters: [{ name: ext.toUpperCase(), extensions: [ext] }, { name: 'All Files', extensions: ['*'] }],
-  });
+  const filePath = await pickExportPath(defaultTitle, ext, ext);
   if (!filePath) return { success: false, canceled: true };
   try {
     const html = await inlineMediaAsDataUrls(htmlContent);

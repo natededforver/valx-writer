@@ -87,7 +87,6 @@
   background: color-mix(in srgb, var(--vx-surface) 35%, transparent);
   backdrop-filter: blur(28px) saturate(1.8);
   -webkit-backdrop-filter: blur(28px) saturate(1.8);
-  border: 1px solid color-mix(in srgb, var(--vx-hair) 50%, transparent);
 }
 .vx-glass-soft {
   background: var(--vx-surface);
@@ -103,12 +102,26 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
+/* The sheet drops the blur too, but keeps its own background: that tint is not
+   transparency, it is the grouped-background shade the cards sit on, and
+   flattening it to --vx-surface would make white cards vanish into it. */
+.vx-opaque .vx-sheet {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 .vx-glass-strong {
   background: var(--vx-surface);
   background: color-mix(in srgb, var(--vx-surface) 90%, transparent);
   backdrop-filter: blur(64px) saturate(1.8);
   -webkit-backdrop-filter: blur(64px) saturate(1.8);
-  border: 1px solid color-mix(in srgb, var(--vx-hair) 50%, transparent);
+}
+
+/* The frame the glass classes used to carry. Wanted on anything that floats
+   over the page and needs an edge to end at — popovers, dropdowns, dialogs —
+   and specifically NOT wanted on a bar or a panel that already ends at the
+   window, where a fourth side reads as a box drawn round the app. */
+.vx-hairline {
+  border: 1px solid color-mix(in srgb, var(--vx-hair) 55%, transparent);
 }
 
 /* Fill the window exactly. Without an explicit height chain the app root's
@@ -792,3 +805,87 @@ button:not([class*='translate-']):not([class*='rotate-']):not([class*='scale-'])
 .dark .tok-number  { color: #b5cea8; }
 .dark .tok-entity  { color: #d7ba7d; }
 .dark .tok-fn      { color: #dcdcaa; }
+
+/* ---------------------------------------------------------------------------
+   Android system-bar insets.
+
+   The phone build is edge-to-edge (MainActivity calls enableEdgeToEdge), which
+   is what lets the note background run behind the status and navigation bars
+   instead of leaving two grey slabs the app's dark mode can't reach. The cost
+   is that the app must inset its own chrome, or the greeting renders under the
+   clock and the footer under the gesture pill.
+
+   Padding on the app root rather than on each bar: the root is the flex
+   container everything else is measured inside, so one rule keeps the sidebar,
+   the editor chrome and the footer all clear at once.
+
+   --vx-inset-* comes from the Android side (lib/insets.ts over
+   MainActivity.kt's bridge) and wins where it is set, because env() is only
+   half right on Android: safe-area-inset-top reports the status bar, but
+   safe-area-inset-bottom reports 0 with the gesture pill sitting on the
+   footer. env() is the fallback for every other platform.
+
+   Zero on desktop — nothing reports insets there, so this is inert rather than
+   platform-gated.
+--------------------------------------------------------------------------- */
+.vx-safe {
+  padding-top: var(--vx-inset-top, env(safe-area-inset-top, 0px));
+  padding-bottom: var(--vx-inset-bottom, env(safe-area-inset-bottom, 0px));
+  padding-left: var(--vx-inset-left, env(safe-area-inset-left, 0px));
+  padding-right: var(--vx-inset-right, env(safe-area-inset-right, 0px));
+}
+
+/* ---------------------------------------------------------------------------
+   iOS-language sheets (touch builds).
+
+   A Windows menu bar is the wrong instrument for a phone: 13px targets, hover
+   to open, and flyouts that fly off the side of a 360px screen. On touch the
+   five menus collapse into one bottom sheet instead — the iPhone idiom, where
+   a grouped list rises over a dimmed page and every row is thumb-sized.
+
+   Built on the app's existing glass vars so the sheet reads as the same
+   material as the desktop chrome, just shaped differently.
+--------------------------------------------------------------------------- */
+.vx-scrim {
+  background: rgba(0, 0, 0, 0.28);
+  animation: vx-scrim-in 0.25s ease-out;
+}
+.dark .vx-scrim { background: rgba(0, 0, 0, 0.5); }
+@keyframes vx-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* The sheet is the "grouped background" — a shade off the surface — and the
+   cards on it are the surface itself. That contrast is what separates one
+   group of rows from the next on iOS; an outline round each card would do the
+   same job, but drawing boxes is exactly the look this is replacing.
+
+   The spring-ish curve is the one iOS presents a sheet with: fast out of the
+   gate, long settle. A linear ease reads as a panel dragged by a machine. */
+.vx-sheet {
+  background: color-mix(in srgb, var(--vx-hair) 42%, var(--vx-surface));
+  backdrop-filter: blur(64px) saturate(1.8);
+  -webkit-backdrop-filter: blur(64px) saturate(1.8);
+  animation: vx-sheet-in 0.34s cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes vx-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+/* One group of rows. The rounding is on the card and the rows inside are
+   square, clipped by it — which is what stops a pressed first or last row from
+   painting into the corner radius. */
+.vx-sheet-card { background: var(--vx-surface); }
+
+/* Touch: no scrollbar gutter.
+   The reskinned 8px scrollbar above is a pointer affordance — something to
+   grab. A finger scrolls the surface directly and never grabs it, so on a
+   phone it is only a permanent grey rule down the side of the page, which is
+   exactly the kind of chrome focus mode exists to remove. Android's own
+   overlay indicator still appears while scrolling. */
+@media (pointer: coarse) {
+  .vx-editor-scroll,
+  .vx-list-scroll {
+    scrollbar-width: none;
+  }
+  .vx-editor-scroll::-webkit-scrollbar,
+  .vx-list-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}

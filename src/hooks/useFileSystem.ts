@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { get, set } from 'idb-keyval';
 import { FileFormat, FILE_FORMATS, ATTACH_DIR, MediaKind, mediaKindFromName } from '../lib/format';
+import { isAndroid } from '../lib/platform';
 
 /** One insertable media file from the workspace's .attachments folder.
  *  `src` is the canonical app URL on desktop; on the web there is no durable
@@ -63,6 +64,18 @@ export function useFileSystem() {
             // Tell main where the workspace is so it can serve attached media.
             (window as any).__valxRoot = handle.path;
             (window as any).electronAPI.setWorkspaceRoot?.(handle.path);
+          } else if (isAndroid) {
+            // No picker on the phone, so first launch adopts <documents>/Valx
+            // instead of dropping the user on a "choose a folder" wall they
+            // could never satisfy. selectDirectory() returns that fixed path
+            // on Android (see lib/desktop.ts) and creates it backend-side.
+            const path = await (window as any).electronAPI.selectDirectory();
+            if (path) {
+              const handle = { kind: 'electron', path };
+              setWorkspaceHandle(handle);
+              localStorage.setItem('valx-electron-workspace', JSON.stringify(handle));
+              (window as any).__valxRoot = path;
+            }
           }
         } else {
           const handle = await get('valx-web-workspace');

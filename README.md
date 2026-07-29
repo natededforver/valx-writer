@@ -31,6 +31,7 @@ WebView2 on Windows, WKWebView on macOS. The Windows installer is under 7 MB.
 > **First launch.** Windows may ask you to confirm an app from a new publisher —
 > choose *More info → Run anyway*. On macOS, right-click Valx in Applications and
 > choose *Open* once. Both go away once the builds are signed.
+> <img src="site/run anyway - macOS screenshot.png" alt="macOS settings instructions" width="620" 
 
 ## Why Valx
 

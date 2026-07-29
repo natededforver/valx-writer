@@ -156,6 +156,19 @@ export default function App() {
     }
   }, [activeNoteId, selectedNoteIds.length]);
 
+  // A workspace switch invalidates the open note: its id belongs to the folder
+  // that was just left, so it resolves to nothing in the new one. The selection
+  // stays non-empty, which meant the effect above kept the phone on the editor
+  // — showing "Select or create a note" with no chrome and no way back but a
+  // swipe. Clearing the selection lets that same effect drop to the list.
+  //
+  // Keyed on the path rather than the handle object: the handle is rebuilt on
+  // every restore, and re-running this on each one would clear a selection the
+  // user still has.
+  useEffect(() => {
+    setSelectedNoteIds([]);
+  }, [workspaceHandle?.path]);
+
   const handleAddNote = () => {
     const currentFolderId = filter.type === 'folder' ? filter.folderId : null;
     const newNote = addNote(currentFolderId);

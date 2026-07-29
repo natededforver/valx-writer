@@ -141,7 +141,7 @@ export function NoteDropdownList({
             // attribute rather than through a prop chain, so a row only has to
             // say what it is and the mouse path above stays untouched.
             data-drag-note={note.id}
-            className={`group relative w-full text-left pl-3 pr-2 py-2 transition-colors cursor-pointer outline-none ${isSelected ? 'bg-slate-900/8 dark:bg-white/8' : 'hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
+            className={`vx-drag-source group relative w-full text-left pl-3 pr-2 py-2 transition-colors cursor-pointer outline-none ${isSelected ? 'bg-slate-900/8 dark:bg-white/8' : 'hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
           >
             {onToggleBookmark && (
               <button

@@ -207,7 +207,11 @@ different one — same notes, same files, same `.md` on disk.
 - **Long-press to drag.** HTML5 drag and drop is a mouse API a touchscreen
   never triggers, so filing notes into folders and dragging them to the bin was
   drawn but unreachable. Press and hold a note to lift it, then drop it on a
-  folder or on Trash.
+  folder or on Trash. Holding the note near the top or bottom of the list
+  scrolls it, so a folder below the fold is still a target — the finger holding
+  the note is not free to scroll with.
+- **Installed as "Valx Writer."** The launcher ellipsises a longer label, and
+  the desktop bundle's full name did not survive it.
 - **Import media** (in the menu panel) and clipboard paste both take images,
   video, audio, GIFs and PDFs into the workspace's `.attachments` folder.
 

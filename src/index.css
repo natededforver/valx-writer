@@ -101,6 +101,19 @@
   -webkit-backdrop-filter: blur(64px) saturate(1.8);
 }
 
+/* Opaque chrome. The glass classes above let the desktop wallpaper through a
+   transparent window and the prose through a floating panel, which is the look
+   everywhere except the two surfaces you *read lists off*: the sidebar and the
+   '/' menu. Text over a moving backdrop is the one place the material costs
+   more than it gives, so those two opt out and sit on the flat surface colour.
+   backdrop-filter is switched off rather than left running — a filter with
+   nothing translucent above it is a compositing layer for no picture. */
+.vx-solid {
+  background: var(--vx-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 /* The frame the glass classes used to carry. Wanted on anything that floats
    over the page and needs an edge to end at — popovers, dropdowns, dialogs —
    and specifically NOT wanted on a bar or a panel that already ends at the
@@ -144,20 +157,22 @@ body {
   background-color: #000000;
 }
 
-/* iOS-style bulging glass effect for slash menu */
+/* The '/' menu's panel. It used to be iOS-style bulging glass — 70% white over
+   a 40px blur — which put the note's own prose faintly behind a list of command
+   names set in the same colour, right where the caret is. It is opaque now:
+   the lift comes from the shadow and the inset hairline, which is what was
+   doing the work anyway. */
 .vx-menu-bulge {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(40px) saturate(1.8);
-  -webkit-backdrop-filter: blur(40px) saturate(1.8);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4), 
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06),
               0 8px 32px rgba(0, 0, 0, 0.12),
               0 16px 48px rgba(0, 0, 0, 0.08);
 }
 .dark .vx-menu-bulge {
-  background: rgba(0, 0, 0, 0.6);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3), 
-              0 8px 32px rgba(0, 0, 0, 0.3),
-              0 16px 48px rgba(0, 0, 0, 0.2);
+  background: #0a0a0a;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+              0 8px 32px rgba(0, 0, 0, 0.5),
+              0 16px 48px rgba(0, 0, 0, 0.35);
 }
 
 /* Settings panel slide entrance */
@@ -975,6 +990,19 @@ button:not([class*='translate-']):not([class*='rotate-']):not([class*='scale-'])
    with a shadow and tilted a hair, so it reads as picked up rather than as a
    second row that has appeared. Anchored at the finger, not under it — a
    thumb covers about 40px and the label has to stay readable. */
+/* Rows that can be picked up and dragged (lib/touchDrag.ts).
+   Selection off is not cosmetic here: a long press on selectable text is how
+   Android starts a text selection, and the browser claiming the gesture fires
+   touchcancel — which killed every touch drag a fraction of a second after the
+   row lifted. With no text to select there is no gesture to lose. The callout
+   is suppressed for the same reason, and neither is a loss on a row whose text
+   is a note title you open by tapping. */
+.vx-drag-source {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 .vx-drag-ghost {
   transform: translate(-50%, -160%) rotate(-2deg);
   background: color-mix(in srgb, var(--vx-surface) 96%, transparent);

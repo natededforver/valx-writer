@@ -66,6 +66,13 @@ export function useHorizontalSwipe(
       const s = start;
       start = null;
       if (!s) return;
+      // Somebody nearer the touch already claimed this gesture — today that is
+      // the sidebar's long-press drag (lib/touchDrag.ts), whose touchend
+      // preventDefaults to swallow the click a drop would otherwise produce.
+      // Its listener is on a descendant, so it has already run by the time this
+      // one does, and a note carried sideways into a folder must not ALSO
+      // navigate to the next panel.
+      if (e.defaultPrevented) return;
       const t = e.changedTouches[0];
       if (!t) return;
       const dx = t.clientX - s.x;

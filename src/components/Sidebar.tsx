@@ -244,7 +244,7 @@ export function Sidebar({
   // the window, and drawing on them put a box around the whole app — most
   // visibly on a phone, where this panel IS the screen.
   return (
-    <div ref={dragRootRef} className={`vx-glass-strong border-r border-black/[0.06] dark:border-white/[0.08] text-slate-700 dark:text-slate-200 flex flex-col h-full min-h-0 ${className}`}>
+    <div ref={dragRootRef} className={`vx-solid border-r border-black/[0.06] dark:border-white/[0.08] text-slate-700 dark:text-slate-200 flex flex-col h-full min-h-0 ${className}`}>
       {/* The lifted row, following the finger. Rendered here rather than at the
           drag source so it is never clipped by the scrolling list it came out
           of, and pointer-events-none so it is not what elementFromPoint finds

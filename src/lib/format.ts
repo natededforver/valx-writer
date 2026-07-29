@@ -118,6 +118,17 @@ const escapeText = (s: string): string =>
 const escapeAttr = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// End-of-tag-name guard for the hand-rolled tag matchers below.
+//
+// `<(b|strong)[^>]*>` reads as "a <b> tag", and is not: [^>]* happily eats the
+// rest of a LONGER name, so it matches <br>, <blockquote> and <body> as well —
+// and since the pair rule then hunts for the next </b>, a single <br> anywhere
+// above a bold word swallowed everything between them. That is what turned a
+// saved note into `**` on one line and `Some bold**` on the next, one restart
+// after it was written. Every tag name here is followed by this: a name ends at
+// whitespace, `/` or `>`, never mid-word.
+const NAME_END = '(?=[\\s/>])';
+
 // ---------------------------------------------------------------------------
 // Tables. The editor holds real <table> elements; on disk they become GitHub /
 // Obsidian-style pipe tables so they stay portable and readable in other apps.
@@ -191,16 +202,21 @@ export function htmlToMarkdown(html: string): string {
     const alt = (/alt=["']([^"']*)["']/i.exec(m)?.[1] || 'image').replace(/[[\]]/g, '');
     return `![${alt}](${src})`;
   });
-  md = md.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_m, level, text) => {
-    return `${'#'.repeat(Number(level))} ${text.replace(/<[^>]+>/g, '').trim()}\n`;
-  });
-  md = md.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, inner) => {
+  md = md.replace(new RegExp(`<a${NAME_END}[^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>`, 'gi'), (_m, href, inner) => {
     const label = inner.replace(/<[^>]+>/g, '').trim() || href;
     return `[${label.replace(/[[\]]/g, '')}](${href})`;
   });
-  md = md.replace(/<(b|strong)[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**');
-  md = md.replace(/<(i|em)[^>]*>([\s\S]*?)<\/\1>/gi, '*$2*');
-  md = md.replace(/<(s|del|strike)[^>]*>([\s\S]*?)<\/\1>/gi, '~~$2~~');
+  md = md.replace(new RegExp(`<(b|strong)${NAME_END}[^>]*>([\\s\\S]*?)<\\/\\1>`, 'gi'), '**$2**');
+  md = md.replace(new RegExp(`<(i|em)${NAME_END}[^>]*>([\\s\\S]*?)<\\/\\1>`, 'gi'), '*$2*');
+  md = md.replace(new RegExp(`<(s|del|strike)${NAME_END}[^>]*>([\\s\\S]*?)<\\/\\1>`, 'gi'), '~~$2~~');
+  // Headings come AFTER the inline rules, not before: the body is flattened to
+  // plain text here, so a heading converted first would take its own bold, its
+  // own links and its own emphasis to the grave with the tags. By this point
+  // whatever was inside is already markdown, and the strip only clears tags
+  // that have no markdown spelling.
+  md = md.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_m, level, text) => {
+    return `${'#'.repeat(Number(level))} ${text.replace(/<[^>]+>/g, '').trim()}\n`;
+  });
   // Blockquotes — after inline formatting so the inner text is already
   // markdown; each rendered line gets its own `> ` prefix.
   md = md.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_m, inner) => {
@@ -211,8 +227,8 @@ export function htmlToMarkdown(html: string): string {
   // Chromium contentEditable wraps every Enter-created line in its own <div>
   // (the first line stays bare), so it's the OPENING block tag that marks a
   // line break. <li> becomes a markdown bullet.
-  md = md.replace(/<li[^>]*>/gi, '\n- ');
-  md = md.replace(/<(?:div|p|ul|ol|blockquote)[^>]*>/gi, '\n');
+  md = md.replace(new RegExp(`<li${NAME_END}[^>]*>`, 'gi'), '\n- ');
+  md = md.replace(new RegExp(`<(?:div|p|ul|ol|blockquote)${NAME_END}[^>]*>`, 'gi'), '\n');
   md = md.replace(/<\/(?:p|div|li|ul|ol|blockquote)>/gi, '');
   md = md.replace(/<[^>]+>/g, '');
   md = decodeEntities(md);

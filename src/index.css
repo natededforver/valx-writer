@@ -94,21 +94,6 @@
   backdrop-filter: blur(20px) saturate(1.6);
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
 }
-/* Settings > Transparency toggle: forces glass surfaces fully opaque. */
-.vx-opaque .vx-glass,
-.vx-opaque .vx-glass-soft,
-.vx-opaque .vx-glass-strong {
-  background: var(--vx-surface);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-/* The sheet drops the blur too, but keeps its own background: that tint is not
-   transparency, it is the grouped-background shade the cards sit on, and
-   flattening it to --vx-surface would make white cards vanish into it. */
-.vx-opaque .vx-sheet {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
 .vx-glass-strong {
   background: var(--vx-surface);
   background: color-mix(in srgb, var(--vx-surface) 90%, transparent);
@@ -853,20 +838,39 @@ button:not([class*='translate-']):not([class*='rotate-']):not([class*='scale-'])
 .dark .vx-scrim { background: rgba(0, 0, 0, 0.5); }
 @keyframes vx-scrim-in { from { opacity: 0; } to { opacity: 1; } }
 
-/* The sheet is the "grouped background" — a shade off the surface — and the
+/* The panel is the "grouped background" — a shade off the surface — and the
    cards on it are the surface itself. That contrast is what separates one
    group of rows from the next on iOS; an outline round each card would do the
    same job, but drawing boxes is exactly the look this is replacing.
 
-   The spring-ish curve is the one iOS presents a sheet with: fast out of the
-   gate, long settle. A linear ease reads as a panel dragged by a machine. */
+   Material only: the entrance lives in .vx-panel-in, because the same surface
+   is presented from different edges and one class carrying both would mean the
+   material and the direction could never be changed independently. */
 .vx-sheet {
   background: color-mix(in srgb, var(--vx-hair) 42%, var(--vx-surface));
   backdrop-filter: blur(64px) saturate(1.8);
   -webkit-backdrop-filter: blur(64px) saturate(1.8);
-  animation: vx-sheet-in 0.34s cubic-bezier(0.32, 0.72, 0, 1);
 }
-@keyframes vx-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+/* Slides in from the right, on the spring-ish curve iOS presents a sheet with:
+   fast out of the gate, long settle. A linear ease reads as a panel being
+   dragged by a machine rather than thrown by a thumb. */
+.vx-panel-in { animation: vx-panel-in 0.34s cubic-bezier(0.32, 0.72, 0, 1); }
+@keyframes vx-panel-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* The grip on the screen edge that the menu panel comes from. Deliberately
+   faint — it is a hint that something is over there, not a control competing
+   with the prose for attention — and it grows a little under the thumb so a
+   press registers before the panel has begun to move. */
+.vx-drawer-grip {
+  opacity: 0.5;
+  background: color-mix(in srgb, var(--vx-hair) 60%, transparent);
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.vx-drawer-grip:active { opacity: 1; transform: translateY(-50%) scaleX(1.4); }
 
 /* One group of rows. The rounding is on the card and the rows inside are
    square, clipped by it — which is what stops a pressed first or last row from
@@ -888,4 +892,97 @@ button:not([class*='translate-']):not([class*='rotate-']):not([class*='scale-'])
   .vx-list-scroll::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Motion.
+
+   One easing curve for the whole app (--vx-ease), so a panel, a dialog and a
+   row all decelerate the same way — mismatched curves are what make an
+   interface feel assembled from parts. It is the iOS presentation curve: most
+   of the distance covered early, then a long settle.
+
+   Durations are short. On a phone, animation is feedback about what just
+   happened, not a performance; anything over ~300ms starts being something the
+   user waits through on the twentieth repetition rather than the first.
+--------------------------------------------------------------------------- */
+:root {
+  --vx-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --vx-fast: 0.18s;
+  --vx-base: 0.26s;
+}
+
+.vx-fade-in { animation: vx-fade-in var(--vx-base) ease-out; }
+@keyframes vx-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Dialogs: scale up from just under full size while fading in. Starting from
+   0.8 (what .vx-pop does) reads as a zoom on a full-screen phone dialog; 0.96
+   is enough to say "this arrived" without the lurch. */
+.vx-dialog-in { animation: vx-dialog-in var(--vx-base) var(--vx-ease); }
+@keyframes vx-dialog-in {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Rows in the note list, as they arrive. Each is offset by its index through
+   an inline --i so a freshly scanned workspace cascades in rather than
+   appearing all at once — capped, because a 300-note workspace must not spend
+   ten seconds dealing itself out. */
+.vx-row-in {
+  animation: vx-row-in var(--vx-base) var(--vx-ease) backwards;
+  animation-delay: calc(min(var(--i, 0), 12) * 22ms);
+}
+@keyframes vx-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Anything tappable: a press should be acknowledged on contact, not on the
+   result. Applied broadly on touch, where there is no hover state to do this
+   job and a tap that looks like nothing happened gets tapped again. */
+@media (pointer: coarse) {
+  button, [role="button"] {
+    transition: transform var(--vx-fast) var(--vx-ease), opacity var(--vx-fast) ease;
+  }
+  button:active, [role="button"]:active { transform: scale(0.97); }
+  /* Opt-out for anything too large for a scale to read as anything but a
+     glitch. (The drawer grip needs no entry here — its own :active rule is
+     more specific than button:active and already wins.) */
+  .vx-no-press:active { transform: none; }
+}
+
+/* Someone who has asked the system for less motion gets less motion: entrances
+   become instant rather than slow. Not a nicety — sliding panels are a genuine
+   trigger for motion sensitivity, and the setting exists to be honoured. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* The spacing dialog's sample paragraph. Set in the writing surface's own face
+   — tuning letter spacing against a preview in the UI typeface would be
+   measuring a different font than the one the setting applies to. */
+.vx-spacing-sample {
+  font-family: var(--vx-editor-font);
+  letter-spacing: 0;
+  word-spacing: 0;
+}
+
+/* The row that follows a finger during a touch drag. Lifted off the surface
+   with a shadow and tilted a hair, so it reads as picked up rather than as a
+   second row that has appeared. Anchored at the finger, not under it — a
+   thumb covers about 40px and the label has to stay readable. */
+.vx-drag-ghost {
+  transform: translate(-50%, -160%) rotate(-2deg);
+  background: color-mix(in srgb, var(--vx-surface) 96%, transparent);
+  color: inherit;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22), 0 0 0 1px color-mix(in srgb, var(--vx-hair) 70%, transparent);
+  animation: vx-drag-lift 0.16s var(--vx-ease);
+}
+@keyframes vx-drag-lift {
+  from { opacity: 0; transform: translate(-50%, -140%) rotate(0deg) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, -160%) rotate(-2deg) scale(1); }
 }

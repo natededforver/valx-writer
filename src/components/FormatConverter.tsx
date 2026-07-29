@@ -172,7 +172,7 @@ export function FormatConverter({ isOpen, onClose, notes, fileFormat, hasWorkspa
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="vx-pop vx-glass-strong vx-hairline rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="vx-dialog-in vx-glass-strong vx-hairline rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-neutral-900">
           <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold">
             <Repeat size={18} className="text-[#32CD32]" />

@@ -1,36 +1,36 @@
 // ---------------------------------------------------------------------------
-// Horizontal swipe navigation for the touch build (iA Writer for Android's
-// gesture, which is the whole reason the phone port doesn't need a tab bar).
+// Horizontal swipe navigation for the touch build — the gesture that lets the
+// phone drop the tab bar iA Writer for Android never had either.
 //
-// The hard part is that the swipe surface IS a contenteditable. A one-finger
-// horizontal drag over prose is how Android moves the caret and drags a
-// selection handle, so claiming it for navigation would make the editor feel
-// broken — text you meant to select would flip you to another note. Hence:
+// Three panels sit side by side, and a swipe moves between them in the
+// direction they lie:
 //
-//   • two fingers, anywhere (prose included)  -> always a swipe
-//   • one finger, but NOT starting on editable text (the note list, the
-//     page margins, the title bar)            -> also a swipe
+//     NOTE LIST  ◀──────  EDITOR  ──────▶  MENU PANEL
+//                swipe →          swipe ←
 //
-// So the list view gets the plain one-finger swipe a list should have, the
-// editor gets a two-finger gesture that no text interaction claims, and caret
-// dragging is never taken away.
+// An earlier version only accepted two-finger drags, plus one-finger drags
+// that started off editable text, on the theory that claiming a one-finger
+// horizontal drag over prose would break caret and selection dragging. In
+// practice it broke the gesture instead: the editor is nearly all editable
+// text, so in the one view where swiping matters most there was almost nowhere
+// left to start one, and two fingers is not a gesture anybody discovers.
 //
-// Screen-edge swipes are deliberately NOT used, natural as they'd feel: on
-// Android 10+ gesture navigation the edges are the system Back gesture and the
-// touch never reaches the webview at all.
+// A plain horizontal drag over text does nothing in an Android WebView — the
+// caret moves on tap, and selection dragging starts from the native handles,
+// which are drawn outside the page. So a one-finger swipe is free to take, and
+// it is taken here anywhere in the app.
 //
-// Recognition is strict: a swipe has to travel THRESHOLD px horizontally while
-// staying under SLOPE times that much vertically, so a diagonal flick during a
-// scroll doesn't register.
+// The guard that remains is on the shape of the gesture, not where it starts:
+// THRESHOLD px of horizontal travel with vertical drift under SLOPE times that.
+// A scroll that wanders sideways is not a swipe, and neither is a tap.
 // ---------------------------------------------------------------------------
 import { useEffect } from 'react';
 
-const THRESHOLD = 60;   // px of horizontal travel before a swipe counts
-const SLOPE = 0.6;      // max |dy| as a fraction of |dx| — keeps scrolls out
+const THRESHOLD = 64;   // px of horizontal travel before a swipe counts
+const SLOPE = 0.55;     // max |dy| as a fraction of |dx| — keeps scrolls out
 
-/** True for a touch that landed on text the user can put a caret in. */
-const onEditableText = (target: EventTarget | null): boolean =>
-  target instanceof Element && !!target.closest('[contenteditable="true"], input, textarea');
+/** Elements that own their own horizontal dragging and must keep it. */
+const CLAIMS_HORIZONTAL = 'input[type="range"], .vx-no-swipe';
 
 export interface SwipeHandlers {
   /** Swipe right-to-left (finger moves left) — "forward". */
@@ -49,19 +49,17 @@ export function useHorizontalSwipe(
     const el = target.current;
     if (!el || !enabled) return;
 
-    // Null between gestures and for any touch that didn't qualify at start —
-    // the qualification test runs once, on touchstart, so a gesture can't
-    // become a swipe halfway through by lifting a finger.
+    // Null between gestures, and for any touch that started somewhere a swipe
+    // must not begin. Multi-touch is dropped outright: a second finger means a
+    // pinch or a scroll-with-two, not navigation.
     let start: { x: number; y: number } | null = null;
 
     const onStart = (e: TouchEvent) => {
       const t = e.touches[0];
-      if (!t) return;
-      // A second finger landing mid-drag upgrades a one-finger drag that was
-      // rejected for being over prose — hence re-qualifying on every
-      // touchstart, and re-anchoring to where the two-finger gesture began.
-      const qualifies = e.touches.length === 2 || !onEditableText(e.target);
-      start = qualifies ? { x: t.clientX, y: t.clientY } : null;
+      if (!t || e.touches.length > 1) { start = null; return; }
+      const target = e.target;
+      if (target instanceof Element && target.closest(CLAIMS_HORIZONTAL)) { start = null; return; }
+      start = { x: t.clientX, y: t.clientY };
     };
 
     const onEnd = (e: TouchEvent) => {
@@ -79,7 +77,7 @@ export function useHorizontalSwipe(
     const onCancel = () => { start = null; };
 
     // Passive: the handlers never preventDefault (a swipe that also scrolled a
-    // little is still a swipe), and a non-passive touchmove listener on the
+    // little is still a swipe), and a non-passive touch listener over the
     // editor would cost scroll smoothness on a low-end phone for nothing.
     el.addEventListener('touchstart', onStart, { passive: true });
     el.addEventListener('touchend', onEnd, { passive: true });

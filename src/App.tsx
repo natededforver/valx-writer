@@ -14,7 +14,8 @@ import { FormatConverter } from './components/FormatConverter';
 import { SettingsModal } from './components/SettingsModal';
 import { DictionaryModal } from './components/DictionaryModal';
 import { ForbiddenModal } from './components/ForbiddenModal';
-import { LS_TRANSPARENCY, applyTransparency, applySpacing, prefOn } from './lib/prefs';
+import { SpacingModal } from './components/SpacingModal';
+import { applySpacing } from './lib/prefs';
 import { FilterState, JumpTarget } from './types';
 import { SearchHit } from './lib/search';
 import { linkHrefForNote } from './lib/noteLinks';
@@ -138,12 +139,8 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  // Re-apply saved appearance preferences on launch. Transparency ships off,
-  // so an unset key means opaque (prefOn handles the ship-defaults).
-  useEffect(() => {
-    applyTransparency(prefOn(LS_TRANSPARENCY));
-    applySpacing();
-  }, []);
+  // Re-apply the saved writing-surface spacing before the first paint.
+  useEffect(() => { applySpacing(); }, []);
 
   // Sync active note logic
   const activeNoteId = selectedNoteIds.length === 1 ? selectedNoteIds[0] : null;
@@ -181,32 +178,53 @@ export default function App() {
     }
   };
 
-  // --- touch: swipe left/right to walk the note list -------------------------
-  // The list order has to be the one on screen or the gesture lies about where
-  // it is taking you, so this reuses the sidebar's own filter+sort rather than
-  // ordering `notes` again. The sort key is read at gesture time, not at
-  // render: it lives in localStorage under the Sidebar's own state, and a
-  // snapshot taken on mount would go stale the moment the user re-sorts.
+  // --- touch: three panels, moved between by swiping -------------------------
+  //
+  //     NOTE LIST  ◀──────  EDITOR  ──────▶  MENU PANEL
+  //                swipe →          swipe ←
+  //
+  // Each panel enters from the side it lives on, so the gesture matches where
+  // the thing is. Swiping left on the list opens the selected note (the first
+  // one if nothing is selected — a swipe that did nothing because of an empty
+  // selection would read as the gesture being broken).
   const rootRef = useRef<HTMLDivElement>(null);
-  const stepNote = React.useCallback((delta: 1 | -1) => {
+
+  // Whether the editor's menu panel is on screen. Read from the DOM rather than
+  // mirrored into state: the panel is the Editor's to own (it is built from the
+  // Editor's own menu fragments), it covers the screen when open, and a boolean
+  // copied up here through an event would be a second source of truth that can
+  // disagree with the one that matters — which is what is actually drawn.
+  const menuPanelOpen = () => !!document.querySelector('.vx-menu-panel');
+  const setMenuPanel = (open: boolean) =>
+    window.dispatchEvent(new CustomEvent('valx-menu-panel', { detail: open }));
+
+  const openSelectedNote = React.useCallback(() => {
+    if (activeNoteId) { setMobileView('editor'); return; }
+    // The list order has to be the one on screen or the gesture lies about
+    // where it is taking you, so this reuses the sidebar's own filter+sort
+    // rather than ordering `notes` again. The sort key is read at gesture time,
+    // not at render: it lives in localStorage under the Sidebar's own state,
+    // and a snapshot taken on mount would go stale the moment the user re-sorts.
     const ordered = filterNotesForContainer(notes, filter, {
       sort: normalizeSort(localStorage.getItem('valx-note-sort')),
     });
     if (ordered.length === 0) return;
-    const at = activeNoteId ? ordered.findIndex(n => n.id === activeNoteId) : -1;
-    // No note open yet (swiping on the list) starts at the top; at either end
-    // the swipe stops rather than wrapping — wrapping past the last note reads
-    // as "it jumped somewhere random".
-    const next = at < 0 ? 0 : at + delta;
-    if (next < 0 || next >= ordered.length) return;
-    setSelectedNoteIds([ordered[next].id]);
+    setSelectedNoteIds([ordered[0].id]);
     setMobileView('editor');
   }, [notes, filter, activeNoteId]);
-  useHorizontalSwipe(rootRef, {
-    enabled: isTouchUI,
-    onLeft: React.useCallback(() => stepNote(1), [stepNote]),
-    onRight: React.useCallback(() => stepNote(-1), [stepNote]),
-  });
+
+  const onSwipeLeft = React.useCallback(() => {
+    if (menuPanelOpen()) return;                       // already at the far right
+    if (mobileView === 'list') { openSelectedNote(); return; }
+    if (activeNoteId) setMenuPanel(true);
+  }, [mobileView, activeNoteId, openSelectedNote]);
+
+  const onSwipeRight = React.useCallback(() => {
+    if (menuPanelOpen()) { setMenuPanel(false); return; }
+    if (mobileView === 'editor') { setMobileView('list'); setIsFullscreen(false); }
+  }, [mobileView]);
+
+  useHorizontalSwipe(rootRef, { enabled: isTouchUI, onLeft: onSwipeLeft, onRight: onSwipeRight });
 
   const handleSearchNavigate = (hit: SearchHit, query: string) => {
     jumpNonceRef.current += 1;
@@ -406,10 +424,7 @@ export default function App() {
           sidebarOpen={showSidebarEff}
           onToggleSidebar={handleToggleSidebar}
           onBack={() => setMobileView('list')}
-          // Android's workspace is fixed (<documents>/Valx — there is no folder
-          // picker to open), so File > Open Folder… is hidden rather than
-          // offering a re-pick that can only ever pick the same folder.
-          onOpenFolder={isAndroid ? undefined : selectWorkspace}
+          onOpenFolder={selectWorkspace}
           onOpenPreferences={() => setIsSettingsOpen(true)}
           className={`${editorVisible ? 'flex' : 'hidden'} md:flex w-full md:flex-1 min-w-0`}
         />
@@ -445,6 +460,10 @@ export default function App() {
       {/* Forbidden words — same event-driven pattern, fired by Words >
           Forbidden Words…. Both lists are global, so neither needs a note. */}
       <ForbiddenModal />
+
+      {/* Letter/word spacing, with a live sample. Same event-driven mount:
+          Format > Text spacing… fires 'valx-open-spacing'. */}
+      <SpacingModal />
 
       {syncToast && <div className="vx-toast">{syncToast}</div>}
     </div>

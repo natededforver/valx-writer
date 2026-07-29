@@ -17,6 +17,9 @@
 interface AndroidBridge {
   print(html: string, jobName: string): void;
   share(text: string, subject: string): void;
+  hasStorageAccess(): boolean;
+  requestStorageAccess(): void;
+  pickFolder(): void;
 }
 
 const bridge = (): AndroidBridge | undefined => (window as any).__valxAndroid;
@@ -73,4 +76,61 @@ export function shareText(text: string, subject = ''): boolean {
   if (!api) return false;
   api.share(text, subject);
   return true;
+}
+
+// --- workspace folder ------------------------------------------------------
+
+/** True once the user has granted access to storage outside the app's own. */
+export function hasStorageAccess(): boolean {
+  const api = bridge();
+  if (!api) return true; // no bridge, no restriction — desktop and the browser
+  try {
+    return api.hasStorageAccess();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send the user to the screen where storage access is granted.
+ *
+ * Android 11 replaced the runtime dialog for this with a Settings toggle, so
+ * there is no "allow" button to await — the app can only open the screen and
+ * find out afterwards whether it was flipped. Callers re-check on return
+ * rather than waiting on a promise that can never resolve.
+ */
+export function requestStorageAccess(): boolean {
+  const api = bridge();
+  if (!api) return false;
+  api.requestStorageAccess();
+  return true;
+}
+
+/**
+ * Open the system folder picker; resolves to the chosen path, or null if the
+ * user cancelled.
+ *
+ * The result comes back as a window event rather than a return value: a
+ * @JavascriptInterface method returns synchronously and a picker does not.
+ * The listener is one-shot and also detaches on a timeout, so an activity that
+ * dies without ever reporting (killed in the background, a provider with no
+ * result) leaves a resolved promise rather than a caller waiting forever.
+ */
+export function pickWorkspaceFolder(): Promise<string | null> {
+  const api = bridge();
+  if (!api) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (path: string | null) => {
+      if (done) return;
+      done = true;
+      window.removeEventListener('valx-folder-picked', onPicked);
+      clearTimeout(timer);
+      resolve(path);
+    };
+    const onPicked = (e: Event) => finish((e as CustomEvent).detail ?? null);
+    window.addEventListener('valx-folder-picked', onPicked);
+    const timer = setTimeout(() => finish(null), 5 * 60 * 1000);
+    api.pickFolder();
+  });
 }

@@ -41,9 +41,9 @@ export function DictionaryModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm" onMouseDown={() => setOpen(false)}>
+    <div className="vx-fade-in fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm" onMouseDown={() => setOpen(false)}>
       <div
-        className="vx-pop vx-glass-strong vx-hairline w-96 max-w-[92vw] max-h-[70vh] flex flex-col rounded-2xl shadow-2xl"
+        className="vx-dialog-in vx-glass-strong vx-hairline w-96 max-w-[92vw] max-h-[70vh] flex flex-col rounded-2xl shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-slate-100 dark:border-neutral-900">

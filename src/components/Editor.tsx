@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Note, JumpTarget } from '../types';
 import { plainText } from '../lib/search';
-import { RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, ChevronLeft, MoreHorizontal, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, SlidersHorizontal, BookA, SpellCheck, Languages, Ban } from 'lucide-react';
+import { RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, ChevronLeft, Share, Type, ImagePlus, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, SlidersHorizontal, BookA, SpellCheck, Languages, Ban } from 'lucide-react';
 import { BinIcon } from './BinIcon';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '../lib/desktop';
@@ -13,12 +13,10 @@ import { codeLangFromExt, highlightCode, buildPreviewDoc, PREVIEWABLE } from '..
 import { mediaDisplayHtml, previewMediaBase, readClipboardText } from '../lib/desktop';
 import {
   LS_LINE_COUNTER, LINE_COUNTER_EVENT, LS_WORDCOUNT, WORDCOUNT_EVENT,
-  LS_AUTOCAP, AUTOCAP_EVENT, LS_TRANSPARENCY, LS_TYPEWRITER, TYPEWRITER_EVENT,
+  LS_AUTOCAP, AUTOCAP_EVENT,
   LS_SPELLCHECK_ON, SPELLCHECK_EVENT,
   HISTORY_INTERVAL_EVENT, historyInterval, wordGoal, prefOn, setPref,
-  emitWordCount, applyTransparency,
-  LS_WORD_SPACING, LS_LETTER_SPACING, WORD_SPACING_RANGE, LETTER_SPACING_RANGE,
-  wordSpacing, letterSpacing, setSpacing,
+  emitWordCount,
 } from '../lib/prefs';
 import { LANGUAGES, spellLang, setSpellLang } from '../lib/spellcheck';
 import { Creator, CREATORS_EVENT, creatorMeName, setCreatorMeName, loadCreators, saveCreators, newCreatorId } from '../lib/creators';
@@ -118,21 +116,14 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
 
   // Menu-bar toggles. Each is mirrored in React state (so the menu shows a
   // checkmark) and in localStorage (so the modules that actually read it —
-  // RichTextEditor's auto-capitalize, the typewriter synth, the spellchecker —
+  // RichTextEditor's auto-capitalize, the spellchecker —
   // pick it up without being wired through props). setToggle keeps the three
   // steps in one place instead of five near-identical handlers.
   const [autoCap, setAutoCap] = useState(() => prefOn(LS_AUTOCAP));
-  const [transparency, setTransparency] = useState(() => prefOn(LS_TRANSPARENCY));
-  const [typewriter, setTypewriter] = useState(() => prefOn(LS_TYPEWRITER));
   const [spellOn, setSpellOn] = useState(() => prefOn(LS_SPELLCHECK_ON));
   // Spellcheck language. Not a setToggle case — it's a pick-one, and
   // setSpellLang already persists it and tells open editors to re-check.
   const [lang, setLang] = useState(() => spellLang());
-  // Spacing sliders. State mirrors localStorage only so the labels and handles
-  // track the drag; the text itself repaints from the CSS variables setSpacing
-  // writes, which is why dragging doesn't re-render the note.
-  const [wordSp, setWordSp] = useState(() => wordSpacing());
-  const [letterSp, setLetterSp] = useState(() => letterSpacing());
   const setToggle = (
     key: string,
     event: string,
@@ -416,6 +407,20 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const chromeVisible = topHover || anyChromeMenuOpen;
   const chromeShown = !isFullscreen || chromeVisible;
 
+  // The menu panel's open/closed state. The swipe that drives it lives in App
+  // (one recogniser for the whole app, so the three panels can't disagree
+  // about which gesture belongs to whom) and says so by event rather than by
+  // prop, which keeps the state owned by the component that draws the panel.
+  //
+  // Declared up here, above the `if (!note)` early return below, because a
+  // hook after an early return is only called on some renders — React counts
+  // them and refuses (error #310) the moment a note is opened.
+  useEffect(() => {
+    const onSet = (e: Event) => setOpenMenu((e as CustomEvent).detail ? 'sheet' : null);
+    window.addEventListener('valx-menu-panel', onSet);
+    return () => window.removeEventListener('valx-menu-panel', onSet);
+  }, []);
+
   // Touch has no mouseleave, so the revealed bar would never go away again on
   // a phone — focus mode would be a one-way trip out. It retreats on a timer
   // instead, held open for as long as a menu is down so a slow tap through
@@ -491,32 +496,19 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // two copies that drift apart.
   // ---------------------------------------------------------------------------
 
-  // Format > spacing. A global writing-surface setting, not per-note formatting,
-  // so it is offered with or without a note open. onMouseDown must NOT be
-  // prevented here the way the format buttons do it — that would kill the drag.
-  const spacingSliders = (
-    <div className="px-3 py-1.5 space-y-2.5 w-60" onClick={(e) => e.stopPropagation()}>
-      {([
-        ['Letter spacing', LS_LETTER_SPACING, LETTER_SPACING_RANGE, letterSp, setLetterSp],
-        ['Word spacing', LS_WORD_SPACING, WORD_SPACING_RANGE, wordSp, setWordSp],
-      ] as const).map(([label, key, range, value, setValue]) => (
-        <label key={key} className="block select-none">
-          <span className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
-            <span>{label}</span>
-            <span className="tabular-nums">{value.toFixed(1)}px</span>
-          </span>
-          <input
-            type="range"
-            min={range.min}
-            max={range.max}
-            step={range.step}
-            value={value}
-            onChange={(e) => setValue(setSpacing(key, parseFloat(e.target.value)))}
-            className="w-full accent-[#32CD32] cursor-pointer"
-          />
-        </label>
-      ))}
-    </div>
+  // Format > Text spacing… A global writing-surface setting, not per-note
+  // formatting, so it is offered with or without a note open. It used to be two
+  // bare sliders inside this dropdown; they are a dialog now (SpacingModal),
+  // because "2.4px" tells you nothing about a typographic measure and the note
+  // that would have shown you was behind the open menu. The dialog carries a
+  // sample paragraph that re-flows as the handle moves.
+  const spacingItem = (
+    <button
+      onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-open-spacing')); }}
+      className={itemCls}
+    >
+      <Type size={15} className="opacity-60" /> Text spacing…
+    </button>
   );
 
   // Words menu — spelling, language, dictionary. Every item is a global
@@ -583,13 +575,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       </button>
       <button onClick={() => setToggle(LS_LINE_COUNTER, LINE_COUNTER_EVENT, !lineCounter, setLineCounter)} className={itemCls}>
         <Check size={14} className={lineCounter ? 'text-[#32CD32]' : 'opacity-0'} /> Line numbers
-      </button>
-      <div className={dividerCls} />
-      <button onClick={() => setToggle(LS_TRANSPARENCY, '', !transparency, setTransparency, applyTransparency)} className={itemCls}>
-        <Check size={14} className={transparency ? 'text-[#32CD32]' : 'opacity-0'} /> Transparency
-      </button>
-      <button onClick={() => setToggle(LS_TYPEWRITER, TYPEWRITER_EVENT, !typewriter, setTypewriter)} className={itemCls}>
-        <Check size={14} className={typewriter ? 'text-[#32CD32]' : 'opacity-0'} /> Typewriter sounds
       </button>
     </>
   );
@@ -816,7 +801,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           {/* FORMAT — just the spacing sliders; the rest needs a selection. */}
           <div className="relative z-50 h-full flex items-center">
             <button onClick={() => setOpenMenu((m) => (m === 'format' ? null : 'format'))} onMouseEnter={() => openMenu && setOpenMenu('format')} className={`${menuBtnCls('format')} h-7`}>Format</button>
-            {openMenu === 'format' && <div className={menuPopCls}>{spacingSliders}</div>}
+            {openMenu === 'format' && <div className={menuPopCls}>{spacingItem}</div>}
           </div>
 
           <div className="relative z-50 h-full flex items-center">
@@ -1134,6 +1119,16 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       {!note.isTrash ? (
         <>
           <button onClick={() => { setOpenMenu(null); handleOpenFile(); }} className={itemCls}><FileUp size={15} className="opacity-60" /> Open File…<span className={shortcutCls}>{accel('Ctrl O')}</span></button>
+          {/* Import media. Everything imported lands in the workspace's
+              .attachments folder and is inserted at the caret — an image,
+              audio or video element for the kinds a page can play, a paperclip
+              chip for the rest (PDFs). The picker itself lives in
+              RichTextEditor, next to the function that does the copying. */}
+          {!note.isTrash && (
+            <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-import-media')); }} className={itemCls}>
+              <ImagePlus size={15} className="opacity-60" /> Import media…
+            </button>
+          )}
           {onOpenFolder && <button onClick={() => { setOpenMenu(null); onOpenFolder(); }} className={itemCls}><FolderOpen size={15} className="opacity-60" /> Open Folder…<span className={shortcutCls}>{accel('Ctrl Shift O')}</span></button>}
           <div className={dividerCls} />
           <button onClick={() => { onSaveNow?.(note.id); setOpenMenu(null); }} className={itemCls}><Check size={15} className="opacity-60" /> Save<span className={shortcutCls}>{accel('Ctrl S')}</span></button>
@@ -1221,7 +1216,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           <div className={dividerCls} />
         </>
       )}
-      {spacingSliders}
+      {spacingItem}
     </>
   );
   const viewMenuItems = (
@@ -1244,53 +1239,56 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     </>
   );
 
-  // --- the mobile sheet ------------------------------------------------------
-  // Every menu, in one grouped list that rises from the bottom. Driven off
-  // `openMenu === 'sheet'` rather than a state of its own, which is not a trick
-  // but the point: dozens of rows already end in setOpenMenu(null) to dismiss
-  // the dropdown they were written for, and going through the same state means
-  // each of them dismisses the sheet too, with no second code path to keep in
-  // step.
-  const sheetOpen = openMenu === 'sheet';
-  const sheetGroup = (label: string, body: React.ReactNode) => (
+  // --- the menu panel --------------------------------------------------------
+  // Every menu, in one grouped list that slides in from the right — the third
+  // of the three panels a swipe moves between (see App's swipe routing).
+  //
+  // Driven off `openMenu === 'sheet'` rather than a state of its own, which is
+  // not a trick but the point: dozens of rows already end in setOpenMenu(null)
+  // to dismiss the dropdown they were written for, and going through the same
+  // state means each of them closes the panel too, with no second code path to
+  // keep in step.
+  const panelOpen = openMenu === 'sheet';
+
+
+  const panelGroup = (label: string, body: React.ReactNode) => (
     <section className="mb-5">
       <h3 className="px-3 pb-1.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">{label}</h3>
       <div className="vx-sheet-card rounded-2xl overflow-hidden">{body}</div>
     </section>
   );
-  // Cards are inset from the sheet's edges: a rounded corner that runs off the
-  // side of the screen isn't a rounded corner, it's a clipped one.
-  const SHEET_PAD = 'px-3.5';
-  const mobileSheet = sheetOpen && (
+  const menuPanel = panelOpen && (
     <>
       <div className="vx-scrim fixed inset-0 z-[70]" onClick={() => setOpenMenu(null)} />
       <div
-        className={`vx-sheet fixed inset-x-0 bottom-0 z-[71] max-h-[82%] overflow-y-auto rounded-t-[26px] pt-2.5 ${SHEET_PAD} shadow-[0_-16px_48px_rgba(0,0,0,0.22)]`}
-        // Below the sheet's own bottom edge is the navigation bar, and the last
-        // row would otherwise sit under the gesture pill.
-        style={{ paddingBottom: `calc(1rem + var(--vx-inset-bottom, 0px))` }}
-        // The sheet opens over a focused editor; letting it take the focus
-        // would collapse the selection that Cut/Copy/Bold are about to act on.
+        className="vx-menu-panel vx-panel-in vx-sheet fixed inset-y-0 right-0 z-[71] w-[86%] max-w-sm overflow-y-auto px-3.5 shadow-[-16px_0_48px_rgba(0,0,0,0.22)]"
+        // The panel spans the screen top to bottom, so it owns both insets:
+        // the status bar above and the gesture pill below.
+        style={{
+          paddingTop: `calc(0.75rem + var(--vx-inset-top, 0px))`,
+          paddingBottom: `calc(1rem + var(--vx-inset-bottom, 0px))`,
+        }}
+        // Opens over a focused editor; letting it take the focus would collapse
+        // the selection that Cut/Copy/Bold are about to act on.
         onMouseDown={(e) => e.preventDefault()}
       >
-        {/* Grabber. Purely a signifier — the sheet is dismissed by the scrim,
-            the Done button, or picking anything in it — but iOS has taught
-            every phone user that this shape means "this panel goes away". */}
-        <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-black/20 dark:bg-white/25" />
-        <div className="px-1 pb-3 text-[17px] font-semibold text-slate-900 dark:text-white truncate">
-          {note.title || 'Untitled'}
+        <div className="flex items-center gap-2 pb-3">
+          <button
+            onClick={() => setOpenMenu(null)}
+            aria-label="Close menu"
+            className="-ml-1 p-1.5 rounded-lg text-[#32CD32] active:opacity-60 transition-opacity"
+          >
+            <ChevronRight size={22} />
+          </button>
+          <span className="text-[17px] font-semibold text-slate-900 dark:text-white truncate">
+            {note.title || 'Untitled'}
+          </span>
         </div>
-        {sheetGroup('File', fileMenuItems)}
-        {sheetGroup('Edit', editMenuItems)}
-        {!note.isTrash && sheetGroup('Format', formatMenuItems)}
-        {sheetGroup('Words', wordsMenuItems)}
-        {sheetGroup('View', viewMenuItems)}
-        <button
-          onClick={() => setOpenMenu(null)}
-          className="vx-sheet-card w-full rounded-2xl py-3.5 text-[17px] font-semibold text-[#32CD32] active:opacity-70 transition-opacity"
-        >
-          Done
-        </button>
+        {panelGroup('File', fileMenuItems)}
+        {panelGroup('Edit', editMenuItems)}
+        {!note.isTrash && panelGroup('Format', formatMenuItems)}
+        {panelGroup('Words', wordsMenuItems)}
+        {panelGroup('View', viewMenuItems)}
       </div>
     </>
   );
@@ -1378,10 +1376,13 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               <button onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit focus mode' : 'Focus mode'} className="p-2 shrink-0 rounded-lg text-[#32CD32] active:opacity-60 transition-opacity">
                 {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
               </button>
-              {/* The five menus, folded into one control. iOS has no menu bar;
-                  it has a ⋯ that presents a sheet, and that is what this is. */}
-              <button onClick={() => setOpenMenu((m) => (m === 'sheet' ? null : 'sheet'))} aria-label="More" className="p-2 -mr-0.5 shrink-0 rounded-lg text-[#32CD32] active:opacity-60 transition-opacity">
-                <MoreHorizontal size={22} />
+              {/* Share, in the trailing slot iOS keeps for it — the system
+                  share sheet, straight from the bar. The five menus used to be
+                  here behind a ⋯; they are a swipe left away now (or the
+                  drawer handle on the right edge), which leaves this the one
+                  action worth a permanent button. */}
+              <button onClick={handleNativeShare} aria-label="Share" className="p-2 -mr-0.5 shrink-0 rounded-lg text-[#32CD32] active:opacity-60 transition-opacity">
+                <Share size={20} />
               </button>
             </>
           )}
@@ -1394,7 +1395,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           )}
         </div>
 
-        {/* Menu bar. Pointer only — on touch these five live in the ⋯ sheet. */}
+        {/* Menu bar. Pointer only — on touch these five live in the menu panel. */}
         <div className={`h-8 ${isTouchUI ? 'hidden' : 'flex'} items-stretch px-1 gap-0.5 border-t border-black/5 dark:border-white/10 text-slate-600 dark:text-slate-300 relative`}>
           {openMenu && <div className="fixed inset-0 z-40" onMouseDown={() => setOpenMenu(null)} />}
 
@@ -1511,9 +1512,25 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         </div>
       </div>
 
-      {/* The touch menu sheet. A sibling of the chrome, not a child of it, so
+      {/* The touch menu panel. A sibling of the chrome, not a child of it, so
           it still presents while the chrome is hidden in focus mode. */}
-      {mobileSheet}
+      {menuPanel}
+
+      {/* Drawer handle for the menu panel. The panel's real gesture is a swipe
+          left, but a gesture with no visible affordance is a feature only the
+          person who built it knows about — so the edge it comes from carries a
+          grip, and the grip is also a button. Hidden while the panel is open
+          (it would sit under it) and in focus mode, where the whole point is
+          that nothing is on screen but the page. */}
+      {isTouchUI && !panelOpen && !isFullscreen && !!note && (
+        <button
+          onClick={() => setOpenMenu('sheet')}
+          aria-label="Open menu"
+          className="vx-drawer-grip absolute right-0 top-1/2 -translate-y-1/2 z-30 h-16 w-3.5 flex items-center justify-center rounded-l-lg active:opacity-100"
+        >
+          <span className="block h-8 w-[3px] rounded-full bg-slate-400/60 dark:bg-slate-500/60" />
+        </button>
+      )}
 
       {/* Find panel — opened from Edit menu / Ctrl+F, floats below the chrome. */}
       {isFindVisible && (

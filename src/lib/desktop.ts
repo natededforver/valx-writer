@@ -21,6 +21,7 @@ import { ATTACH_DIR, MEDIA_URL_PREFIX } from './format';
 import { canonicalMediaHtml, displayMediaHtml, displayMediaSrc } from './mediaUrl';
 import { KNOWN_EXT, serializeNote } from './exports';
 import { isAndroid } from './platform';
+import { hasStorageAccess, requestStorageAccess, pickWorkspaceFolder } from './android';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -92,20 +93,39 @@ async function setWorkspaceRoot(root: string): Promise<void> {
   if (workspaceRoot) await invoke('set_workspace_root', { root: workspaceRoot });
 }
 
+/**
+ * Pick a workspace folder.
+ *
+ * Android goes through the system folder picker rather than the dialog plugin,
+ * which binds only the *file* chooser. Reading a folder outside the app's own
+ * storage additionally needs All files access, so the grant is checked first
+ * and the user is sent to the Settings screen that offers it. That screen
+ * cannot be awaited — it isn't a dialog, it's another app — so this returns
+ * null and the next invocation, after they come back, finds the grant in place
+ * and goes straight to the picker.
+ */
 async function selectDirectory(): Promise<string | null> {
-  // Android has no directory picker to open — the dialog plugin only binds the
-  // file chooser, not SAF's tree picker — so the phone gets its one fixed
-  // workspace (<documents>/Valx, created by the backend) instead of a prompt.
-  // Same call site either way, so "Open Folder…" degrades to a no-op re-select
-  // rather than a dead menu item.
   if (isAndroid) {
-    const dir = await invoke<string>('default_workspace');
-    workspaceRoot = dir;
+    if (!hasStorageAccess()) {
+      requestStorageAccess();
+      return null;
+    }
+    const dir = await pickWorkspaceFolder();
+    if (!dir) return null;
+    await setWorkspaceRoot(dir);
     return dir;
   }
   const dir = await openDialog({ directory: true });
   if (typeof dir !== 'string' || !dir) return null;
   await setWorkspaceRoot(dir);
+  return dir;
+}
+
+/** The workspace the phone starts with, before the user picks one: a folder in
+ *  the app's own storage, which needs no permission. */
+async function defaultWorkspace(): Promise<string | null> {
+  const dir = await invoke<string>('default_workspace');
+  workspaceRoot = dir;
   return dir;
 }
 
@@ -436,6 +456,7 @@ export function installDesktopBridge(): void {
   if (!isTauri || (window as any).electronAPI) return;
   (window as any).electronAPI = {
     selectDirectory,
+    defaultWorkspace,
     readDirectory,
     createFolder,
     deleteFolder,

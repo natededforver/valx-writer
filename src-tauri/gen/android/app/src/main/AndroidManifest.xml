@@ -2,6 +2,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Workspace storage. The app keeps notes as ordinary .md files in a
+         folder the user picks, and scans that folder with std::fs from Rust —
+         real paths, not content:// URIs. On Android 11+ that is precisely what
+         scoped storage withholds without All files access, so the app asks for
+         it; the user grants it on a Settings screen, and until they do the
+         workspace stays in the app's own storage, which needs no permission at
+         all. Below 11 the ordinary read/write permission covers the same
+         ground, so it is declared with maxSdkVersion rather than requested
+         everywhere.
+
+         This rules out a Play Store listing without a declared exemption. The
+         app is distributed as an APK. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 

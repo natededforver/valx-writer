@@ -17,10 +17,6 @@ export const LS_LINE_COUNTER = 'valx-line-counter';
 export const LS_WORDCOUNT = 'valx-wordcount-widget';
 export const LS_WORDCOUNT_GOAL = 'valx-wordcount-goal';
 export const LS_HISTORY_INTERVAL = 'valx-history-interval';
-export const LS_TRANSPARENCY = 'valx-transparency';
-// Typewriter sounds own their key next to the synth that reads it.
-import { LS_TYPEWRITER } from './typewriter';
-export { LS_TYPEWRITER, TYPEWRITER_EVENT } from './typewriter';
 
 export const LINE_COUNTER_EVENT = 'valx-line-counter-changed';
 export const WORDCOUNT_EVENT = 'valx-wordcount-changed';
@@ -30,12 +26,10 @@ export const SPELLCHECK_EVENT = 'valx-spellcheck-changed';
 
 export const DEFAULT_HISTORY_INTERVAL = 10;
 
-// Defaults that ship ON: auto-capitalize, the word-count pill, the line
-// counter and the typewriter sounds are all part of the out-of-the-box writing
-// setup, so their absence from localStorage means "on" and only an explicit
-// 'false' turns them off.
-// Transparency ships OFF — the app opens as a solid, opaque window.
-const DEFAULT_ON = [LS_AUTOCAP, LS_WORDCOUNT, LS_LINE_COUNTER, LS_SPELLCHECK_ON, LS_TYPEWRITER];
+// Defaults that ship ON: auto-capitalize, the word-count pill and the line
+// counter are part of the out-of-the-box writing setup, so their absence from
+// localStorage means "on" and only an explicit 'false' turns them off.
+const DEFAULT_ON = [LS_AUTOCAP, LS_WORDCOUNT, LS_LINE_COUNTER, LS_SPELLCHECK_ON];
 
 /** Read a boolean preference, honouring its ship-default. */
 export function prefOn(key: string): boolean {
@@ -119,11 +113,4 @@ export function setSpacing(key: string, px: number): number {
   applySpacing();
   window.dispatchEvent(new CustomEvent(SPACING_EVENT, { detail: { key, value: v } }));
   return v;
-}
-
-/** Toggles the .vx-opaque class (index.css) that flattens the sidebar and
- *  window titlebar's glass effect to a solid background. Called on boot so the
- *  saved choice — opaque by default — is applied before the first paint. */
-export function applyTransparency(enabled: boolean): void {
-  document.documentElement.classList.toggle('vx-opaque', !enabled);
 }

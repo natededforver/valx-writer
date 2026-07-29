@@ -1,9 +1,9 @@
 // Sidebar header greeting — replaces the logo/wordmark for an immersive feel.
-// Time-based greetings (Good morning/afternoon/evening) only show once per day.
-// Otherwise a random quirky word shows, Minecraft-splash-text style — different
-// every login. Night-flavored words are drawn from a separate pool and only
-// mixed in after 7 PM (system-local hour, so this is naturally correct in
-// whatever timezone the device is set to — no extra timezone handling needed).
+// Two kinds, mixed: the time-of-day one (Good morning/afternoon/evening) and a
+// random quirky word, Minecraft-splash-text style. Night-flavored words are
+// drawn from a separate pool and only mixed in after 7 PM (system-local hour,
+// so this is naturally correct in whatever timezone the device is set to — no
+// extra timezone handling needed).
 
 export const QUIRKY_DAY: string[] = [
   'Hi.', 'Hello.', 'Hey.', 'Hey.. Hey you.', "It's time.", 'Welcome back.', 'Greetings.',
@@ -71,38 +71,37 @@ export const QUIRKY_NIGHT: string[] = [
   'Sleep is for the losers.', 'Treasure.opus',
 ];
 
-const GREETING_STORAGE_KEY = 'valx-greeting-shown-today';
+/** How often the time-of-day greeting wins over a quirky word, when the hour
+ *  has one to offer. It used to be once per calendar day, which in practice
+ *  meant almost never seeing it: one launch would spend the day's allowance and
+ *  every launch after it got a random word. A share of every launch keeps both
+ *  kinds in rotation, which is the point of having two. */
+const TIME_GREETING_SHARE = 0.35;
 
-/** Get today's date string in YYYY-MM-DD format for localStorage comparison */
-function getTodayKey(): string {
-  const date = new Date();
-  return date.toISOString().split('T')[0];
+/** The greeting for `date`'s hour, or null outside the named parts of the day
+ *  (after 9 PM there is no "good night" — that hour has its own word pool). */
+export function timeGreeting(date = new Date()): string | null {
+  const h = date.getHours();
+  if (h >= 5 && h <= 11) return 'Good morning.';
+  if (h >= 12 && h <= 16) return 'Good afternoon.';
+  if (h >= 17 && h <= 20) return 'Good evening.';
+  return null;
 }
 
-/** Greeting for the sidebar header, based on local hour. Time-based greetings
- *  only show once per day; otherwise shows a random quirky word — night-themed
- *  words only join the pool after 7 PM (system-local hour). */
-export function greeting(date = new Date()): string {
+/** Greeting for the sidebar header. Mostly a random quirky word; sometimes the
+ *  hour's own greeting. Night-themed words only join the pool after 7 PM.
+ *
+ *  `rand` is injectable so the mix is testable — the split is a behaviour worth
+ *  pinning, and a test that reaches for Math.random can only assert "it did not
+ *  crash". */
+export function greeting(date = new Date(), rand: () => number = Math.random): string {
+  const timed = timeGreeting(date);
+  if (timed && rand() < TIME_GREETING_SHARE) return timed;
+
   const h = date.getHours();
-  const todayKey = getTodayKey();
-  const lastShown = localStorage.getItem(GREETING_STORAGE_KEY);
-
-  // Determine if we should show a time-based greeting
-  let timeBasedGreeting: string | null = null;
-  if (h >= 5 && h <= 11) timeBasedGreeting = 'Good morning.';
-  else if (h >= 12 && h <= 16) timeBasedGreeting = 'Good afternoon.';
-  else if (h >= 17 && h <= 20) timeBasedGreeting = 'Good evening.';
-
-  // If we haven't shown a greeting today and it's a time-based period, show it
-  if (timeBasedGreeting && lastShown !== todayKey) {
-    localStorage.setItem(GREETING_STORAGE_KEY, todayKey);
-    return timeBasedGreeting;
-  }
-
-  // Otherwise show a random quirky word — night words only after 7 PM.
   const isNight = h >= 19 || h < 5;
   const pool = isNight ? QUIRKY_DAY.concat(QUIRKY_NIGHT) : QUIRKY_DAY;
-  return pool[Math.floor(Math.random() * pool.length)];
+  return pool[Math.floor(rand() * pool.length)];
 }
 
 const GREETING_CACHE_KEY = 'valx-greeting-cache';

@@ -65,11 +65,13 @@ export function useFileSystem() {
             (window as any).__valxRoot = handle.path;
             (window as any).electronAPI.setWorkspaceRoot?.(handle.path);
           } else if (isAndroid) {
-            // No picker on the phone, so first launch adopts <documents>/Valx
-            // instead of dropping the user on a "choose a folder" wall they
-            // could never satisfy. selectDirectory() returns that fixed path
-            // on Android (see lib/desktop.ts) and creates it backend-side.
-            const path = await (window as any).electronAPI.selectDirectory();
+            // First launch adopts a folder in the app's own storage rather
+            // than dropping the user on a "choose a folder" wall — picking one
+            // needs All files access, and asking for a system permission
+            // before the app has drawn a single note is the wrong first
+            // impression. File > Open Folder… moves the workspace anywhere
+            // once they want it moved.
+            const path = await (window as any).electronAPI.defaultWorkspace();
             if (path) {
               const handle = { kind: 'electron', path };
               setWorkspaceHandle(handle);

@@ -61,8 +61,7 @@ mark in the document itself, which words are **yours** and which words came from
 - Drop into the raw markdown source whenever you want to see the real text.
 - Code blocks arrive syntax-highlighted with their own gutter and line numbers.
 - Tables are edited in place: tab between cells, add and remove rows and columns.
-- Letter spacing and word spacing are sliders in the Format menu, so you can tune the page to your own eyes.
-- Typewriter sounds, if you like the noise. Off with one click if you don't.
+- Letter spacing and word spacing get their own dialog, with a sample paragraph that re-flows as you drag — set in the writing surface's own typeface, so what you tune is what you get.
 - Auto-capitalize handles the start of your sentences and stays out of everything else.
 - The caret is lime and sits on the text's own box, so you always know where you are — including on an empty line.
 
@@ -112,7 +111,7 @@ mark in the document itself, which words are **yours** and which words came from
 - Every note is a real file. Choose `.md`, `.txt` or `.html` and that is genuinely what lands on disk.
 - Convert one note — or an entire workspace — between `.md`, `.txt`, `.html` and `.docx` in a click.
 - Export to PDF, DOCX or ODT. Tables and file attachments survive the round trip.
-- Drag images, audio and video straight into a note. They are referenced from disk, never inflated into the note itself.
+- Drag images, audio and video straight into a note, paste them from the clipboard, or use **Import media** for GIFs and PDFs too. All of it is referenced from disk, never inflated into the note itself.
 
 <img src="site/feature-formats.svg" alt="The Convert Format dialog converting a whole workspace between markdown, plain text and HTML, and the files it writes to disk" width="820" />
 
@@ -188,18 +187,29 @@ different one — same notes, same files, same `.md` on disk.
 - **Focus mode.** The `⤢` button in the navigation bar drops everything but the
   page and the caret. Tap the top edge of the screen to bring the bar back; it
   retreats again a few seconds later.
-- **Swipe between notes.** Two fingers anywhere, or one finger anywhere that
-  isn't editable text, moves to the previous or next note in the list you are
-  looking at — in its order, not some other one. Caret dragging and text
-  selection are never taken over, and the screen edges are left to Android's
-  own back gesture.
-- **One `⋯` menu.** The five desktop menus are folded into a single sheet that
-  rises from the bottom, grouped the same way. Both are rendered from the same
-  code, so neither can quietly lose a command the other has.
-- **Share** goes to the system share sheet instead of the desktop's list of web
-  targets. The phone already knows which apps can take a note.
+- **Three panels, moved between by swiping.** The note list, the editor and the
+  menu sit side by side, and each enters from the side it lives on:
+
+  ```
+  NOTE LIST  ◀──────  EDITOR  ──────▶  MENU PANEL
+             swipe →          swipe ←
+  ```
+
+  The menu panel holds everything the desktop's five menus hold, grouped the
+  same way — both are rendered from the same code, so neither can quietly lose
+  a command the other has. It also has a grip on the right edge, for anyone who
+  would rather tap than swipe.
+- **Share** is the one permanent button in the navigation bar, and it opens the
+  system share sheet rather than the desktop's list of web targets. The phone
+  already knows which apps can take a note.
 - **Print** goes through Android's print dialog, which is also where "Save as
   PDF" lives.
+- **Long-press to drag.** HTML5 drag and drop is a mouse API a touchscreen
+  never triggers, so filing notes into folders and dragging them to the bin was
+  drawn but unreachable. Press and hold a note to lift it, then drop it on a
+  folder or on Trash.
+- **Import media** (in the menu panel) and clipboard paste both take images,
+  video, audio, GIFs and PDFs into the workspace's `.attachments` folder.
 
 **What is missing, and why**
 
@@ -214,11 +224,20 @@ different one — same notes, same files, same `.md` on disk.
 
 **Where the notes live**
 
-`Android/data/com.valx.prose_writer/files/Documents/Valx` — the app's own
-external storage. There is no folder picker on Android (the dialog plugin binds
-the file chooser, not a directory tree picker), so the workspace is fixed and
-created on first launch. Exports land in an `Exports` subfolder of it and the
-app says so in a toast, since there is no save dialog to ask with either.
+First launch adopts `Android/data/com.valx.prose_writer/files/Documents/Valx` —
+the app's own external storage, which needs no permission. **File > Open
+Folder…** moves the workspace anywhere on the device.
+
+That second part needs *All files access*. The app keeps notes as ordinary
+`.md` files and scans the folder with `std::fs` from Rust — real paths, not
+`content://` URIs — and reading real paths outside its own storage is exactly
+what scoped storage withholds on Android 11+. So the first attempt sends the
+user to the Settings screen where the grant is made; after that the system
+folder picker opens directly. **This rules out a Play Store listing without a
+declared exemption**, which is why the app ships as an APK.
+
+Exports land in an `Exports` subfolder of the workspace, and the app says so in
+a toast — Android has no save dialog to ask with.
 
 **Building it**
 

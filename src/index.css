@@ -368,8 +368,9 @@ body {
 }
 
 /* Slop detector — words pasted from outside (or marked AI / Other Websites)
-   are coloured along the sd-texture ramp. Static colour only: no animation and
-   no image, so thousands of marked words cost nothing per frame. */
+   are coloured along a ramp sampled from sd-texture.png: red/pink for AI,
+   purple for web and paste. Static colour only: no animation and no image, so
+   thousands of marked words cost nothing per frame. */
 .rich-editor mark.vx-slop {
   /* Marked words are painted by ORDINARY TEXT RENDERING, in an opaque colour.
      Nothing else. That is the whole point of this rule, so read on before
@@ -407,7 +408,7 @@ body {
 
      sd-texture.png is now unreferenced and drops out of the bundle. It is still
      in the repo; see the note in the handoff before deleting it. */
-  color: #c2185b;
+  color: var(--vx-slop-ink, #c11568);
   /* Belt and braces: some editor states set a fill colour, and a transparent
      fill is the one thing that could still hide these words. */
   -webkit-text-fill-color: currentColor;
@@ -415,31 +416,118 @@ body {
   background: none;
 }
 
-/* Walk the sd-texture ramp across the run — crimson through purple to indigo.
-   Marks wrap PER WORD, so successive words step along the ramp and a marked
-   sentence reads as one coloured sweep rather than a flat block. Eight steps,
-   the same cycle length the texture offsets used. */
-.rich-editor mark.vx-slop:nth-of-type(8n+1) { color: #c2185b; }
-.rich-editor mark.vx-slop:nth-of-type(8n+2) { color: #ad1457; }
-.rich-editor mark.vx-slop:nth-of-type(8n+3) { color: #8e24aa; }
-.rich-editor mark.vx-slop:nth-of-type(8n+4) { color: #7b1fa2; }
-.rich-editor mark.vx-slop:nth-of-type(8n+5) { color: #5e35b1; }
-.rich-editor mark.vx-slop:nth-of-type(8n+6) { color: #4527a0; }
-.rich-editor mark.vx-slop:nth-of-type(8n+7) { color: #3949ab; }
-.rich-editor mark.vx-slop:nth-of-type(8n+8) { color: #303f9f; }
+/* ── The ramps ──────────────────────────────────────────────────────────────
+   Every ramp below sets --vx-slop-ink and never `color`. The one rule above
+   turns the variable into paint, so the ramps never compete with the
+   Creators-menu rules further down and the specificity arithmetic that used to
+   be load-bearing here stops mattering. The literal in the var() fallback is
+   what a mark with an unrecognised data-slop paints as, so there is still no
+   path to an unpainted word.
 
-/* Dark workspace: the same ramp lifted clear of the background. The light
-   values sit at roughly 20–30% luminance and read as near-black on #0a0a0a —
+   Two things changed about the colours themselves.
+
+   FIRST: one ramp became three, split by provenance. The old ramp ran crimson
+   → indigo across every mark regardless of type, so an AI word and a pasted
+   word landed on unrelated points of it and the colour told you nothing about
+   where the text came from. Now AI keeps the texture's red/pink spine, and
+   web + paste share its purple — the same split the Creators menu makes.
+
+   SECOND, and this is what actually made the old ramp read as disjointed: the
+   steps are a CLOSED LOOP in HSL, not a line. :nth-of-type cycles, so step 8 is
+   always followed by step 1 — and in the old ramp that wrap was #303f9f →
+   #c2185b, a 104° hue jump from indigo straight back to crimson, landing on
+   every eighth word. Each loop below walks out through the saturated side of
+   its band and returns along a washed one, so the wrap is the same size as
+   every other step (~15° worst case) and a long marked run reads as a smear.
+
+   The bands are measured off sd-texture.png rather than guessed. Its hue mass
+   is 60% in 320–350 (crimson → rose → magenta), 22% in 290–320 (magenta →
+   purple) and a violet tail near 260; saturation runs high through the crimson
+   and noticeably lower through the purple, which is why these ramps do too. */
+
+/* AI — the texture's crimson spine, out to magenta at the turn and back
+   through rose. Red and pink throughout; it never reaches purple. */
+.rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+1) { --vx-slop-ink: #c3374a; }
+.rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+2) { --vx-slop-ink: #c3284f; }
+.rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+3) { --vx-slop-ink: #c51b59; }
+.rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+4) { --vx-slop-ink: #c11568; }
+.rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+5) { --vx-slop-ink: #ad1f74; }
+.rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+6) { --vx-slop-ink: #b53071; }
+.rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+7) { --vx-slop-ink: #bc3864; }
+.rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+8) { --vx-slop-ink: #bf405b; }
+
+/* Other websites + clipboard pastes — text that came from somewhere rather
+   than from something. One ramp for both: magenta-purple out to violet and
+   back, at the lower saturation the texture's purple bands actually carry. */
+.rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+1),
+.rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+1) { --vx-slop-ink: #ae3d90; }
+.rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+2),
+.rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+2) { --vx-slop-ink: #ab369f; }
+.rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+3),
+.rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+3) { --vx-slop-ink: #983ba0; }
+.rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+4),
+.rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+4) { --vx-slop-ink: #8843a3; }
+.rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+5),
+.rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+5) { --vx-slop-ink: #7848a8; }
+.rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+6),
+.rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+6) { --vx-slop-ink: #8e54ab; }
+.rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+7),
+.rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+7) { --vx-slop-ink: #a057a8; }
+.rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+8),
+.rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+8) { --vx-slop-ink: #af4ba5; }
+
+/* Human authors — the texture's cool tail, past the purple into indigo. Not
+   one of the three the brief named, but it can no longer ride the AI ramp now
+   that that ramp means "AI", and this is the band left over. */
+.rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+1) { --vx-slop-ink: #6a4ba0; }
+.rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+2) { --vx-slop-ink: #614aa5; }
+.rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+3) { --vx-slop-ink: #5649ab; }
+.rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+4) { --vx-slop-ink: #4f4dac; }
+.rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+5) { --vx-slop-ink: #545dab; }
+.rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+6) { --vx-slop-ink: #6362a7; }
+.rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+7) { --vx-slop-ink: #6f65a4; }
+.rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+8) { --vx-slop-ink: #7059a6; }
+
+/* Dark workspace: the same three loops lifted clear of the background. The
+   light values sit at roughly 40–50% lightness and read as mud on #0a0a0a —
    which is how "invisible marks" looked the time it really was a contrast
-   problem rather than a paint one. */
-.dark .rich-editor mark.vx-slop:nth-of-type(8n+1) { color: #f06292; }
-.dark .rich-editor mark.vx-slop:nth-of-type(8n+2) { color: #ec407a; }
-.dark .rich-editor mark.vx-slop:nth-of-type(8n+3) { color: #ba68c8; }
-.dark .rich-editor mark.vx-slop:nth-of-type(8n+4) { color: #ab47bc; }
-.dark .rich-editor mark.vx-slop:nth-of-type(8n+5) { color: #9575cd; }
-.dark .rich-editor mark.vx-slop:nth-of-type(8n+6) { color: #7e57c2; }
-.dark .rich-editor mark.vx-slop:nth-of-type(8n+7) { color: #7986cb; }
-.dark .rich-editor mark.vx-slop:nth-of-type(8n+8) { color: #5c6bc0; }
+   problem rather than a paint one. Same hues and the same loop, lightness up
+   to ~62–77%, saturation raised to hold the hue there. Every value in both
+   themes clears 4.5:1 against its background. */
+.dark .rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+1) { --vx-slop-ink: #eb7a89; }
+.dark .rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+2) { --vx-slop-ink: #ee6889; }
+.dark .rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+3) { --vx-slop-ink: #f0568f; }
+.dark .rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+4) { --vx-slop-ink: #ee4f9b; }
+.dark .rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+5) { --vx-slop-ink: #e458ac; }
+.dark .rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+6) { --vx-slop-ink: #e175a9; }
+.dark .rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+7) { --vx-slop-ink: #e283a3; }
+.dark .rich-editor mark.vx-slop[data-slop="ai"]:nth-of-type(8n+8) { --vx-slop-ink: #e58a9e; }
+
+.dark .rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+1),
+.dark .rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+1) { --vx-slop-ink: #e283c9; }
+.dark .rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+2),
+.dark .rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+2) { --vx-slop-ink: #e279d7; }
+.dark .rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+3),
+.dark .rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+3) { --vx-slop-ink: #d47adc; }
+.dark .rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+4),
+.dark .rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+4) { --vx-slop-ink: #c081d9; }
+.dark .rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+5),
+.dark .rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+5) { --vx-slop-ink: #b389dc; }
+.dark .rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+6),
+.dark .rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+6) { --vx-slop-ink: #c59ada; }
+.dark .rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+7),
+.dark .rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+7) { --vx-slop-ink: #d29cd8; }
+.dark .rich-editor mark.vx-slop[data-slop="web"]:nth-of-type(8n+8),
+.dark .rich-editor mark.vx-slop[data-slop="paste"]:nth-of-type(8n+8) { --vx-slop-ink: #de91d6; }
+
+.dark .rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+1) { --vx-slop-ink: #aa8ddd; }
+.dark .rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+2) { --vx-slop-ink: #a38ee1; }
+.dark .rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+3) { --vx-slop-ink: #9c91e3; }
+.dark .rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+4) { --vx-slop-ink: #9998e2; }
+.dark .rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+5) { --vx-slop-ink: #9ea5e0; }
+.dark .rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+6) { --vx-slop-ink: #ababde; }
+.dark .rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+7) { --vx-slop-ink: #b4acdd; }
+.dark .rich-editor mark.vx-slop[data-slop="human"]:nth-of-type(8n+8) { --vx-slop-ink: #b4a2dd; }
 
 /* No radius/padding rules and no paragraph glow any more. Both existed to prop
    up a background that no longer exists: the radii rounded the ends of a swatch,
@@ -449,16 +537,16 @@ body {
    not asking WKWebView's compositor for favours. */
 
 /* Creators menu — hiding a provenance type reverts those marks to plain text
-   (the colour goes; the words themselves stay). Human-author marks share the
-   same ramp as paste/AI/web. */
+   (the colour goes; the words themselves stay). */
 .vx-hide-paste .rich-editor mark.vx-slop[data-slop="paste"],
 .vx-hide-ai .rich-editor mark.vx-slop[data-slop="ai"],
 .vx-hide-web .rich-editor mark.vx-slop[data-slop="web"],
 .vx-hide-human .rich-editor mark.vx-slop[data-slop="human"] {
-  /* Four classes — a tie with the dark ramp rules (.dark + .rich-editor +
-     .vx-slop + :nth-of-type) and one more than the light ones, and this comes
-     later in the file, so it wins in both themes. Reverting colour is now the
-     whole job: there is no background left to clear. */
+  /* Four classes against the base rule's two, in either theme: the ramps set a
+     variable rather than `color`, so the only rule this has to outrank is the
+     one that reads it, and the dark ramp being heavier than the light one no
+     longer matters. Reverting colour is the whole job: there is no background
+     left to clear. */
   color: inherit;
   -webkit-text-fill-color: currentColor;
 }

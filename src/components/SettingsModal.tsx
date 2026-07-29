@@ -96,8 +96,9 @@ export function SettingsModal({
 
         <div className="p-5 space-y-7 overflow-y-auto">
           <p className="text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
-            Everything else lives in the menu bar — spelling and auto-capitalize under
-            Edit, word count, line numbers and appearance under View.
+            Everything else lives in the note's menus — spelling and auto-capitalize
+            under Words, word count, line numbers and appearance under View. On a
+            phone all of them are behind the ⋯ button.
           </p>
 
           {/* Word-count goal */}

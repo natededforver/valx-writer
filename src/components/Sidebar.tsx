@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Note, FilterState, Folder } from '../types';
 import { FileText, Hash, Moon, Sun, Plus, Folder as FolderIcon, Cloud, RefreshCw, Repeat, SlidersHorizontal, Search, X, ChevronDown, ChevronRight, ArrowDownUp, Bookmark, Check } from 'lucide-react';
 import { BinIcon } from './BinIcon';
 import { sessionGreeting } from '../lib/greeting';
+import { useTouchDrag } from '../lib/touchDrag';
+import { isTouchUI } from '../lib/platform';
 import { filterNotesForContainer, NoteDropdownList, BookmarkedNotesPanel } from './NoteList';
 import { NoteSort, NOTE_SORTS, SORT_LABELS, IS_DATE_SORT, normalizeSort, compareTitles } from '../lib/noteSort';
 
@@ -169,6 +171,26 @@ export function Sidebar({
 
   const [greet] = useState(() => sessionGreeting());
 
+  // Touch drag and drop. The desktop rows are HTML5-draggable, an API a
+  // touchscreen never triggers — so on a phone every one of these targets was
+  // drawn and unreachable. The same drops, driven by a long press instead.
+  const dragRootRef = useRef<HTMLDivElement>(null);
+  const touchDrag = useTouchDrag(dragRootRef, {
+    enabled: isTouchUI,
+    // A press on a note that is part of the current selection drags the whole
+    // selection; a press on any other note drags just that one, exactly like
+    // handleDragStart does for the mouse.
+    resolveIds: (id) => (selectedNoteIds.includes(id) ? selectedNoteIds : [id]),
+    onDropOnFolder: (ids, folderId) => onMoveNotesToFolder(ids, folderId),
+    onDropOnTrash: (ids) => onMoveNotesToTrash(ids),
+  });
+  const touchOver = (kind: 'folder' | 'trash', id: string) =>
+    touchDrag.over?.kind === kind && touchDrag.over.id === id;
+  const draggedTitle =
+    touchDrag.ids && touchDrag.ids.length > 0
+      ? notes.find((n) => n.id === touchDrag.ids![0])?.title || 'Untitled Note'
+      : '';
+
   const allNotes = useMemo(() => filterNotesForContainer(notes, { type: 'all' }, listOpts), [notes, listOpts]);
   // Same numeric collation as the note lists, so "10. Chapter" follows
   // "2. Chapter" in the folder rail too.
@@ -218,8 +240,23 @@ export function Sidebar({
     if (ok) onEmptyTrash();
   };
 
+  // One hairline, on the edge that meets the editor. The other three sides are
+  // the window, and drawing on them put a box around the whole app — most
+  // visibly on a phone, where this panel IS the screen.
   return (
-    <div className={`vx-glass-strong text-slate-700 dark:text-slate-200 flex flex-col h-full min-h-0 ${className}`}>
+    <div ref={dragRootRef} className={`vx-solid border-r border-black/[0.06] dark:border-white/[0.08] text-slate-700 dark:text-slate-200 flex flex-col h-full min-h-0 ${className}`}>
+      {/* The lifted row, following the finger. Rendered here rather than at the
+          drag source so it is never clipped by the scrolling list it came out
+          of, and pointer-events-none so it is not what elementFromPoint finds
+          under the finger — that has to be the target beneath it. */}
+      {touchDrag.ids && (
+        <div
+          className="vx-drag-ghost fixed z-[80] pointer-events-none px-3 py-2 rounded-xl text-sm font-medium max-w-[60vw] truncate"
+          style={{ left: touchDrag.x, top: touchDrag.y }}
+        >
+          {touchDrag.ids.length > 1 ? `${touchDrag.ids.length} notes` : draggedTitle}
+        </div>
+      )}
       {/* macOS: the sidebar is the window's left edge, so AppKit's traffic
           lights land here. Give them an empty title-bar-height strip of their
           own and let the whole column start below it — and make the strip a
@@ -316,7 +353,8 @@ export function Sidebar({
             {/* All Notes — expandable dropdown */}
             <div className="mb-1">
               <div
-                className={`flex items-center transition-colors ${dragOverFolderId === 'all' ? 'bg-slate-200 dark:bg-neutral-800' : ''}`}
+                data-drop-folder="all"
+                className={`flex items-center transition-colors ${dragOverFolderId === 'all' || touchOver('folder', 'all') ? 'bg-slate-200 dark:bg-neutral-800' : ''}`}
                 onDragOver={(e) => handleDragOver(e, 'all')}
                 onDragLeave={(e) => handleDragLeave(e, 'all')}
                 onDrop={(e) => handleDrop(e, 'all')}
@@ -399,7 +437,8 @@ export function Sidebar({
                   return (
                     <div key={folder.id}>
                       <div
-                        className={`group flex items-center transition-colors ${isDragOver ? 'bg-slate-200 dark:bg-neutral-800' : ''}`}
+                        data-drop-folder={folder.id}
+                        className={`group flex items-center transition-colors ${isDragOver || touchOver('folder', folder.id) ? 'bg-slate-200 dark:bg-neutral-800' : ''}`}
                         onDragOver={(e) => handleDragOver(e, folder.id)}
                         onDragLeave={(e) => handleDragLeave(e, folder.id)}
                         onDrop={(e) => handleDrop(e, folder.id)}
@@ -510,14 +549,15 @@ export function Sidebar({
             {/* Trash — expandable dropdown */}
             <div className="mt-5 mb-2">
               <div
-                className={`flex items-center transition-colors ${dragOverTrash ? 'bg-red-100 dark:bg-red-900/30' : ''}`}
+                data-drop-trash=""
+                className={`flex items-center transition-colors ${dragOverTrash || touchOver('trash', '') ? 'bg-red-100 dark:bg-red-900/30' : ''}`}
                 onDragOver={(e) => handleDragOver(e, 'trash')}
                 onDragLeave={(e) => handleDragLeave(e, 'trash')}
                 onDrop={(e) => handleDrop(e, 'trash')}
               >
                 <button
                   onClick={() => handleContainerClick({ type: 'trash' })}
-                  className={`flex-1 flex items-center gap-2 px-3 py-2 text-sm transition-colors ${isTrash ? 'bg-slate-900/8 dark:bg-white/8 text-slate-900 dark:text-white font-medium' : dragOverTrash ? 'text-red-600' : 'text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-slate-100 font-medium hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
+                  className={`flex-1 flex items-center gap-2 px-3 py-2 text-sm transition-colors ${isTrash ? 'bg-slate-900/8 dark:bg-white/8 text-slate-900 dark:text-white font-medium' : (dragOverTrash || touchOver('trash', '')) ? 'text-red-600' : 'text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-slate-100 font-medium hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
                 >
                   <Chevron expanded={expandedKeys.has('trash')} />
                   {/* No section icon here: the row already carries the 🗑️

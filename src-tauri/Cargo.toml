@@ -31,24 +31,30 @@ tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# OneDrive sync (src/onedrive.rs): blocking reqwest avoids pulling in a tokio
-# runtime — the OAuth loopback server is plain std::net on its own thread, and
-# every Graph call is one-shot from a tauri::command. sha2/getrandom/base64
-# are for PKCE (code_verifier/code_challenge) — hand-rolling that crypto is
-# exactly the kind of "simplification" that isn't worth the risk.
-# Spellchecking (src/spellcheck.rs). Pure-Rust Hunspell-compatible checker, so
-# there is no libhunspell to find or ship on Windows. The en_US dictionary is
-# baked into the binary with include_str! (see spellcheck.rs) — the app owns its
-# dictionary rather than deferring to whatever the OS webview happens to have.
+base64 = "0.22"
+
+# Desktop-only backend. Both of these are dead weight — or worse — on Android:
+#
+#   onedrive.rs   the OAuth redirect is a loopback TcpListener on 127.0.0.1,
+#                 which no mobile browser will ever come back to. Sync on
+#                 Android would need the custom-scheme/app-link flow instead,
+#                 so the whole module (and reqwest/url/sha2/getrandom with it)
+#                 is left out rather than shipped broken.
+#   spellcheck.rs the five dictionaries are include_str!'d into the binary —
+#                 8 MB of text per ABI in an APK, to duplicate a checker the
+#                 phone keyboard already has. Mobile keeps the webview's own
+#                 spellcheck instead (RichTextEditor's spellCheck attribute).
+#
+# The frontend needs no matching #ifdef: lib/spellcheck.ts already degrades to
+# "spelled correctly" when the invoke rejects, and the OneDrive UI is gated on
+# isTauri && !isAndroid in App.tsx.
+[target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
+tauri-plugin-single-instance = "2"
 spellbook = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 url = "2"
 sha2 = "0.10"
 getrandom = "0.2"
-base64 = "0.22"
-
-[target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
-tauri-plugin-single-instance = "2"
 
 # macOS only: one message to the underlying WKWebView to turn off its
 # Safari-style link preview (see lib.rs). Already in the tree via tauri/wry, so

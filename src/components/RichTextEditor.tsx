@@ -9,9 +9,9 @@ import { JumpTarget } from '../types';
 import { parseTrailingMdLink } from '../lib/noteLinks';
 import { slopWrapText, wordSpans, SlopType } from '../lib/slop';
 import { mediaDisplaySrc, mediaDisplayHtml, mediaCanonicalHtml, readClipboardText } from '../lib/desktop';
+import { isAndroid } from '../lib/platform';
 import { SlashMenu, SlashItem, SlashSyntaxItem, SlashMediaItem } from './SlashMenu';
 import { AttachmentItem } from '../hooks/useFileSystem';
-import { typewriterEnabled, playKey, playReturn } from '../lib/typewriter';
 import {
   paintMisspellings, suggest, wordAtPoint, addWord, ignoreWord, DICTIONARY_EVENT,
 } from '../lib/spellcheck';
@@ -946,6 +946,17 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   // .attachments/ (Electron) so the note holds a path, not a base64 blob. In
   // the browser (or before a folder is chosen) it falls back to a data: URL.
   const insertMedia = (file: File) => { void insertFile(file); };
+
+  // "Import media" (menu panel / slash menu). The file input lives here rather
+  // than beside the button that opens it: insertFile is what copies a file into
+  // .attachments and writes the element into the note, and it is local to this
+  // component. The button is a long way away in the tree, so it asks by event.
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onImport = () => mediaInputRef.current?.click();
+    window.addEventListener('valx-import-media', onImport);
+    return () => window.removeEventListener('valx-import-media', onImport);
+  }, []);
   async function insertFile(file: File) {
     if (!file) return;
     const kind =
@@ -1271,17 +1282,6 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Any keyboard activity dismisses the media remove button.
     hideMediaTool();
-    // Typewriter sounds (Settings toggle). Shift+Enter is the carriage-return
-    // bell + slide; every other actual typing key is a clack. Pure modifier /
-    // navigation keys stay silent. Read straight from localStorage like
-    // auto-capitalize does — no re-render needed to pick up the toggle.
-    if (typewriterEnabled()) {
-      if (e.key === 'Enter' && e.shiftKey) playReturn();
-      else if (
-        (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) ||
-        e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Tab'
-      ) playKey();
-    }
     // '/' menu owns navigation keys while open.
     if (slashPos) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -1548,12 +1548,33 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
     }
   };
 
+  /** Every file on the clipboard, from either place a browser puts them.
+   *
+   *  `files` is the obvious one and is what desktop Chromium fills. Android is
+   *  the reason for the second half: pasting an image from Gboard, Photos or a
+   *  chat app arrives on `items` with kind 'file' and leaves `files` empty, so
+   *  a paste handler that only reads `files` drops the picture and pastes
+   *  nothing — which is what "clipboard pasting multimedia doesn't work" was.
+   *  Reading both costs a loop and covers every source. */
+  const clipboardFiles = (data: DataTransfer): globalThis.File[] => {
+    const out = Array.from(data.files || []);
+    if (out.length === 0 && data.items) {
+      for (const item of Array.from(data.items)) {
+        if (item.kind !== 'file') continue;
+        const file = item.getAsFile();
+        if (file) out.push(file);
+      }
+    }
+    return out;
+  };
+
   const handlePaste = (e: React.ClipboardEvent) => {
     if (disabled) return;
-    
-    if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+
+    const pastedFiles = clipboardFiles(e.clipboardData);
+    if (pastedFiles.length > 0) {
       e.preventDefault();
-      Array.from(e.clipboardData.files).forEach(insertMedia);
+      pastedFiles.forEach(insertMedia);
       return;
     }
 
@@ -1611,11 +1632,34 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
         // backend) so it can own the language and offer "Add to Dictionary" —
         // neither of which WebView2's built-in checker exposes to the host.
         // Leaving the native one on would double-underline every word.
-        spellCheck={false}
+        //
+        // Android is the exception: spellcheck.rs is not compiled into that
+        // build (8 MB of dictionaries per ABI, to duplicate work the keyboard
+        // already does), so switching the native checker off there would leave
+        // the phone with no spellcheck at all. Gboard's is better on a phone
+        // anyway — it corrects as you type instead of only underlining.
+        spellCheck={isAndroid}
         className={`rich-editor w-full min-h-[60vh] text-lg leading-relaxed border-none outline-none focus:outline-none bg-transparent empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 dark:empty:before:text-slate-600 break-words ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
         style={{ whiteSpace: 'pre-wrap' }}
       />
       <div ref={caretRef} aria-hidden className="vx-caret" style={{ display: 'none' }} />
+      {/* Import media. `accept` is a hint, not a gate — Android file pickers
+          honour it loosely and some return a file the list never mentioned —
+          so insertFile still decides what an unknown type becomes (a paperclip
+          chip, which is also what a PDF gets). */}
+      <input
+        ref={mediaInputRef}
+        type="file"
+        multiple
+        accept="image/*,video/*,audio/*,.pdf,.gif"
+        className="hidden"
+        onChange={(e) => {
+          Array.from(e.target.files || []).forEach(insertMedia);
+          // Cleared so picking the same file twice in a row fires onChange the
+          // second time too.
+          e.target.value = '';
+        }}
+      />
 
       {/* Right-click menu — spelling first (the reason it exists), then the
           clipboard commands the native menu used to provide, then "Mark as"

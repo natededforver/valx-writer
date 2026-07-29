@@ -137,7 +137,11 @@ export function NoteDropdownList({
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNoteClick(e, note.id); } }}
             draggable
             onDragStart={(e) => handleDragStart(e, note.id)}
-            className={`group relative w-full text-left pl-3 pr-2 py-2 transition-colors cursor-pointer outline-none ${isSelected ? 'bg-slate-900/8 dark:bg-white/8' : 'hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
+            // The touch drag (lib/touchDrag.ts) finds its source by this
+            // attribute rather than through a prop chain, so a row only has to
+            // say what it is and the mouse path above stays untouched.
+            data-drag-note={note.id}
+            className={`vx-drag-source group relative w-full text-left pl-3 pr-2 py-2 transition-colors cursor-pointer outline-none ${isSelected ? 'bg-slate-900/8 dark:bg-white/8' : 'hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
           >
             {onToggleBookmark && (
               <button

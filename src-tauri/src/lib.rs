@@ -25,7 +25,12 @@ use tauri_plugin_fs::FsExt;
 
 #[cfg(target_os = "macos")]
 mod macos_menu;
+// Desktop-only backend — see the Cargo.toml note on why neither ships to
+// Android (loopback OAuth that can't come back; 8 MB of baked-in dictionaries
+// duplicating the phone keyboard's own checker).
+#[cfg(desktop)]
 mod onedrive;
+#[cfg(desktop)]
 mod spellcheck;
 
 #[derive(Serialize)]
@@ -128,16 +133,59 @@ fn read_directory(root: String) -> Result<DirListing, String> {
     Ok(DirListing { files, folders, missing: false })
 }
 
+// The workspace's own hidden directories. Allowing the root recursively does
+// not reach them: the scope is glob-matched, and `<root>/**` does not match a
+// path segment beginning with a dot. Notes therefore wrote fine while
+// attachments and the trash came back "forbidden path … not allowed on the
+// scope for `allow-mkdir`". They get their own patterns below.
+//
+// Must stay in sync with ATTACH_DIR in src/lib/format.ts and the trash folder
+// name in src/hooks/useNotes.ts.
+const HIDDEN_DIRS: [&str; 2] = [".attachments", ".trash"];
+
 #[tauri::command]
 fn set_workspace_root(app: tauri::AppHandle, root: String) -> Result<(), String> {
     let path = PathBuf::from(&root);
-    app.fs_scope()
-        .allow_directory(&path, true)
-        .map_err(|e| e.to_string())?;
-    app.asset_protocol_scope()
-        .allow_directory(&path, true)
-        .map_err(|e| e.to_string())?;
+    let fs_scope = app.fs_scope();
+    let asset_scope = app.asset_protocol_scope();
+
+    fs_scope.allow_directory(&path, true).map_err(|e| e.to_string())?;
+    asset_scope.allow_directory(&path, true).map_err(|e| e.to_string())?;
+
+    for hidden in HIDDEN_DIRS {
+        let dir = path.join(hidden);
+        // Created here so the pattern refers to something real and the first
+        // write doesn't have to. A failure is not fatal — a read-only or
+        // missing workspace is the caller's problem to report, not a reason to
+        // refuse to set the root.
+        let _ = fs::create_dir_all(&dir);
+        fs_scope.allow_directory(&dir, true).map_err(|e| e.to_string())?;
+        asset_scope.allow_directory(&dir, true).map_err(|e| e.to_string())?;
+    }
     Ok(())
+}
+
+/// The workspace folder to use when the platform has no folder picker.
+///
+/// Android's dialog plugin can open files but not directories — there is no
+/// SAF tree-picker binding — so the phone build never asks: it creates
+/// <documents>/Valx on first launch and treats that as the workspace forever.
+/// Documents rather than the private data dir so the notes are reachable from
+/// a file manager and survive as ordinary .md files. Creating the directory
+/// here (not from the renderer) also keeps it out of the fs plugin's static
+/// scope: allow_directory only accepts a path that already exists.
+#[tauri::command]
+fn default_workspace(app: tauri::AppHandle) -> Result<String, String> {
+    let base = app
+        .path()
+        .document_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(|e| e.to_string())?;
+    let dir = base.join("Valx");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let root = dir.to_string_lossy().to_string();
+    set_workspace_root(app, root.clone())?;
+    Ok(root)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -154,22 +202,36 @@ pub fn run() {
         }
     }));
 
-    let app = builder
+    let builder = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
-        .invoke_handler(tauri::generate_handler![
-            read_directory,
-            set_workspace_root,
-            onedrive::start_oauth,
-            onedrive::sync_onedrive,
-            spellcheck::spell_check,
-            spellcheck::spell_suggest,
-            spellcheck::spell_add_word,
-            spellcheck::spell_remove_word,
-            spellcheck::spell_user_words,
-        ])
+        .plugin(tauri_plugin_clipboard_manager::init());
+
+    // Two handler lists rather than one with #[cfg] rows: generate_handler! is
+    // a macro over a token list, so a cfg attribute inside it is not applied
+    // before the macro expands.
+    #[cfg(desktop)]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        read_directory,
+        set_workspace_root,
+        default_workspace,
+        onedrive::start_oauth,
+        onedrive::sync_onedrive,
+        spellcheck::spell_check,
+        spellcheck::spell_suggest,
+        spellcheck::spell_add_word,
+        spellcheck::spell_remove_word,
+        spellcheck::spell_user_words,
+    ]);
+    #[cfg(mobile)]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        read_directory,
+        set_workspace_root,
+        default_workspace,
+    ]);
+
+    let app = builder
         // macOS: closing the window must not end the process. Elsewhere in the
         // OS ⌘W closes a document and leaves the app running in the Dock, and a
         // writing app that vanished instead would look broken — worse, the user
@@ -186,12 +248,13 @@ pub fn run() {
                 }
             }
         })
-        .setup(|app| {
-            spellcheck::load_user_dictionary(app.handle());
+        .setup(|_app| {
+            #[cfg(desktop)]
+            spellcheck::load_user_dictionary(_app.handle());
             // macOS puts the standard commands in the system menu bar; the
             // app's own in-window menu bar covers the rest on every platform.
             #[cfg(target_os = "macos")]
-            macos_menu::install(app.handle());
+            macos_menu::install(_app.handle());
             // WKWebView's own link preview fires on a force-click and puts a
             // Safari result card over the note — it had been matching ordinary
             // words in the prose (a stray "sjd" resolved to a school's website)
@@ -203,7 +266,7 @@ pub fn run() {
             // BUILDER and these windows are declared in tauri.conf.json, hence
             // reaching the live webview through with_webview instead.
             #[cfg(target_os = "macos")]
-            if let Some(main) = app.get_webview_window("main") {
+            if let Some(main) = _app.get_webview_window("main") {
                 let _ = main.with_webview(|webview| {
                     use objc2::msg_send;
                     use objc2::runtime::AnyObject;

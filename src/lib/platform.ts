@@ -18,6 +18,22 @@
 export const isMac =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
 
+// Android build. The Tauri webview is a plain Chrome WebView, so the UA carries
+// "Android" exactly as the browser would — same synchronous-detection argument
+// as above applies, and it additionally lets `npm run dev` in a phone browser
+// exercise the mobile layout.
+export const isAndroid =
+  typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+
+// Anything driven by a finger: no hover, so the desktop's hover-to-reveal
+// chrome has to become tap-to-reveal, and horizontal swipes become navigation.
+// Kept separate from isAndroid so a touchscreen laptop behaves sensibly too.
+export const isTouchUI =
+  isAndroid ||
+  (typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches);
+
 // The traffic-light measurements live in hooks/useMacTitleBar.ts, next to the
 // fullscreen state they depend on — this module stays React-free so non-UI
 // callers (share.ts) can import it.

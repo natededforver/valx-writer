@@ -1,0 +1,11 @@
+<resources>
+    <!-- What the launcher and the app list call it. Deliberately NOT the
+         desktop bundle's "Valx Prose Writer": a launcher label much past a
+         dozen characters is ellipsised under the icon, so the long name
+         installed as "Valx Prose W…". Hand-maintained — `tauri android init`
+         writes this file from productName, but only when gen/android is
+         missing, which is the same reason the manifest beside it can carry
+         hand-written permissions. -->
+    <string name="app_name">"Valx Writer"</string>
+    <string name="main_activity_title">"Valx Writer"</string>
+</resources>

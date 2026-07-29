@@ -20,6 +20,8 @@ import { writeText as clipboardWriteText, readText as clipboardReadText, readIma
 import { ATTACH_DIR, MEDIA_URL_PREFIX } from './format';
 import { canonicalMediaHtml, displayMediaHtml, displayMediaSrc } from './mediaUrl';
 import { KNOWN_EXT, serializeNote } from './exports';
+import { isAndroid } from './platform';
+import { hasStorageAccess, requestStorageAccess, pickWorkspaceFolder } from './android';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -91,10 +93,39 @@ async function setWorkspaceRoot(root: string): Promise<void> {
   if (workspaceRoot) await invoke('set_workspace_root', { root: workspaceRoot });
 }
 
+/**
+ * Pick a workspace folder.
+ *
+ * Android goes through the system folder picker rather than the dialog plugin,
+ * which binds only the *file* chooser. Reading a folder outside the app's own
+ * storage additionally needs All files access, so the grant is checked first
+ * and the user is sent to the Settings screen that offers it. That screen
+ * cannot be awaited — it isn't a dialog, it's another app — so this returns
+ * null and the next invocation, after they come back, finds the grant in place
+ * and goes straight to the picker.
+ */
 async function selectDirectory(): Promise<string | null> {
+  if (isAndroid) {
+    if (!hasStorageAccess()) {
+      requestStorageAccess();
+      return null;
+    }
+    const dir = await pickWorkspaceFolder();
+    if (!dir) return null;
+    await setWorkspaceRoot(dir);
+    return dir;
+  }
   const dir = await openDialog({ directory: true });
   if (typeof dir !== 'string' || !dir) return null;
   await setWorkspaceRoot(dir);
+  return dir;
+}
+
+/** The workspace the phone starts with, before the user picks one: a folder in
+ *  the app's own storage, which needs no permission. */
+async function defaultWorkspace(): Promise<string | null> {
+  const dir = await invoke<string>('default_workspace');
+  workspaceRoot = dir;
   return dir;
 }
 
@@ -290,12 +321,34 @@ export async function inlineMediaAsDataUrls(html: string): Promise<string> {
 const writeExport = (path: string, data: Uint8Array | string) =>
   typeof data === 'string' ? writeTextFile(path, data) : writeFile(path, data);
 
+/**
+ * Where an export should be written.
+ *
+ * Desktop asks, with a save dialog. Android can't: the dialog plugin binds
+ * Android's file *chooser*, not its create-document flow, so save() there
+ * resolves to nothing and Export silently did nothing at all — the same shape
+ * of bug as Print. The phone writes into <workspace>/Exports instead and says
+ * where it went; that folder is under Documents, so a file manager or the
+ * share sheet of any other app can reach it.
+ */
+async function pickExportPath(title: string, ext: string, label: string): Promise<string | null> {
+  const name = `${sanitizeName(title || 'Note')}.${ext}`;
+  if (isAndroid) {
+    const root = currentRoot();
+    if (!root) return null;
+    const dir = `${root}/Exports`;
+    await mkdir(dir, { recursive: true }).catch(() => {});
+    return `${dir}/${name}`;
+  }
+  return (await saveDialog({
+    defaultPath: name,
+    filters: [{ name: label.toUpperCase(), extensions: [ext] }],
+  })) as string | null;
+}
+
 async function exportWithPandoc(htmlContent: string, format: string, defaultTitle: string) {
   const ext = KNOWN_EXT[format] || format;
-  const filePath = await saveDialog({
-    defaultPath: `${sanitizeName(defaultTitle || 'Note')}.${ext}`,
-    filters: [{ name: String(format).toUpperCase(), extensions: [ext] }],
-  });
+  const filePath = await pickExportPath(defaultTitle, ext, String(format));
   if (!filePath) return { success: false, canceled: true };
   try {
     const html = await inlineMediaAsDataUrls(htmlContent);
@@ -309,10 +362,7 @@ async function exportWithPandoc(htmlContent: string, format: string, defaultTitl
 // "Other format": any extension, saved as a portable text copy.
 async function exportCustom(htmlContent: string, rawExt: string, defaultTitle: string) {
   const ext = String(rawExt || '').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'txt';
-  const filePath = await saveDialog({
-    defaultPath: `${sanitizeName(defaultTitle || 'Note')}.${ext}`,
-    filters: [{ name: ext.toUpperCase(), extensions: [ext] }, { name: 'All Files', extensions: ['*'] }],
-  });
+  const filePath = await pickExportPath(defaultTitle, ext, ext);
   if (!filePath) return { success: false, canceled: true };
   try {
     const html = await inlineMediaAsDataUrls(htmlContent);
@@ -406,6 +456,7 @@ export function installDesktopBridge(): void {
   if (!isTauri || (window as any).electronAPI) return;
   (window as any).electronAPI = {
     selectDirectory,
+    defaultWorkspace,
     readDirectory,
     createFolder,
     deleteFolder,

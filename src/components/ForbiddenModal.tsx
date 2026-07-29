@@ -47,9 +47,9 @@ export function ForbiddenModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm" onMouseDown={() => setOpen(false)}>
+    <div className="vx-fade-in fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm" onMouseDown={() => setOpen(false)}>
       <div
-        className="vx-pop w-96 max-h-[70vh] flex flex-col rounded-xl bg-white dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 shadow-2xl"
+        className="vx-dialog-in vx-glass-strong vx-hairline w-96 max-w-[92vw] max-h-[70vh] flex flex-col rounded-2xl shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } }}
       >

@@ -3,19 +3,29 @@ import { useNotes } from './hooks/useNotes';
 import { useOneDrive } from './hooks/useOneDrive';
 import { isTauri, onOpenPreferences } from './lib/desktop';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { isMac } from './lib/platform';
+import { isMac, isAndroid, isTouchUI } from './lib/platform';
+import { useHorizontalSwipe } from './lib/swipe';
 import { dismissSplash } from './lib/splash';
+import { filterNotesForContainer } from './components/NoteList';
+import { normalizeSort } from './lib/noteSort';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
 import { FormatConverter } from './components/FormatConverter';
 import { SettingsModal } from './components/SettingsModal';
 import { DictionaryModal } from './components/DictionaryModal';
 import { ForbiddenModal } from './components/ForbiddenModal';
-import { LS_TRANSPARENCY, applyTransparency, applySpacing, prefOn } from './lib/prefs';
+import { SpacingModal } from './components/SpacingModal';
+import { applySpacing } from './lib/prefs';
 import { FilterState, JumpTarget } from './types';
 import { SearchHit } from './lib/search';
 import { linkHrefForNote } from './lib/noteLinks';
-import { ChevronLeft } from 'lucide-react';
+
+// OneDrive sync is desktop-only: the OAuth redirect is a loopback listener on
+// 127.0.0.1, which an Android browser hand-off never returns to, and the
+// backend module isn't even compiled into the phone build (see Cargo.toml).
+// Every entry point is gated on this so the phone shows no button that could
+// only fail.
+const desktopSync = isTauri && !isAndroid;
 
 // NoteList used to be its own rail; it now lives inside the Sidebar (merge of
 // the two panes). Only two mobile states remain — 'list' (sidebar visible) and
@@ -129,12 +139,8 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  // Re-apply saved appearance preferences on launch. Transparency ships off,
-  // so an unset key means opaque (prefOn handles the ship-defaults).
-  useEffect(() => {
-    applyTransparency(prefOn(LS_TRANSPARENCY));
-    applySpacing();
-  }, []);
+  // Re-apply the saved writing-surface spacing before the first paint.
+  useEffect(() => { applySpacing(); }, []);
 
   // Sync active note logic
   const activeNoteId = selectedNoteIds.length === 1 ? selectedNoteIds[0] : null;
@@ -149,6 +155,19 @@ export default function App() {
       setIsFullscreen(false);
     }
   }, [activeNoteId, selectedNoteIds.length]);
+
+  // A workspace switch invalidates the open note: its id belongs to the folder
+  // that was just left, so it resolves to nothing in the new one. The selection
+  // stays non-empty, which meant the effect above kept the phone on the editor
+  // — showing "Select or create a note" with no chrome and no way back but a
+  // swipe. Clearing the selection lets that same effect drop to the list.
+  //
+  // Keyed on the path rather than the handle object: the handle is rebuilt on
+  // every restore, and re-running this on each one would clear a selection the
+  // user still has.
+  useEffect(() => {
+    setSelectedNoteIds([]);
+  }, [workspaceHandle?.path]);
 
   const handleAddNote = () => {
     const currentFolderId = filter.type === 'folder' ? filter.folderId : null;
@@ -171,6 +190,54 @@ export default function App() {
       setIsFullscreen(false);
     }
   };
+
+  // --- touch: three panels, moved between by swiping -------------------------
+  //
+  //     NOTE LIST  ◀──────  EDITOR  ──────▶  MENU PANEL
+  //                swipe →          swipe ←
+  //
+  // Each panel enters from the side it lives on, so the gesture matches where
+  // the thing is. Swiping left on the list opens the selected note (the first
+  // one if nothing is selected — a swipe that did nothing because of an empty
+  // selection would read as the gesture being broken).
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Whether the editor's menu panel is on screen. Read from the DOM rather than
+  // mirrored into state: the panel is the Editor's to own (it is built from the
+  // Editor's own menu fragments), it covers the screen when open, and a boolean
+  // copied up here through an event would be a second source of truth that can
+  // disagree with the one that matters — which is what is actually drawn.
+  const menuPanelOpen = () => !!document.querySelector('.vx-menu-panel');
+  const setMenuPanel = (open: boolean) =>
+    window.dispatchEvent(new CustomEvent('valx-menu-panel', { detail: open }));
+
+  const openSelectedNote = React.useCallback(() => {
+    if (activeNoteId) { setMobileView('editor'); return; }
+    // The list order has to be the one on screen or the gesture lies about
+    // where it is taking you, so this reuses the sidebar's own filter+sort
+    // rather than ordering `notes` again. The sort key is read at gesture time,
+    // not at render: it lives in localStorage under the Sidebar's own state,
+    // and a snapshot taken on mount would go stale the moment the user re-sorts.
+    const ordered = filterNotesForContainer(notes, filter, {
+      sort: normalizeSort(localStorage.getItem('valx-note-sort')),
+    });
+    if (ordered.length === 0) return;
+    setSelectedNoteIds([ordered[0].id]);
+    setMobileView('editor');
+  }, [notes, filter, activeNoteId]);
+
+  const onSwipeLeft = React.useCallback(() => {
+    if (menuPanelOpen()) return;                       // already at the far right
+    if (mobileView === 'list') { openSelectedNote(); return; }
+    if (activeNoteId) setMenuPanel(true);
+  }, [mobileView, activeNoteId, openSelectedNote]);
+
+  const onSwipeRight = React.useCallback(() => {
+    if (menuPanelOpen()) { setMenuPanel(false); return; }
+    if (mobileView === 'editor') { setMobileView('list'); setIsFullscreen(false); }
+  }, [mobileView]);
+
+  useHorizontalSwipe(rootRef, { enabled: isTouchUI, onLeft: onSwipeLeft, onRight: onSwipeRight });
 
   const handleSearchNavigate = (hit: SearchHit, query: string) => {
     jumpNonceRef.current += 1;
@@ -245,26 +312,13 @@ export default function App() {
   useEffect(() => onOpenPreferences(() => setIsSettingsOpen(true)), []);
 
   return (
-    <div className={`relative flex h-full w-full overflow-hidden text-slate-800 dark:text-slate-200 font-sans ${isDarkMode ? 'dark' : ''} ${dragging ? 'select-none cursor-col-resize' : ''}`}>
-      {/* Mobile Header (visible only on small screens). The sidebar and the
-          note list are the same panel now, so the only switch is between the
-          sidebar/list view and the editor view. The 'list' view shows the
-          nav + notes + footer; the 'editor' view is the editor full-screen
-          with a back chevron. */}
-      {!isFullscreen && (
-        <div className="md:hidden absolute top-0 w-full h-14 bg-white dark:bg-black border-b border-slate-100 dark:border-neutral-900 flex items-center px-4 justify-between z-20 shadow-sm">
-          {mobileView === 'editor' && (
-            <button onClick={() => setMobileView('list')} className="p-2 -ml-2 text-[#32CD32] flex items-center">
-              <ChevronLeft size={24} />
-              <span className="font-medium">Notes</span>
-            </button>
-          )}
-          <div className="font-bold text-slate-900 dark:text-white absolute left-1/2 -translate-x-1/2">
-            {mobileView === 'list' ? 'Notes' : ''}
-          </div>
-          <div className="w-10"></div> {/* spacer */}
-        </div>
-      )}
+    <div ref={rootRef} className={`vx-safe relative flex h-full w-full overflow-hidden text-slate-800 dark:text-slate-200 font-sans ${isDarkMode ? 'dark' : ''} ${dragging ? 'select-none cursor-col-resize' : ''}`}>
+      {/* The mobile header used to live here: a 56px bar carrying a "Notes"
+          back chevron over the editor and the word "Notes" over the list. It is
+          gone. In the list view the Sidebar already names itself, and over the
+          editor it stacked a second bar on top of the editor's own — 100px of
+          chrome on a 360px screen, and the back chevron is now the first thing
+          in the editor's title bar (Editor's onBack, touch only). */}
 
       {/* Sidebar — the wrapper animates width; the inner sidebar keeps a fixed
           width so contents don't reflow mid-animation. With the merge, this
@@ -316,9 +370,9 @@ export default function App() {
           onOpenNote={(id) => { setSelectedNoteIds([id]); setMobileView('editor'); }}
           oneDriveConnected={oneDrive.connected}
           oneDriveSyncing={oneDrive.isSyncing}
-          onGoToOneDriveSettings={isTauri ? goToOneDriveSettings : undefined}
-          onSyncOneDrive={isTauri ? oneDrive.sync : undefined}
-          className={`${mobileView === 'list' ? 'flex' : 'hidden'} md:flex w-full md:w-[var(--rw)] pt-14 md:pt-0 shrink-0`}
+          onGoToOneDriveSettings={desktopSync ? goToOneDriveSettings : undefined}
+          onSyncOneDrive={desktopSync ? oneDrive.sync : undefined}
+          className={`${mobileView === 'list' ? 'flex' : 'hidden'} md:flex w-full md:w-[var(--rw)] shrink-0`}
         />
         </div>
       )}
@@ -382,9 +436,10 @@ export default function App() {
           listAttachments={listAttachments}
           sidebarOpen={showSidebarEff}
           onToggleSidebar={handleToggleSidebar}
+          onBack={() => setMobileView('list')}
           onOpenFolder={selectWorkspace}
           onOpenPreferences={() => setIsSettingsOpen(true)}
-          className={`${editorVisible ? 'flex' : 'hidden'} md:flex w-full md:flex-1 min-w-0 pt-14 md:pt-0`}
+          className={`${editorVisible ? 'flex' : 'hidden'} md:flex w-full md:flex-1 min-w-0`}
         />
 
       {/* Smart file-format converter */}
@@ -406,8 +461,8 @@ export default function App() {
         onClose={() => { setIsSettingsOpen(false); setHighlightOneDriveSettings(false); }}
         oneDriveConnected={oneDrive.connected}
         oneDriveAccount={oneDrive.account}
-        onConnectOneDrive={isTauri ? oneDrive.connect : undefined}
-        onDisconnectOneDrive={isTauri ? oneDrive.disconnect : undefined}
+        onConnectOneDrive={desktopSync ? oneDrive.connect : undefined}
+        onDisconnectOneDrive={desktopSync ? oneDrive.disconnect : undefined}
         highlightOneDrive={highlightOneDriveSettings}
       />
 
@@ -418,6 +473,10 @@ export default function App() {
       {/* Forbidden words — same event-driven pattern, fired by Words >
           Forbidden Words…. Both lists are global, so neither needs a note. */}
       <ForbiddenModal />
+
+      {/* Letter/word spacing, with a live sample. Same event-driven mount:
+          Format > Text spacing… fires 'valx-open-spacing'. */}
+      <SpacingModal />
 
       {syncToast && <div className="vx-toast">{syncToast}</div>}
     </div>

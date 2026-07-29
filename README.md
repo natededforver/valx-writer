@@ -34,7 +34,7 @@ WebView2 on Windows, WKWebView on macOS. The Windows installer is under 7 MB.
 
 ## Run instruction:
 
-<img src="site/run anyway - macOS screenshot.png" alt="macOS settings instructions" width="620" 
+<img src="site/run-anyway-macOS.png" alt="macOS settings instructions" width="620" 
 
 ## Why Valx
 

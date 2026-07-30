@@ -31,7 +31,7 @@
     "html2pdf.js": "^0.14.0",
     "idb-keyval": "^6.2.6",
     "jszip": "^3.10.1",
-    "lucide-react": "^0.546.0",
+    "lucide-react": "^1.27.0",
     "mammoth": "^1.12.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1"

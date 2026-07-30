@@ -1,0 +1,74 @@
+# Proves the tree still compiles — the check dependabot majors were missing.
+#
+# Before this existed the only workflows were CodeQL (build-mode: none, so it
+# never invokes a compiler) and Pages (which only ships site/). Nothing built
+# the app, so a breaking dependency bump could go green and merge: getrandom
+# 0.2 -> 0.4 in #16 dropped the free getrandom() this repo calls in
+# onedrive.rs, and no check would have caught it.
+#
+# Split by target rather than one job: the frontend is platform-agnostic and
+# cheapest on Linux, while the Rust side is checked on Windows because that is
+# what ships. Checking it on Linux would drag in the GTK/webkit2gtk stack that
+# only exists for a platform this app does not build for.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A superseded run tells us nothing once a newer commit is in flight.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # ci, not install: fails loudly when package-lock.json and package.json
+      # disagree, which is exactly the state a bad dependabot bump leaves.
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  rust:
+    name: Rust (cargo check)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      # check, not build: this gates correctness of the dependency graph and
+      # the code against it. Producing an installer is release.sh's job.
+      - name: Cargo check
+        run: cargo check --locked --all-targets
+        working-directory: src-tauri

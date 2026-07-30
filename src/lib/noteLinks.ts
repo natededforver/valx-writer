@@ -3,6 +3,8 @@
 // entity-escaping so appended links survive the htmlToMarkdown/markdownToHtml
 // round-trip the same way hand-written note links do).
 
+import { decodeHtmlEntities } from './htmlText';
+
 const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -59,7 +61,10 @@ export function extractNoteLinkHrefs(content: string): string[] {
   const re = /<a\b[^>]*\shref=["']([^"']+)["']/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(content))) {
-    hrefs.push(m[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
+    // One pass, so `&amp;amp;` decodes to the literal text `&amp;` — decoding
+    // `&amp;` first and the rest afterwards turned an href that merely spelled
+    // out an entity into the character it names, and the link stopped matching.
+    hrefs.push(decodeHtmlEntities(m[1]));
   }
   return hrefs;
 }

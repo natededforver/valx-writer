@@ -1,10 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { highlightCode, codeLangFromExt, buildPreviewDoc, PREVIEWABLE } from './codeHighlight';
+import { stripTags, decodeHtmlEntities } from './htmlText';
 
 test('highlightCode escapes HTML so notes cannot inject markup', () => {
   const out = highlightCode('<script>alert(1)</script>', 'html');
-  assert.ok(!/<script>/.test(out), 'raw <script> must not survive');
+  // Asserting `!/<script>/` only ruled out that one spelling — `<script >`,
+  // `<SCRIPT>` and `<script\n>` would all have passed it. The highlighter's own
+  // spans are the only markup allowed here, so strip those and require that
+  // what's left contains no '<' at all.
+  assert.ok(!stripTags(out).includes('<'), 'no raw markup survives the highlighter');
   assert.ok(out.includes('&lt;'), 'angle brackets are escaped');
 });
 
@@ -18,7 +23,7 @@ test('highlightCode marks keywords and strings', () => {
 
 test('highlightCode terminates and preserves length of plain text', () => {
   const plain = 'just words here';
-  const out = highlightCode(plain, 'js').replace(/<[^>]+>/g, '');
+  const out = stripTags(highlightCode(plain, 'js'));
   assert.equal(out, plain);
 });
 
@@ -54,9 +59,9 @@ test('md highlight fades syntax marks and keeps content meaningful', () => {
 test('md highlight escapes HTML and preserves text', () => {
   const src = '# <script>alert(1)</script>\nplain **line**';
   const out = highlightCode(src, 'md');
-  assert.ok(!/<script>/.test(out), 'no raw script tags');
+  assert.ok(!stripTags(out).includes('<'), 'no raw markup survives the highlighter');
   assert.equal(
-    out.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'),
+    decodeHtmlEntities(stripTags(out)),
     src,
     'stripping spans yields the original source'
   );

@@ -8,6 +8,7 @@
 
 import { SLOP_MARK_RE } from './slop';
 import { BYLINE_RE } from './byline';
+import { stripTags } from './htmlText';
 
 export type MediaKind = 'image' | 'audio' | 'video' | 'file';
 export interface MediaAttachment {
@@ -133,10 +134,15 @@ const NAME_END = '(?=[\\s/>])';
 // Tables. The editor holds real <table> elements; on disk they become GitHub /
 // Obsidian-style pipe tables so they stay portable and readable in other apps.
 // ---------------------------------------------------------------------------
+// A cell's text with the two characters that mean something to the pipe-table
+// syntax escaped. The backslash goes first, and must: escaping only `|` leaves
+// `\` and `\|` spelling the same thing on disk, so a cell ending in a backslash
+// silently ate the column boundary next to it. splitRow undoes exactly this
+// pair, and nothing else — see the note there about files written before it.
 const cellToText = (h: string): string =>
-  decodeEntities(
-    h.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
-  ).replace(/\|/g, '\\|');
+  decodeEntities(stripTags(h.replace(/<br\s*\/?>/gi, ' '), '').replace(/\s+/g, ' ').trim())
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|');
 
 /** A single editor <table> element -> a markdown pipe table. */
 export function tableHtmlToMarkdown(tableHtml: string): string {
@@ -154,11 +160,39 @@ export function tableHtmlToMarkdown(tableHtml: string): string {
 const isTableSeparator = (line: string | undefined): boolean =>
   !!line && /-/.test(line) && /\|/.test(line) && /^[\s|:\-]+$/.test(line);
 
+// The inverse of cellToText's escaping. Scanned character by character rather
+// than split by regex: a lookbehind for one backslash cannot tell `\|` (an
+// escaped pipe) from `\\|` (a literal backslash, then a real column boundary).
+//
+// Only `\|` and `\\` are treated as escapes. Any other backslash is literal, so
+// a cell holding a Windows path in a table written by an older build — which
+// escaped nothing but `|` — still reads back as `C:\temp`, not `C:temp`.
 const splitRow = (line: string): string[] => {
-  let s = line.trim();
-  if (s.startsWith('|')) s = s.slice(1);
-  if (s.endsWith('|')) s = s.slice(0, -1);
-  return s.split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, '|'));
+  const s = line.trim();
+  const cells: string[] = [];
+  let cur = '';
+  let endedOnBoundary = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\' && (s[i + 1] === '|' || s[i + 1] === '\\')) {
+      cur += s[i + 1];
+      i++;
+      endedOnBoundary = false;
+    } else if (ch === '|') {
+      cells.push(cur);
+      cur = '';
+      endedOnBoundary = true;
+    } else {
+      cur += ch;
+      endedOnBoundary = false;
+    }
+  }
+  cells.push(cur);
+  // `| a | b |` borders show up as empty cells at both ends; drop those, but
+  // keep a genuinely empty trailing cell in `| a | |`.
+  if (cells.length > 1 && s.startsWith('|')) cells.shift();
+  if (cells.length > 1 && endedOnBoundary) cells.pop();
+  return cells.map((c) => c.trim());
 };
 
 /** A markdown pipe table block -> editor <table> HTML (cells escaped). */
@@ -191,11 +225,11 @@ export function htmlToMarkdown(html: string): string {
   // Code blocks first — their content must ride through every transform below
   // untouched (a fence documenting `**x**` or a pipe table must stay literal).
   md = md.replace(/<pre[^>]*>\s*(?:<code[^>]*>)?([\s\S]*?)(?:<\/code>)?\s*<\/pre>/gi, (_m, body) =>
-    stash.put('P', '```\n' + body.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '') + '\n```'));
+    stash.put('P', '```\n' + stripTags(body.replace(/<br\s*\/?>/gi, '\n')) + '\n```'));
   // Tables convert to pipe-table markdown up front, then ride through the rest
   // of the pipeline as an opaque stash token.
   md = md.replace(/<table[\s\S]*?<\/table>/gi, (m) => stash.put('P', tableHtmlToMarkdown(m)));
-  md = md.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, (_m, body) => '`' + body.replace(/<[^>]+>/g, '') + '`');
+  md = md.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, (_m, body) => '`' + stripTags(body) + '`');
   md = md.replace(/<input[^>]*type=["']checkbox["'][^>]*\/?>[ \t]?/gi, (m) => (/\schecked\b/i.test(m) ? '- [x] ' : '- [ ] '));
   md = md.replace(/<hr[^>]*\/?>/gi, '\n---\n');
   md = md.replace(/<img[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, (m, src) => {
@@ -203,7 +237,7 @@ export function htmlToMarkdown(html: string): string {
     return `![${alt}](${src})`;
   });
   md = md.replace(new RegExp(`<a${NAME_END}[^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>`, 'gi'), (_m, href, inner) => {
-    const label = inner.replace(/<[^>]+>/g, '').trim() || href;
+    const label = stripTags(inner).trim() || href;
     return `[${label.replace(/[[\]]/g, '')}](${href})`;
   });
   md = md.replace(new RegExp(`<(b|strong)${NAME_END}[^>]*>([\\s\\S]*?)<\\/\\1>`, 'gi'), '**$2**');
@@ -215,12 +249,12 @@ export function htmlToMarkdown(html: string): string {
   // whatever was inside is already markdown, and the strip only clears tags
   // that have no markdown spelling.
   md = md.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_m, level, text) => {
-    return `${'#'.repeat(Number(level))} ${text.replace(/<[^>]+>/g, '').trim()}\n`;
+    return `${'#'.repeat(Number(level))} ${stripTags(text).trim()}\n`;
   });
   // Blockquotes — after inline formatting so the inner text is already
   // markdown; each rendered line gets its own `> ` prefix.
   md = md.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_m, inner) => {
-    const lines = inner.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').split('\n');
+    const lines = stripTags(inner.replace(/<br\s*\/?>/gi, '\n')).split('\n');
     return '\n' + lines.map((l: string) => `> ${l.trim()}`).join('\n') + '\n';
   });
   md = md.replace(/<br\s*\/?>/gi, '\n');
@@ -230,7 +264,7 @@ export function htmlToMarkdown(html: string): string {
   md = md.replace(new RegExp(`<li${NAME_END}[^>]*>`, 'gi'), '\n- ');
   md = md.replace(new RegExp(`<(?:div|p|ul|ol|blockquote)${NAME_END}[^>]*>`, 'gi'), '\n');
   md = md.replace(/<\/(?:p|div|li|ul|ol|blockquote)>/gi, '');
-  md = md.replace(/<[^>]+>/g, '');
+  md = stripTags(md);
   md = decodeEntities(md);
   md = md.replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '');
   md = stash.restore(md, 'S', (tag) => tag);
@@ -330,7 +364,7 @@ const MARKDOWN_EXT_RE = /\.(md|markdown|mdown|mkd)$/i;
 /** Word count of a note's HTML content (tags stripped). Shared by the editor's
  *  toolbar count and the note-list row so both agree. */
 export function wordCount(html: string): number {
-  return html.replace(/<[^>]*>?/gm, ' ').trim().split(/\s+/).filter(w => w.length > 0).length;
+  return stripTags(html, ' ').trim().split(/\s+/).filter(w => w.length > 0).length;
 }
 
 /** Which on-disk serialization an extension implies. */

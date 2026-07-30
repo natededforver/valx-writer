@@ -159,11 +159,31 @@ These are deliberate trade-offs, documented so nobody spends time reporting them
 ## Dependencies
 
 Dependency updates are applied on a best-effort basis and land in ordinary
-releases. If you find a known-vulnerable version pinned in
+releases; [`.github/dependabot.yml`](.github/dependabot.yml) opens the routine
+ones monthly. If you find a known-vulnerable version pinned in
 [`package.json`](package.json), [`package-lock.json`](package-lock.json) or
 [`src-tauri/Cargo.toml`](src-tauri/Cargo.toml), a normal public issue is the right
 place — unless you can show it is actually exploitable through Valx, in which case
 use the private advisory flow above.
+
+### Open transitive advisory: `glib` 0.18.5
+
+`src-tauri/Cargo.lock` pins `glib` 0.18.5, which carries an unsoundness
+advisory in the `Iterator`/`DoubleEndedIterator` impls for `VariantStrIter`.
+It is left in place deliberately, for two reasons:
+
+- **It cannot be moved from here.** `glib` arrives through `gtk` 0.18.2, which
+  requires `glib = "^0.18"`; `gtk` in turn comes from `tauri` (already on its
+  newest release). The advisory's fix lands in `glib` 0.20.4, which that
+  requirement rejects, and 0.18.5 is the last of the 0.18 line. The bump has to
+  happen upstream in gtk-rs and Tauri first.
+- **It is not in the published builds.** `gtk` is Tauri's Linux backend:
+  `cargo tree -i glib` finds nothing for the Windows or macOS targets, and both
+  released installers are built from those. Only a self-built Linux package
+  compiles `glib` at all, and Valx never constructs a `VariantStrIter`.
+
+Dependabot will raise the update automatically once Tauri moves; until then
+this entry is the reason the alert stays open.
 
 ## Licence note
 

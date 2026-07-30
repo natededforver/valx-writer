@@ -1,0 +1,59 @@
+# CodeQL, configured explicitly rather than by default setup.
+#
+# Default setup detected Kotlin in the repo and tried to autobuild it. The only
+# Kotlin here is the Android project Tauri generates under src-tauri/gen/android
+# — checked in, never hand-edited, and unbuildable in CI without the Android SDK
+# and NDK, so autobuild failed every run. That language is dropped below and the
+# generated tree is excluded from the languages that remain.
+#
+# NOTE: this file only runs once CodeQL is switched from Default to Advanced in
+# Settings -> Code security -> Code scanning. While default setup is on, GitHub
+# ignores it and reports a conflict.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays, 04:17 UTC — off the hour, where runner contention is lower.
+    - cron: '17 4 * * 1'
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript, rust]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          # Nothing here needs compiling to be analysed.
+          build-mode: none
+          config: |
+            paths-ignore:
+              - src-tauri/gen
+              - dist
+              - out
+              - node_modules
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:${{ matrix.language }}'

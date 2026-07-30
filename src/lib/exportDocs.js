@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { stripTags } from './htmlText';
 
 // DOCX/ODT generation. Ran in the Electron main process before the Tauri
 // migration; now runs in the renderer (JSZip is isomorphic) and returns
@@ -41,6 +42,15 @@ function escapeXml(text) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// Attribute values need both quote characters neutralised as well. This matters
+// for anything lifted out of a note: the media MIME type comes from the note's
+// own `data:...;base64,` URL via MEDIA_REGEX, whose `[^;]+` will happily carry a
+// quote — enough to close the attribute and write XML of its own into the
+// exported package. Numbers are coerced, so callers can pass sizes directly.
+function escapeXmlAttr(value) {
+  return escapeXml(String(value)).replace(/'/g, '&apos;');
 }
 
 const MEDIA_REGEX = /<(img|audio|video)[^>]+src=["']data:([^;]+);base64,([^"']+)["'][^>]*>/gi;
@@ -145,7 +155,7 @@ export async function generateDocx(title, htmlContent) {
     </w:p>`;
 
   const appendTextRun = (text) => {
-    const clean = text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ');
+    const clean = stripTags(text).replace(/&nbsp;/g, ' ');
     if (clean) {
       documentXml += `<w:r><w:t xml:space="preserve">${escapeXml(clean)}</w:t></w:r>`;
     }
@@ -178,7 +188,7 @@ export async function generateDocx(title, htmlContent) {
         const fitted = fitBox(wPx, hPx, EMU_PER_PX, MAX_WIDTH_EMU, MAX_HEIGHT_EMU);
         const cx = Math.round(fitted.w), cy = Math.round(fitted.h);
         const relId = `rId${100 + relCounter}`; // offset to avoid clashing with rId1 of .rels convention
-        rels.push(`<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${mediaFileName}"/>`);
+        rels.push(`<Relationship Id="${escapeXmlAttr(relId)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${escapeXmlAttr(mediaFileName)}"/>`);
         // Complete, spec-valid inline drawing (Word rejects documents missing nvPicPr/extent/docPr)
         documentXml += `<w:r><w:drawing>
           <wp:inline distT="0" distB="0" distL="0" distR="0">
@@ -228,7 +238,7 @@ export async function generateDocx(title, htmlContent) {
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 `;
   for (const [ext, type] of contentTypeDefaults) {
-    contentTypes += `  <Default Extension="${ext}" ContentType="${type}"/>\n`;
+    contentTypes += `  <Default Extension="${escapeXmlAttr(ext)}" ContentType="${escapeXmlAttr(type)}"/>\n`;
   }
   contentTypes += `  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 </Types>`;
@@ -270,7 +280,7 @@ export async function generateOdt(title, htmlContent) {
   let mediaCounter = 1;
 
   const appendText = (text) => {
-    const clean = text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ');
+    const clean = stripTags(text).replace(/&nbsp;/g, ' ');
     if (clean) contentXml += escapeXml(clean);
   };
 
@@ -289,7 +299,7 @@ export async function generateOdt(title, htmlContent) {
 
       const mediaFileName = `Pictures/media${mediaCounter}.${ext}`;
       zip.file(mediaFileName, base64Data, { base64: true });
-      manifest += `  <manifest:file-entry manifest:full-path="${mediaFileName}" manifest:media-type="${mimeType}"/>\n`;
+      manifest += `  <manifest:file-entry manifest:full-path="${escapeXmlAttr(mediaFileName)}" manifest:media-type="${escapeXmlAttr(mimeType)}"/>\n`;
 
       appendText(block.substring(lastIndex, match.index));
 
@@ -297,7 +307,7 @@ export async function generateOdt(title, htmlContent) {
         const { w: wPx, h: hPx } = await resolveTargetPx(match[0], mimeType, base64Data);
         const { w: wCm, h: hCm } = fitBox(wPx, hPx, CM_PER_PX, MAX_WIDTH_CM, MAX_HEIGHT_CM);
         contentXml += `<draw:frame draw:name="media${mediaCounter}" text:anchor-type="as-char" svg:width="${wCm.toFixed(2)}cm" svg:height="${hCm.toFixed(2)}cm">` +
-          `<draw:image xlink:href="${mediaFileName}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>` +
+          `<draw:image xlink:href="${escapeXmlAttr(mediaFileName)}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>` +
           `</draw:frame>`;
       } else {
         contentXml += escapeXml(`[Attached ${tagType}: ${mediaFileName}]`);

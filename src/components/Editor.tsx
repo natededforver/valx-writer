@@ -9,6 +9,7 @@ import { accel, isMac, isAndroid, isTouchUI } from '../lib/platform';
 import { useMacTitleBar, MENU_BAR_REVEAL } from '../hooks/useMacTitleBar';
 import { RichTextEditor } from './RichTextEditor';
 import { contentFromDisk, formatKind, htmlToMarkdown, markdownToHtml, wordCount } from '../lib/format';
+import { stripTags } from '../lib/htmlText';
 import { codeLangFromExt, highlightCode, buildPreviewDoc, PREVIEWABLE } from '../lib/codeHighlight';
 import { mediaDisplayHtml, previewMediaBase, readClipboardText } from '../lib/desktop';
 import {
@@ -347,7 +348,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const versionLabel = (t: number) =>
     new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const versionPreview = (c: string) =>
-    c.replace(/<[^>]*>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 48) || '(empty)';
+    stripTags(c, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 48) || '(empty)';
 
   // Find in note — reuses the RichTextEditor `jumpTo` channel that workspace
   // search already drives (select + scroll to the Nth occurrence), so there is
@@ -1005,7 +1006,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     md = md.replace(/<(b|strong)>(.*?)<\/\1>/gi, '**$2**');
     md = md.replace(/<(i|em)>(.*?)<\/\1>/gi, '*$2*');
     md = md.replace(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi, '![image]($1)');
-    md = md.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ');
+    md = stripTags(md).replace(/&nbsp;/g, ' ');
     const content = `# ${note.title || 'Untitled'}\n\n${md}`;
     const blob = new Blob([content], { type: 'text/markdown' });
     saveAs(blob, `${note.title || 'Note'}.md`);
@@ -1041,7 +1042,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   };
 
   const handleDownload = (format: 'txt' | 'html') => {
-    const plainText = note.title + '\n\n' + note.content.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ').replace(/<[^>]+>/g, '');
+    const plainText = note.title + '\n\n' + stripTags(note.content.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' '));
     let content = format === 'txt' ? plainText : `<h1>${note.title}</h1>\n${note.content}`;
     let mimeType = format === 'txt' ? 'text/plain' : 'text/html';
     let extension = format === 'txt' ? '.txt' : '.html';

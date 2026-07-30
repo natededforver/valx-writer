@@ -17,6 +17,7 @@ import { dropHistory } from '../lib/history';
 import mammoth from 'mammoth';
 import { generateDocx } from '../lib/exportDocs.js';
 import { inlineMediaAsDataUrls } from '../lib/desktop';
+import { stripTags } from '../lib/htmlText';
 
 function base64ToArrayBuffer(b64: string): ArrayBuffer {
   const bin = atob(b64);
@@ -84,7 +85,7 @@ const newId = (): string =>
     : Date.now().toString(36) + Math.random().toString(36).slice(2);
 
 const parseTags = (title: string, content: string): string[] => {
-  const plain = (content || '').replace(/<[^>]*>?/gm, ' ');
+  const plain = stripTags(content, ' ');
   const matches = `${title} ${plain}`.match(/(^|[\s​])#[\w-]+/g);
   return matches ? Array.from(new Set(matches.map((t) => t.replace(/^[\s​]*#/, '').toLowerCase()))) : [];
 };
@@ -165,10 +166,7 @@ export function useNotes() {
         stash.push(m);
         return `@@VXSLOP${stash.length - 1}@@`;
       });
-      temp = temp
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<[^>]*>?/gm, '')
-        .replace(/&nbsp;/g, ' ');
+      temp = stripTags(temp.replace(/<br\s*\/?>/gi, '\n')).replace(/&nbsp;/g, ' ');
       out = temp.replace(/@@VXSLOP(\d+)@@/g, (_, i) => stash[Number(i)]);
     } else out = note.content;
     return rewriteMediaToDisk(out, depth);

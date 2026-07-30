@@ -2,6 +2,8 @@
 // no DOM — so it can run against notes from any folder/tag filter and be
 // unit-tested without a browser.
 
+import { stripTags } from './htmlText';
+
 export interface SearchHit {
   noteId: string;
   title: string;
@@ -22,7 +24,7 @@ const SNIPPET_RADIUS = 40;
 
 /** Same normalization NoteList uses for its body preview text. */
 export function plainText(html: string): string {
-  return (html || '').replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+  return stripTags(html, ' ').replace(/\s+/g, ' ').trim();
 }
 
 const buildSnippet = (text: string, index: number, len: number) => {

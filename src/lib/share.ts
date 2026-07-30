@@ -1,5 +1,6 @@
 import { Note } from '../types';
 import { pasteChord } from './platform';
+import { decodeHtmlEntities, stripTags } from './htmlText';
 
 // ---------------------------------------------------------------------------
 // "Send to Others" targets. Every send copies the FULL plain text to the
@@ -12,17 +13,17 @@ import { pasteChord } from './platform';
 // non-ASCII text ~3x, and Windows mailto handlers cap the whole URL near 2,083.
 // ---------------------------------------------------------------------------
 
+// Line breaks and block ends become newlines, everything else that is markup
+// goes away, and only then are entities decoded — in one pass, so a note that
+// literally writes "&amp;lt;" keeps saying "&lt;" instead of collapsing to "<".
 export const htmlToPlain = (html: string): string =>
-  (html || '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+  decodeHtmlEntities(
+    stripTags(
+      (html || '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
+    )
+  );
 
 export const plainTextOfNote = (note: Pick<Note, 'title' | 'content'>): string =>
   (note.title || 'Untitled') + '\n\n' + htmlToPlain(note.content);

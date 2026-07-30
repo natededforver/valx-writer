@@ -45,6 +45,11 @@ interface SidebarProps {
   onToggleBookmark?: (id: string) => void;
   onSearchNavigate?: (hit: SearchHit, query: string) => void;
   onOpenNote?: (id: string) => void;
+  /** Merge `ids` into `targetId`, or into a new note when it is null. The
+   *  caller confirms before anything is written — a merge trashes its sources. */
+  onMergeNotes?: (ids: string[], targetId: string | null) => void;
+  /** The note the editor is showing, so the merge drop zone can name it. */
+  activeNoteId?: string | null;
   oneDriveConnected?: boolean;
   oneDriveSyncing?: boolean;
   /** Not connected — clicking the button should open Settings to the OneDrive
@@ -66,6 +71,7 @@ export function Sidebar({
   onRestoreFromTrash, onDeleteNotePerm, onEmptyTrash,
   isDarkMode, setIsDarkMode, workspaceHandle, selectWorkspace, fileFormat, onOpenFormatConverter, onOpenSettings,
   notes, selectedNoteIds, onSelectNotes, onAddNote, noteExtensions = {}, bookmarkedIds = [], onToggleBookmark, onSearchNavigate, onOpenNote,
+  onMergeNotes, activeNoteId = null,
   oneDriveConnected = false, oneDriveSyncing = false, onGoToOneDriveSettings, onSyncOneDrive,
   className = '',
 }: SidebarProps) {
@@ -188,13 +194,28 @@ export function Sidebar({
     resolveIds: (id) => (selectedNoteIds.includes(id) ? selectedNoteIds : [id]),
     onDropOnFolder: (ids, folderId) => onMoveNotesToFolder(ids, folderId),
     onDropOnTrash: (ids) => onMoveNotesToTrash(ids),
+    onDropOnNote: (ids, targetId) => onMergeNotes?.(ids, targetId),
+    onDropOnEditor: (ids) => onMergeNotes?.(ids, activeNoteId),
+    // Opening a note is a tap and only a tap now. It used to ride on the row's
+    // own click, which the browser synthesises from the very touch the drag is
+    // reading — so a hold that the drag had already claimed could still open
+    // the note underneath it. See the header of lib/touchDrag.ts.
+    onTap: (id) => onSelectNotes([id]),
   });
   const touchOver = (kind: 'folder' | 'trash', id: string) =>
     touchDrag.over?.kind === kind && touchDrag.over.id === id;
+  const mergeTargetId = touchDrag.over?.kind === 'note' ? touchDrag.over.id : null;
   const draggedTitle =
     touchDrag.ids && touchDrag.ids.length > 0
       ? notes.find((n) => n.id === touchDrag.ids![0])?.title || 'Untitled Note'
       : '';
+  // Two fingers mean merge, and the editor is one of the two things a merge can
+  // land on — but on a phone the editor is a different panel, off-screen while
+  // the list is up, so there is nothing there to aim at. This strip is the
+  // editor, standing in for it on the edge it lies beyond, and it exists only
+  // while a merge drag is actually in flight.
+  const mergeToEditor = !!touchDrag.ids && touchDrag.mode === 'merge' && !!onMergeNotes;
+  const activeTitle = notes.find((n) => n.id === activeNoteId)?.title || 'Untitled Note';
 
   const allNotes = useMemo(() => filterNotesForContainer(notes, { type: 'all' }, listOpts), [notes, listOpts]);
   // Same numeric collation as the note lists, so "10. Chapter" follows
@@ -259,7 +280,25 @@ export function Sidebar({
           className="vx-drag-ghost fixed z-[80] pointer-events-none px-3 py-2 rounded-xl text-sm font-medium max-w-[60vw] truncate"
           style={{ left: touchDrag.x, top: touchDrag.y }}
         >
+          {touchDrag.mode === 'merge' && <span className="text-[#32CD32]">Merge · </span>}
           {touchDrag.ids.length > 1 ? `${touchDrag.ids.length} notes` : draggedTitle}
+        </div>
+      )}
+      {/* The editor, as a target. Only while a merge drag is up — the rest of
+          the time it would be a permanent band down the side of the list for a
+          gesture that is not happening. */}
+      {mergeToEditor && (
+        <div
+          data-drop-editor=""
+          className={`fixed right-0 top-0 bottom-0 z-[70] w-16 flex items-center justify-center border-l-2 border-dashed transition-colors ${
+            touchDrag.over?.kind === 'editor'
+              ? 'bg-[#32CD32]/25 border-[#32CD32]'
+              : 'bg-[#32CD32]/10 border-[#32CD32]/40'
+          }`}
+        >
+          <span className="text-[11px] font-semibold text-[#2eb82e] dark:text-[#32CD32] [writing-mode:vertical-rl] rotate-180 max-h-[70vh] truncate px-1">
+            {activeNoteId ? `Merge into “${activeTitle}”` : 'Merge into a new note'}
+          </span>
         </div>
       )}
       {/* macOS: the sidebar is the window's left edge, so AppKit's traffic
@@ -398,6 +437,7 @@ export function Sidebar({
                     emptyLabel="No notes yet"
                     sort={sort}
                     onMoveToTrash={moveOneToTrash}
+                    mergeTargetId={mergeTargetId}
                   />
                 </div>
               )}
@@ -416,6 +456,7 @@ export function Sidebar({
                 onToggleExpanded={() => toggleExpanded('bookmarks')}
                 sort={sort}
                 onMoveToTrash={moveOneToTrash}
+                mergeTargetId={mergeTargetId}
               />
             )}
 
@@ -481,6 +522,7 @@ export function Sidebar({
                             emptyLabel="No notes in this folder"
                             sort={sort}
                             onMoveToTrash={moveOneToTrash}
+                            mergeTargetId={mergeTargetId}
                           />
                         </div>
                       )}
@@ -546,6 +588,7 @@ export function Sidebar({
                               emptyLabel="No notes with this tag"
                               sort={sort}
                               onMoveToTrash={moveOneToTrash}
+                              mergeTargetId={mergeTargetId}
                             />
                           </div>
                         )}

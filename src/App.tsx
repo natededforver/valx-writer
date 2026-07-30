@@ -175,6 +175,51 @@ export default function App() {
     setSelectedNoteIds([newNote.id]);
   };
 
+  // --- merging notes ---------------------------------------------------------
+  //
+  // A merge appends whole notes into another one and throws the originals in
+  // the bin. On the desktop that only ever happened at the end of a deliberate
+  // mouse drag onto the editor; on a phone it is now also a gesture — two
+  // fingers carrying a note, or one note dropped on top of another — and a
+  // gesture is something a thumb can produce by accident. So nothing is written
+  // until the dialog at the bottom of this file is answered. Every path in
+  // (Editor drop, note-on-note, the merge strip) goes through requestMerge, so
+  // there is exactly one place where a merge can be agreed to.
+  const [pendingMerge, setPendingMerge] = useState<{ ids: string[]; targetId: string | null } | null>(null);
+
+  const requestMerge = (sourceIds: string[], targetId: string | null) => {
+    // A note is never merged into itself, and a trashed note is not a source:
+    // it is already gone as far as the lists are concerned.
+    const ids = sourceIds.filter(id => id !== targetId && notes.some(n => n.id === id && !n.isTrash));
+    if (ids.length === 0) return;
+    setPendingMerge({ ids, targetId });
+  };
+
+  const runMerge = ({ ids, targetId }: { ids: string[]; targetId: string | null }) => {
+    setPendingMerge(null);
+    const sources = notes.filter(n => ids.includes(n.id));
+    if (sources.length === 0) return;
+    const body = sources.map(n => `<h1>${n.title}</h1>\n${n.content}`).join('\n\n');
+    const target = targetId ? notes.find(n => n.id === targetId) : null;
+    if (target) {
+      updateNote(target.id, { content: target.content + '\n\n' + body });
+      moveNotesToTrash(sources.map(n => n.id));
+      // Deliberately no selection change: the merge happened where the user was
+      // looking (the list, on a phone), and jumping them into the editor would
+      // be a second, unasked-for thing done by one drop.
+    } else {
+      const title = sources[0].title ? `Merged: ${sources[0].title}` : 'Merged Notes';
+      const currentFolderId = filter.type === 'folder' ? filter.folderId : null;
+      const newNote = addNoteWithContent(title, body, currentFolderId);
+      moveNotesToTrash(sources.map(n => n.id));
+      setSelectedNoteIds([newNote.id]);   // nothing else would show it exists
+    }
+  };
+
+  const mergeTargetTitle = pendingMerge?.targetId
+    ? (notes.find(n => n.id === pendingMerge.targetId)?.title || 'Untitled Note')
+    : null;
+
   // The single top arrow both hides the sidebar and drops into distraction-free
   // fullscreen writing — the two states are coupled (iA-Writer style). Hiding
   // with no note open would strand the user on the empty editor (no chrome in
@@ -368,6 +413,8 @@ export default function App() {
           onToggleBookmark={toggleBookmark}
           onSearchNavigate={handleSearchNavigate}
           onOpenNote={(id) => { setSelectedNoteIds([id]); setMobileView('editor'); }}
+          onMergeNotes={requestMerge}
+          activeNoteId={activeNoteId}
           oneDriveConnected={oneDrive.connected}
           oneDriveSyncing={oneDrive.isSyncing}
           onGoToOneDriveSettings={desktopSync ? goToOneDriveSettings : undefined}
@@ -406,27 +453,9 @@ export default function App() {
               setSelectedNoteIds([target.id]);
               return true;
             }}
-            onMergeNotes={(sourceIds) => {
-               if (activeNoteId && activeNote) {
-                  const notesToMerge = notes.filter(n => sourceIds.includes(n.id) && n.id !== activeNoteId);
-                  if (notesToMerge.length > 0) {
-                     const mergedContent = notesToMerge.map(n => `<h1>${n.title}</h1>\n${n.content}`).join('\n\n');
-                     updateNote(activeNoteId, { content: activeNote.content + '\n\n' + mergedContent });
-                     moveNotesToTrash(notesToMerge.map(n => n.id)); // move merged to trash
-                  }
-               } else {
-                  // Merge into a new note
-                  const notesToMerge = notes.filter(n => sourceIds.includes(n.id));
-                  if (notesToMerge.length > 0) {
-                     const mergedContent = notesToMerge.map(n => `<h1>${n.title}</h1>\n${n.content}`).join('\n\n');
-                     const title = notesToMerge[0].title ? `Merged: ${notesToMerge[0].title}` : 'Merged Notes';
-                     const currentFolderId = filter.type === 'folder' ? filter.folderId : null;
-                     const newNote = addNoteWithContent(title, mergedContent, currentFolderId);
-                     moveNotesToTrash(notesToMerge.map(n => n.id)); // move merged to trash
-                     setSelectedNoteIds([newNote.id]);
-                  }
-               }
-            }}
+            // Dropped on the editor: merge into the open note, or into a new
+            // one when there isn't one. Asks first — see requestMerge.
+            onMergeNotes={(sourceIds) => requestMerge(sourceIds, activeNoteId)}
             onAddNoteWithContent={(title, content) => {
               const currentFolderId = filter.type === 'folder' ? filter.folderId : null;
               const note = addNoteWithContent(title, content, currentFolderId);
@@ -481,6 +510,42 @@ export default function App() {
       {/* Letter/word spacing, with a live sample. Same event-driven mount:
           Format > Text spacing… fires 'valx-open-spacing'. */}
       <SpacingModal />
+
+      {/* Merge confirmation. The one thing standing between a two-finger drag
+          — or a note dropped a row off target — and two notes being rewritten
+          with a third thrown away. It names both sides and says where the
+          originals go, because "Merge" on its own does not tell you that. */}
+      {pendingMerge && (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="vx-pop bg-white dark:bg-black p-6 rounded-xl shadow-xl max-w-sm w-full border border-slate-100 dark:border-neutral-900">
+            <h3 className="text-lg font-bold mb-2 text-slate-900 dark:text-white">
+              {pendingMerge.ids.length === 1 ? 'Merge this note?' : `Merge ${pendingMerge.ids.length} notes?`}
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">
+              {mergeTargetTitle
+                ? <>{pendingMerge.ids.length === 1 ? 'Its' : 'Their'} contents are appended to <span className="font-semibold text-slate-700 dark:text-slate-300">“{mergeTargetTitle}”</span>.</>
+                : <>{pendingMerge.ids.length === 1 ? 'Its contents are moved into' : 'Their contents are combined into'} one new note.</>}
+            </p>
+            <p className="text-slate-400 dark:text-slate-500 text-xs mb-5">
+              {pendingMerge.ids.length === 1 ? 'The note you merged moves to Trash.' : 'The notes you merged move to Trash.'}
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                className="bg-[#32CD32] hover:bg-[#2eb82e] text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm"
+                onClick={() => runMerge(pendingMerge)}
+              >
+                Merge
+              </button>
+              <button
+                className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-2 font-medium"
+                onClick={() => setPendingMerge(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {syncToast && <div className="vx-toast">{syncToast}</div>}
     </div>

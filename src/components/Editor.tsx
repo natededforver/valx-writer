@@ -1367,6 +1367,10 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
 
   return (
     <div
+      // The mouse drops notes here through dataTransfer (handleDrop below); a
+      // finger has no such API, so the touch drag finds this pane by attribute
+      // instead (lib/touchDrag.ts). Both land on the same merge.
+      data-drop-editor={note.isTrash ? undefined : ''}
       className={`flex-1 bg-white dark:bg-black vx-editor-opaque flex flex-col h-full overflow-hidden relative ${[...hiddenAuthors].map((a) => 'vx-hide-' + a).join(' ')} ${className}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}

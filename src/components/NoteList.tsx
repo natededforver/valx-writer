@@ -76,6 +76,10 @@ interface NoteDropdownListProps {
    *  tap-sized path to the same place dragging a row onto Trash goes, which is
    *  the only path a phone had until now. */
   onMoveToTrash?: (id: string) => void;
+  /** The row a touch drag is currently hovering as a merge target, if it is in
+   *  this list. Every list renders every note it holds, so the id is matched
+   *  rather than passed down a path. */
+  mergeTargetId?: string | null;
 }
 
 /** Compact note rows rendered inside an expanded All Notes / group dropdown. */
@@ -92,6 +96,7 @@ export function NoteDropdownList({
   onRestore,
   onDeletePerm,
   onMoveToTrash,
+  mergeTargetId,
 }: NoteDropdownListProps) {
   const showCreated = sort.startsWith('created');
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
@@ -151,6 +156,7 @@ export function NoteDropdownList({
         const isSelected = selectedNoteIds.includes(note.id);
         const isBookmarked = bookmarkedSet.has(note.id);
         const ext = noteExtensions[note.id];
+        const isMergeTarget = mergeTargetId === note.id;
         return (
           <div
             key={note.id}
@@ -165,7 +171,11 @@ export function NoteDropdownList({
             // attribute rather than through a prop chain, so a row only has to
             // say what it is and the mouse path above stays untouched.
             data-drag-note={note.id}
-            className={`vx-drag-source group relative w-full text-left pl-3 pr-2 py-2 transition-colors cursor-pointer outline-none ${isSelected ? 'bg-slate-900/8 dark:bg-white/8' : 'hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
+            // …and a row is also a *target*: a note dropped onto another note
+            // merges the two. Not offered on trashed rows — merging into
+            // something already thrown away has no meaning.
+            data-drop-note={note.isTrash ? undefined : note.id}
+            className={`vx-drag-source group relative w-full text-left pl-3 pr-2 py-2 transition-colors cursor-pointer outline-none ${isMergeTarget ? 'bg-[#32CD32]/15 ring-1 ring-inset ring-[#32CD32]' : isSelected ? 'bg-slate-900/8 dark:bg-white/8' : 'hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
           >
             {/* Bookmark + bin, on the rows that are not in the trash already.
                 Both sit in one flex strip rather than each anchoring itself to
@@ -256,6 +266,7 @@ interface BookmarkedNotesPanelProps {
   onToggleExpanded?: () => void;
   sort?: NoteSort;
   onMoveToTrash?: (id: string) => void;
+  mergeTargetId?: string | null;
 }
 
 /** Foldable bookmark rail in the sidebar. */
@@ -271,6 +282,7 @@ export function BookmarkedNotesPanel({
   onToggleExpanded,
   sort = 'modified-desc',
   onMoveToTrash,
+  mergeTargetId,
 }: BookmarkedNotesPanelProps) {
   const bookmarkedSet = useMemo(() => new Set(bookmarkedIds), [bookmarkedIds]);
   // Bookmarks used to be pinned to recently-edited regardless of the sidebar's
@@ -304,6 +316,7 @@ export function BookmarkedNotesPanel({
             emptyLabel="No bookmarks yet"
             sort={sort}
             onMoveToTrash={onMoveToTrash}
+            mergeTargetId={mergeTargetId}
           />
         </div>
       )}

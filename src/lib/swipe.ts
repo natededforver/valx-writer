@@ -25,6 +25,7 @@
 // A scroll that wanders sideways is not a swipe, and neither is a tap.
 // ---------------------------------------------------------------------------
 import { useEffect } from 'react';
+import { touchGestureClaimed } from './gestureClaim';
 
 const THRESHOLD = 64;   // px of horizontal travel before a swipe counts
 const SLOPE = 0.55;     // max |dy| as a fraction of |dx| — keeps scrolls out
@@ -67,12 +68,20 @@ export function useHorizontalSwipe(
       start = null;
       if (!s) return;
       // Somebody nearer the touch already claimed this gesture — today that is
-      // the sidebar's long-press drag (lib/touchDrag.ts), whose touchend
-      // preventDefaults to swallow the click a drop would otherwise produce.
-      // Its listener is on a descendant, so it has already run by the time this
-      // one does, and a note carried sideways into a folder must not ALSO
-      // navigate to the next panel.
-      if (e.defaultPrevented) return;
+      // the sidebar's long-press drag (lib/touchDrag.ts). A note carried
+      // sideways into a folder is also 64px of horizontal travel, and it must
+      // not ALSO navigate to the next panel.
+      //
+      // This used to read `e.defaultPrevented`, on the strength of the drag
+      // preventDefaulting its touchend. That is no longer the right signal in
+      // either direction: the drag now preventDefaults *every* sequence that
+      // begins on a note row (to stop the browser synthesising a click that
+      // would open the note behind the gesture's back), while a drag Android
+      // cancels mid-flight has no touchend to prevent at all. The claim says
+      // what defaultPrevented only used to imply — a drag actually lifted, so
+      // this touch is spoken for — and a press on a row that never became one
+      // is still free to swipe, which is how you leave the list.
+      if (touchGestureClaimed()) return;
       const t = e.changedTouches[0];
       if (!t) return;
       const dx = t.clientX - s.x;

@@ -5,8 +5,22 @@
 #   .\scripts\release.ps1 -Publish    -> additionally publish to GitHub Releases
 #                                        (needs `gh auth login`)
 #
-# Output lands in out\release\ with the exact asset name the download page links
-# to: valx-prose-writer-setup.exe
+# Output lands in out\release\ under BOTH names a release has to carry, because
+# the two places that link a download disagree about which one they want:
+#
+#   Valx.Prose.Writer_<version>_x64-setup.exe   Tauri's own bundle name, and
+#       what site/download.html hardcodes per release. Every release since
+#       1.0.7 has carried it. (GitHub turns the spaces in the file tauri build
+#       actually writes into dots, which is where the dotted form comes from.)
+#   valx-prose-writer-setup.exe   the stable name README.md points at through
+#       /releases/latest/download/, a URL that never needs editing. This script
+#       produced it from the start and nothing ever uploaded it, so both README
+#       links 404'd from 1.0.7 until 1.1.0 fixed it.
+#
+# Uploading both costs a duplicated 6 MB and makes both links work. Collapsing
+# to one name is the better end state — point download.html at /latest/ too —
+# but that is a change to a published page, not something to do inside a
+# release script.
 #
 # This drives `tauri build`. The previous version of this script called
 # electron-forge and electron-builder, which stopped being able to run when the
@@ -56,9 +70,14 @@ $setup = Get-ChildItem $nsisDir -Filter '*-setup.exe' -ErrorAction SilentlyConti
 if (-not $setup) { throw "No installer produced under $nsisDir" }
 
 New-Item -ItemType Directory -Force out\release | Out-Null
+# Dots, not the spaces tauri build writes: GitHub substitutes them on upload,
+# so naming the file this way locally is what makes the local artifact and the
+# release asset the same string. See the header.
+$versioned = "out\release\Valx.Prose.Writer_${version}_x64-setup.exe"
+Copy-Item $setup.FullName $versioned
 Copy-Item $setup.FullName 'out\release\valx-prose-writer-setup.exe'
 
-Step "Release artifacts (v$version)"
+Step "Release artifacts ($version)"
 Get-ChildItem out\release | ForEach-Object { '{0}  {1:N1} MB' -f $_.Name, ($_.Length / 1MB) }
 
 if ($Publish) {
@@ -66,7 +85,11 @@ if ($Publish) {
   if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     throw "gh not found — install the GitHub CLI and run 'gh auth login'"
   }
-  gh release create "v$version" `
+  # Bare version, no leading v: 1.0.7 through 1.0.10 are all tagged that way and
+  # site/download.html builds its URLs from it. The v-prefixed form this script
+  # used to pass would have created a second, parallel tag series.
+  gh release create "$version" `
+    $versioned `
     'out\release\valx-prose-writer-setup.exe' `
     --title "Valx Writer v$version" --generate-notes
   if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }

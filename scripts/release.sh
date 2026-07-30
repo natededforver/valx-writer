@@ -10,8 +10,10 @@
 # downloadable DMG should be — a user landing on the download page has no way to
 # know which slice they need.
 #
-# Output lands in out/release/ with stable asset names:
-#   valx-prose-writer.dmg
+# Output lands in out/release/ under both names a release has to carry:
+#   Valx.Prose.Writer_<version>_universal.dmg   what site/download.html links
+#   valx-prose-writer.dmg                       what README.md links, via
+#                                               /releases/latest/download/
 #
 # Signing & notarization (optional; unsigned builds work but Gatekeeper will
 # make the user right-click > Open on first launch). Set before running:
@@ -92,15 +94,29 @@ if [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
 fi
 
 mkdir -p out/release
+# Both names, for the same reason release.ps1 emits both — site/download.html
+# hardcodes the versioned one per release, README.md points at the stable one
+# through /releases/latest/download/. Dots rather than the spaces tauri writes,
+# because GitHub substitutes them on upload.
+VERSIONED="out/release/Valx.Prose.Writer_${VERSION}_universal.dmg"
+cp "$DMG" "$VERSIONED"
 cp "$DMG" "out/release/valx-prose-writer.dmg"
 
-green "Release artifacts (v$VERSION)"
+green "Release artifacts ($VERSION)"
 ls -lh out/release | awk 'NR>1 {printf "%s  %s\n", $9, $5}'
 
 if [[ "$PUBLISH" == "1" ]]; then
   green "Publishing to GitHub Releases"
   command -v gh >/dev/null || { echo "gh not found — install the GitHub CLI and run 'gh auth login'" >&2; exit 1; }
-  gh release create "v$VERSION" \
+  # Bare version, no leading v — 1.0.7 through 1.1.0 are all tagged that way.
+  #
+  # create, not upload: this assumes it is cutting a NEW release. When the tag
+  # already exists because the other platform shipped first — which is the
+  # normal case, since Windows and macOS are built on different machines — this
+  # fails and the right command is:
+  #     gh release upload "$VERSION" "$VERSIONED" out/release/valx-prose-writer.dmg
+  gh release create "$VERSION" \
+    "$VERSIONED" \
     out/release/valx-prose-writer.dmg \
     --title "Valx Writer v$VERSION" --generate-notes
 fi

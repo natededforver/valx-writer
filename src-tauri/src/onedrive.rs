@@ -83,7 +83,7 @@ pub(crate) struct SyncResult {
 
 fn random_bytes(n: usize) -> Vec<u8> {
     let mut buf = vec![0u8; n];
-    getrandom::getrandom(&mut buf).expect("OS RNG unavailable");
+    getrandom::fill(&mut buf).expect("OS RNG unavailable");
     buf
 }
 

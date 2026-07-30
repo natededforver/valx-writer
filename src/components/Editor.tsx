@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Note, JumpTarget } from '../types';
+import { Note, JumpTarget, Folder } from '../types';
 import { plainText } from '../lib/search';
-import { RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, ChevronLeft, Share, Type, ImagePlus, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, SlidersHorizontal, BookA, SpellCheck, Languages, Ban } from 'lucide-react';
+import { compareTitles } from '../lib/noteSort';
+import { RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, ChevronLeft, Share, Type, ImagePlus, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, FolderInput, SlidersHorizontal, BookA, SpellCheck, Languages, Ban } from 'lucide-react';
 import { BinIcon } from './BinIcon';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '../lib/desktop';
@@ -83,10 +84,15 @@ interface EditorProps {
   onOpenFolder?: () => void;
   /** File > Preferences… */
   onOpenPreferences?: () => void;
+  /** Folders the open note can be filed into — File > Move to. Dragging a row
+   *  onto a folder in the sidebar does the same thing; this is the path that
+   *  does not need a drag, which is the only kind a thumb reliably has. */
+  folders?: Folder[];
+  onMoveNoteToFolder?: (id: string, folderId: string | null) => void;
   className?: string;
 }
 
-export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, deleteNotePerm, isFullscreen, toggleFullscreen, onAddNoteWithContent, onMergeNotes, onSaveNow, jumpTo, onOpenNoteLink, noteExt = '', listAttachments, sidebarOpen, onToggleSidebar, onBack, onOpenFolder, onOpenPreferences, className = '' }: EditorProps) {
+export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, deleteNotePerm, isFullscreen, toggleFullscreen, onAddNoteWithContent, onMergeNotes, onSaveNow, jumpTo, onOpenNoteLink, noteExt = '', listAttachments, sidebarOpen, onToggleSidebar, onBack, onOpenFolder, onOpenPreferences, folders = [], onMoveNoteToFolder, className = '' }: EditorProps) {
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [droppedTextFiles, setDroppedTextFiles] = useState<globalThis.File[] | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -390,8 +396,9 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const [topHover, setTopHover] = useState(false);
   // Which top menu (File/Edit/Format/View/Authors) is open, if any.
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  // File-menu flyout (Export as / Send to), and the author's own display name.
-  const [fileSub, setFileSub] = useState<'export' | 'send' | null>(null);
+  // File-menu flyout (Export as / Send to / Move to), and the author's own
+  // display name.
+  const [fileSub, setFileSub] = useState<'export' | 'send' | 'move' | null>(null);
   useEffect(() => { if (openMenu !== 'file') setFileSub(null); }, [openMenu]);
   // Words-menu flyout (Spelling / Language), same contract as fileSub.
   const [wordsSub, setWordsSub] = useState<'spelling' | 'language' | null>(null);
@@ -459,6 +466,18 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // text rises at the same rate the bar fades instead of jumping under it.
   const chromeFadeCls = slowFade ? 'duration-[1600ms]' : 'duration-300';
 
+  // Folders offered by File > Move to, in the same numeric-aware order the
+  // sidebar's folder rail uses — the two lists name the same folders, so a user
+  // reading one and then the other must not have to re-find them.
+  //
+  // Up here with the other hooks rather than next to the menu it feeds: the menu
+  // bodies are built after the `if (!note)` return below, and a useMemo there
+  // would run on only some renders.
+  const moveTargets = useMemo(
+    () => [...folders].sort((a, b) => compareTitles(a.name, b.name)),
+    [folders]
+  );
+
   // Shared class strings for the menus.
   //
   // Touch takes the same rows through a different skin. The five dropdowns of
@@ -489,6 +508,18 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // No keyboard on a phone, so the accelerator column is dead weight there.
   const shortcutCls = isTouchUI ? 'hidden' : 'ml-auto text-[10px] text-slate-400 dark:text-slate-500 tabular-nums pl-4';
 
+  /**
+   * Hover-to-open for a flyout row — on a pointer only.
+   *
+   * A row that both opens on hover and toggles on click cancels itself out on a
+   * touchscreen: for a tap, Chrome dispatches mouseenter *before* click, so the
+   * hover opened the flyout and the tap's own toggle closed it again. Every
+   * flyout in the mobile sheet — Export as, Send to, Spelling, Language — was
+   * unreachable that way, verified on an Android emulator. Handing back
+   * undefined leaves the click in sole charge of the flyout on touch.
+   */
+  const hoverOpen = (fn: () => void) => (isTouchUI ? undefined : fn);
+
   // ---------------------------------------------------------------------------
   // Menu fragments shared by the two menu bars — the full one over an open note,
   // and the reduced one shown with no note open. Defined here, above the
@@ -517,7 +548,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   // three groups without the dropdown chrome around them.
   const wordsMenuItems = (
     <>
-      <div className="relative" onMouseEnter={() => setWordsSub('spelling')}>
+      <div className="relative" onMouseEnter={hoverOpen(() => setWordsSub('spelling'))}>
         <button onClick={() => setWordsSub((s) => (s === 'spelling' ? null : 'spelling'))} className={`${itemCls} ${wordsSub === 'spelling' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><SpellCheck size={15} className="opacity-60" /> Spelling<ChevronRight size={14} className="ml-auto opacity-50" /></button>
         {wordsSub === 'spelling' && (
           <div className={subPopCls}>
@@ -530,7 +561,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           </div>
         )}
       </div>
-      <div className="relative" onMouseEnter={() => setWordsSub('language')}>
+      <div className="relative" onMouseEnter={hoverOpen(() => setWordsSub('language'))}>
         <button onClick={() => setWordsSub((s) => (s === 'language' ? null : 'language'))} className={`${itemCls} ${wordsSub === 'language' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Languages size={15} className="opacity-60" /> Language<ChevronRight size={14} className="ml-auto opacity-50" /></button>
         {wordsSub === 'language' && (
           <div className={subPopCls}>
@@ -544,7 +575,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       </div>
       {/* Dictionary and Forbidden Words are dialogs, not lists — they open
           straight from their row rather than pretending to be flyouts. */}
-      <div onMouseEnter={() => setWordsSub(null)}>
+      <div onMouseEnter={hoverOpen(() => setWordsSub(null))}>
         <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-open-dictionary')); }} className={itemCls}>
           <BookA size={15} className="opacity-60" /> Dictionary…
         </button>
@@ -1134,7 +1165,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           <button onClick={() => { onSaveNow?.(note.id); setOpenMenu(null); }} className={itemCls}><Check size={15} className="opacity-60" /> Save<span className={shortcutCls}>{accel('Ctrl S')}</span></button>
           <div className={dividerCls} />
           {/* Export as → flyout */}
-          <div className="relative" onMouseEnter={() => setFileSub('export')}>
+          <div className="relative" onMouseEnter={hoverOpen(() => setFileSub('export'))}>
             <button onClick={() => setFileSub((s) => (s === 'export' ? null : 'export'))} className={`${itemCls} ${fileSub === 'export' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Download size={15} className="opacity-60" /> Export as<ChevronRight size={14} className="ml-auto opacity-50" /></button>
             {fileSub === 'export' && (
               <div className={subPopCls}>
@@ -1151,7 +1182,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           {isAndroid ? (
             <button onClick={() => { handleNativeShare(); setOpenMenu(null); }} className={itemCls}><Send size={15} className="opacity-60" /> Share…</button>
           ) : (
-          <div className="relative" onMouseEnter={() => setFileSub('send')}>
+          <div className="relative" onMouseEnter={hoverOpen(() => setFileSub('send'))}>
             <button onClick={() => setFileSub((s) => (s === 'send' ? null : 'send'))} className={`${itemCls} ${fileSub === 'send' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Send size={15} className="opacity-60" /> Send to<ChevronRight size={14} className="ml-auto opacity-50" /></button>
             {fileSub === 'send' && (
               <div className={subPopCls}>
@@ -1169,6 +1200,47 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           <div className={dividerCls} />
           {onOpenPreferences && <button onClick={() => { setOpenMenu(null); onOpenPreferences(); }} className={itemCls}><SlidersHorizontal size={15} className="opacity-60" /> Preferences…<span className={shortcutCls}>{accel('Ctrl ,')}</span></button>}
           <div className={dividerCls} />
+          {/* Move to → flyout. Filing a note was drag-only: pick the row up in
+              the sidebar and drop it on a folder. That is a gesture a phone
+              barely has, so the same move is a menu row here — and it sits with
+              Move to Trash because the two are the same decision about where
+              this note should live. */}
+          {onMoveNoteToFolder && (
+            <div className="relative" onMouseEnter={hoverOpen(() => setFileSub('move'))}>
+              <button onClick={() => setFileSub((s) => (s === 'move' ? null : 'move'))} className={`${itemCls} ${fileSub === 'move' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><FolderInput size={15} className="opacity-60" /> Move to<ChevronRight size={14} className="ml-auto opacity-50" /></button>
+              {fileSub === 'move' && (
+                <div className={subPopCls}>
+                  {/* No folder at all — the workspace root, which the sidebar
+                      calls All Notes. Named the way the sidebar names it, so the
+                      row says where the note will turn up. */}
+                  <button
+                    onClick={() => { onMoveNoteToFolder(note.id, null); setOpenMenu(null); }}
+                    className={itemCls}
+                  >
+                    <Check size={14} className={note.folderId ? 'opacity-0' : 'text-[#32CD32]'} />
+                    <span className="truncate">All Notes</span>
+                  </button>
+                  {moveTargets.length > 0 && <div className={dividerCls} />}
+                  {moveTargets.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => { onMoveNoteToFolder(note.id, f.id); setOpenMenu(null); }}
+                      className={itemCls}
+                      title={f.name}
+                    >
+                      <Check size={14} className={note.folderId === f.id ? 'text-[#32CD32]' : 'opacity-0'} />
+                      <span className="truncate">{f.name}</span>
+                    </button>
+                  ))}
+                  {moveTargets.length === 0 && (
+                    <div className="px-4 py-2.5 text-xs text-slate-400 dark:text-slate-500 italic">
+                      No folders yet — add one in the sidebar
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <button onClick={() => { moveToTrash(note.id); setOpenMenu(null); }} className={itemCls}><BinIcon size={15} className="opacity-60" /> Move to Trash</button>
         </>
       ) : (

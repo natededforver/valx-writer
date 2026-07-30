@@ -439,6 +439,10 @@ export default function App() {
           onBack={() => setMobileView('list')}
           onOpenFolder={selectWorkspace}
           onOpenPreferences={() => setIsSettingsOpen(true)}
+          // File > Move to — the same move the sidebar's drag-and-drop performs,
+          // reachable without a drag.
+          folders={folders}
+          onMoveNoteToFolder={(id, folderId) => moveNotesToFolder([id], folderId)}
           className={`${editorVisible ? 'flex' : 'hidden'} md:flex w-full md:flex-1 min-w-0`}
         />
 

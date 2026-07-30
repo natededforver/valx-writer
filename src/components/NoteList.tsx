@@ -1,8 +1,27 @@
 import React, { useMemo, useState } from 'react';
 import { Note, FilterState } from '../types';
 import { Bookmark, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { BinIcon } from './BinIcon';
 import { wordCount } from '../lib/format';
+import { isTouchUI } from '../lib/platform';
 import { NoteSort, sortNotes } from '../lib/noteSort';
+
+// A row control that appears on hover — and one that cannot, because the finger
+// driving it has no hover state. On touch every row action is simply there:
+// hiding it behind a gesture the platform does not have is hiding it for good,
+// which is how the bin beside a note and a folder became unreachable on the
+// phone in the first place.
+export const ROW_ACTION_REVEAL = isTouchUI
+  ? 'opacity-100'
+  : 'opacity-0 group-hover:opacity-100 focus:opacity-100';
+
+// Padding around a row action. A 12px glyph with 2px of padding is a 19px
+// target, which is fine to click and far under the ~48dp a thumb needs — and
+// these are now the phone's main way to file and bin a note, so they have to be
+// hittable rather than merely present. Desktop keeps the small, quiet control.
+const ROW_ACTION_HIT = isTouchUI ? 'p-2' : 'p-0.5';
+/** Glyph size to match — a bigger target with a 12px icon just looks broken. */
+const ROW_ACTION_ICON = isTouchUI ? 15 : 12;
 
 export interface NoteListOpts {
   sort?: NoteSort;
@@ -53,6 +72,10 @@ interface NoteDropdownListProps {
   /** Delete a trashed note for good. Same deal — Trash list only. Already
    *  confirmed by the caller, so this row just calls it. */
   onDeletePerm?: (id: string) => void;
+  /** Throw this note in the bin. The non-trash lists' own bin button — the
+   *  tap-sized path to the same place dragging a row onto Trash goes, which is
+   *  the only path a phone had until now. */
+  onMoveToTrash?: (id: string) => void;
 }
 
 /** Compact note rows rendered inside an expanded All Notes / group dropdown. */
@@ -68,6 +91,7 @@ export function NoteDropdownList({
   sort = 'modified-desc',
   onRestore,
   onDeletePerm,
+  onMoveToTrash,
 }: NoteDropdownListProps) {
   const showCreated = sort.startsWith('created');
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
@@ -143,14 +167,31 @@ export function NoteDropdownList({
             data-drag-note={note.id}
             className={`vx-drag-source group relative w-full text-left pl-3 pr-2 py-2 transition-colors cursor-pointer outline-none ${isSelected ? 'bg-slate-900/8 dark:bg-white/8' : 'hover:bg-slate-900/5 dark:hover:bg-white/5'}`}
           >
-            {onToggleBookmark && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onToggleBookmark(note.id); }}
-                title={isBookmarked ? 'Remove bookmark' : 'Bookmark this note'}
-                className={`absolute top-1.5 right-1.5 p-0.5 rounded transition-opacity ${isBookmarked ? 'opacity-100 text-[#32CD32]' : 'opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-400 hover:text-[#32CD32]'}`}
-              >
-                <Bookmark size={12} fill={isBookmarked ? 'currentColor' : 'none'} />
-              </button>
+            {/* Bookmark + bin, on the rows that are not in the trash already.
+                Both sit in one flex strip rather than each anchoring itself to
+                the corner, so adding the second one did not stack it on top of
+                the first. */}
+            {(onToggleBookmark || onMoveToTrash) && (
+              <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5">
+                {onToggleBookmark && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onToggleBookmark(note.id); }}
+                    title={isBookmarked ? 'Remove bookmark' : 'Bookmark this note'}
+                    className={`${ROW_ACTION_HIT} rounded transition-opacity ${isBookmarked ? 'opacity-100 text-[#32CD32]' : `${ROW_ACTION_REVEAL} text-slate-400 hover:text-[#32CD32]`}`}
+                  >
+                    <Bookmark size={ROW_ACTION_ICON} fill={isBookmarked ? 'currentColor' : 'none'} />
+                  </button>
+                )}
+                {onMoveToTrash && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onMoveToTrash(note.id); }}
+                    title="Move to Trash"
+                    className={`${ROW_ACTION_HIT} rounded leading-none hover:bg-red-500/10 transition-opacity ${ROW_ACTION_REVEAL}`}
+                  >
+                    <BinIcon size={ROW_ACTION_ICON} />
+                  </button>
+                )}
+              </div>
             )}
             {/* Trash rows only. Restore sits next to delete because a trash
                 list that can only destroy is a trap — the undo for landing
@@ -161,23 +202,23 @@ export function NoteDropdownList({
                   <button
                     onClick={(e) => { e.stopPropagation(); onRestore(note.id); }}
                     title="Restore this note"
-                    className="p-0.5 rounded text-slate-400 hover:text-[#32CD32] transition-colors"
+                    className={`${ROW_ACTION_HIT} rounded text-slate-400 hover:text-[#32CD32] transition-colors`}
                   >
-                    <RotateCcw size={12} />
+                    <RotateCcw size={ROW_ACTION_ICON} />
                   </button>
                 )}
                 {onDeletePerm && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onDeletePerm(note.id); }}
                     title="Delete permanently"
-                    className="p-0.5 rounded text-[12px] leading-none hover:bg-red-500/10 transition-colors"
+                    className={`${ROW_ACTION_HIT} rounded leading-none hover:bg-red-500/10 transition-colors`}
                   >
-                    <span aria-hidden>🗑️</span>
+                    <BinIcon size={ROW_ACTION_ICON} />
                   </button>
                 )}
               </div>
             )}
-            <div className="font-medium text-sm text-slate-900 dark:text-white truncate pr-5">
+            <div className={`font-medium text-sm text-slate-900 dark:text-white truncate ${isTouchUI ? 'pr-24' : 'pr-11'}`}>
               {note.title || 'Untitled Note'}
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
@@ -214,6 +255,7 @@ interface BookmarkedNotesPanelProps {
   expanded?: boolean;
   onToggleExpanded?: () => void;
   sort?: NoteSort;
+  onMoveToTrash?: (id: string) => void;
 }
 
 /** Foldable bookmark rail in the sidebar. */
@@ -228,6 +270,7 @@ export function BookmarkedNotesPanel({
   expanded = true,
   onToggleExpanded,
   sort = 'modified-desc',
+  onMoveToTrash,
 }: BookmarkedNotesPanelProps) {
   const bookmarkedSet = useMemo(() => new Set(bookmarkedIds), [bookmarkedIds]);
   // Bookmarks used to be pinned to recently-edited regardless of the sidebar's
@@ -260,6 +303,7 @@ export function BookmarkedNotesPanel({
             onOpenNote={onOpenNote}
             emptyLabel="No bookmarks yet"
             sort={sort}
+            onMoveToTrash={onMoveToTrash}
           />
         </div>
       )}

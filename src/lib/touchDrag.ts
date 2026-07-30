@@ -33,6 +33,45 @@
 // were wrong in the first cut: see HOLD_SLOP (the press cancelled itself before
 // it could become a drag) and DROP_TOLERANCE (a thumb cannot hit a 32dp row).
 //
+//
+// ONE TOUCH, ONE OUTCOME
+//
+// A press on a note row used to be able to produce three things at once: the
+// drag, the row's own click (which selects, and selecting is what opens the
+// note on a phone — App.tsx drives mobileView off the selection), and the app
+// root's panel swipe. Nothing arbitrated between them; they each read the same
+// touch and answered independently, so which one you got came down to whether
+// the hold timer beat your thumb. Holding a note and dragging it "frequently
+// gets interrupted by the note opening" is exactly that race, seen from the
+// outside.
+//
+// So the sequence is partitioned here, once, by two thresholds that tile the
+// whole space with no overlap and no gap:
+//
+//   released under HOLD_MS, travelled <= TAP_SLOP   -> a tap: open the note
+//   held past HOLD_MS,      travelled <= HOLD_SLOP  -> a drag: file/bin/merge
+//   travelled past HOLD_SLOP before the hold fired  -> not ours: scroll or swipe
+//
+// The first two are settled here and *nowhere else*: the tap is reported
+// through onTap and the synthesised click is suppressed, so a row's onClick can
+// no longer open a note behind the drag's back, and a lifted drag claims the
+// touch outright (lib/gestureClaim.ts) so the swipe cannot navigate off the
+// list mid-drag. The third case is released untouched — that is the one gesture
+// this hook does not want.
+//
+//
+// TWO MODES
+//
+// The number of fingers picks what the drag means, and the two sets of targets
+// are disjoint so neither can be reached by accident from the other:
+//
+//   one finger    move   -> a folder, or the bin
+//   two or more   merge  -> another note, or the editor
+//
+// Dropping a note *onto another note* merges either way — that is what putting
+// one on top of another looks like it should do — and every merge is confirmed
+// by a dialog before anything is written, because a merge trashes its sources.
+//
 // Targets and sources are declared in the markup with data attributes rather
 // than registered through a context, so a row only has to say what it is and
 // the existing desktop handlers keep working untouched beside it:
@@ -40,12 +79,15 @@
 //   data-drag-note="<id>"      a note that can be picked up
 //   data-drop-folder="<id>"    a folder that accepts notes ('all' = no folder)
 //   data-drop-trash            the bin
+//   data-drop-note="<id>"      a note that accepts notes (merge)
+//   data-drop-editor           the open note / the editor (merge)
 //
 // The hit test is elementFromPoint on every move, not a cached list of target
 // rectangles: the sidebar scrolls, folders expand, and a cached rectangle would
 // silently start pointing at the wrong row.
 // ---------------------------------------------------------------------------
 import { useEffect, useRef, useState } from 'react';
+import { claimTouchGesture, releaseTouchGesture } from './gestureClaim';
 
 /** Hold before a press becomes a drag. Long enough not to fire while the user
  *  is starting a scroll, short enough not to feel broken — and short of the
@@ -66,6 +108,16 @@ const HOLD_MS = 300;
  */
 const HOLD_SLOP = 22;
 /**
+ * Travel a quick press may have and still count as a tap.
+ *
+ * Tighter than HOLD_SLOP on purpose. The gap between them is a press that
+ * wandered too far to be a tap but not far enough to have been a scroll, and
+ * that press now does nothing at all — which is the right answer: those are the
+ * flicks that used to open a note the user was only scrolling past. Roughly
+ * where a browser's own click slop sits, so a tap still feels native.
+ */
+const TAP_SLOP = 14;
+/**
  * How far from a drop target a release still counts as landing on it.
  *
  * A folder row is 32dp tall; a thumb's contact patch is bigger than that, and
@@ -82,15 +134,20 @@ const EDGE = 56;
 /** Fastest edge scroll, px per frame, reached at the very edge. */
 const EDGE_SPEED = 14;
 
+/** What the drag will do when it lands. Fixed by the number of fingers. */
+export type TouchDragMode = 'move' | 'merge';
+
 export interface TouchDropTarget {
-  kind: 'folder' | 'trash';
-  /** Folder id, 'all' for the no-folder root, or '' for the bin. */
+  kind: 'folder' | 'trash' | 'note' | 'editor';
+  /** Folder or note id, 'all' for the no-folder root, '' for bin and editor. */
   id: string;
 }
 
 export interface TouchDragState {
   /** Note ids being dragged, or null when nothing is in flight. */
   ids: string[] | null;
+  /** Whether the drop will file these notes or merge them. */
+  mode: TouchDragMode;
   /** Where the finger is now, for drawing the ghost. */
   x: number;
   y: number;
@@ -98,11 +155,31 @@ export interface TouchDragState {
   over: TouchDropTarget | null;
 }
 
-const IDLE: TouchDragState = { ids: null, x: 0, y: 0, over: null };
+const IDLE: TouchDragState = { ids: null, mode: 'move', x: 0, y: 0, over: null };
 
-/** The target an element belongs to, if any. */
-function targetOf(el: Element | null): TouchDropTarget | null {
+/** Every target a mode will accept, for the nearest-miss search. */
+const SELECTOR: Record<TouchDragMode, string> = {
+  move: '[data-drop-folder],[data-drop-trash],[data-drop-note],[data-drop-editor]',
+  merge: '[data-drop-note],[data-drop-editor]',
+};
+
+/**
+ * The target an element belongs to, if any.
+ *
+ * Merge targets are tested first and are the only ones a merge drag can see:
+ * two fingers mean "combine these", and a folder or the bin appearing under
+ * that gesture would be an entirely different, destructive answer to it.
+ * `ids` are the notes in flight — a note is never a target for itself.
+ */
+function targetOf(el: Element | null, mode: TouchDragMode, ids: string[]): TouchDropTarget | null {
   if (!el) return null;
+  const note = el.closest('[data-drop-note]');
+  if (note) {
+    const id = note.getAttribute('data-drop-note') || '';
+    return id && !ids.includes(id) ? { kind: 'note', id } : null;
+  }
+  if (el.closest('[data-drop-editor]')) return { kind: 'editor', id: '' };
+  if (mode === 'merge') return null;
   if (el.closest('[data-drop-trash]')) return { kind: 'trash', id: '' };
   const folder = el.closest('[data-drop-folder]');
   if (folder) return { kind: 'folder', id: folder.getAttribute('data-drop-folder') || '' };
@@ -118,24 +195,32 @@ function targetOf(el: Element | null): TouchDropTarget | null {
  * rather than snapping to whatever is closest — dropping a note into a folder
  * the user was nowhere near is worse than the drop not registering.
  */
-function nearestTarget(x: number, y: number): TouchDropTarget | null {
+function nearestTarget(x: number, y: number, mode: TouchDragMode, ids: string[]): TouchDropTarget | null {
   let best: TouchDropTarget | null = null;
   let bestGap = DROP_TOLERANCE;
-  for (const el of document.querySelectorAll('[data-drop-folder],[data-drop-trash]')) {
+  for (const el of document.querySelectorAll(SELECTOR[mode])) {
     const r = el.getBoundingClientRect();
     if (r.height === 0 || x < r.left || x > r.right) continue;   // hidden, or a different column
     const gap = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
-    if (gap < bestGap) {
-      bestGap = gap;
-      best = targetOf(el);
-    }
+    if (gap >= bestGap) continue;
+    const hit = targetOf(el, mode, ids);
+    if (!hit) continue;                                          // a note in flight — not its own target
+    bestGap = gap;
+    best = hit;
   }
   return best;
 }
 
-function targetAt(x: number, y: number): TouchDropTarget | null {
+function targetAt(x: number, y: number, mode: TouchDragMode, ids: string[]): TouchDropTarget | null {
   const el = document.elementFromPoint(x, y);
-  return targetOf(el instanceof Element ? el : null) ?? nearestTarget(x, y);
+  const node = el instanceof Element ? el : null;
+  // Sitting exactly on one of the notes in flight is a deliberate nothing.
+  // Note rows are contiguous, so falling through to the nearest-miss search
+  // here would snap to the row next door — and a drag lifted and released
+  // without moving would offer to merge the note with its neighbour.
+  const self = node?.closest('[data-drop-note]');
+  if (self && ids.includes(self.getAttribute('data-drop-note') || '')) return null;
+  return targetOf(node, mode, ids) ?? nearestTarget(x, y, mode, ids);
 }
 
 const sameTarget = (a: TouchDropTarget | null, b: TouchDropTarget | null): boolean =>
@@ -158,6 +243,17 @@ export interface TouchDragOptions {
   resolveIds: (id: string) => string[];
   onDropOnFolder: (ids: string[], folderId: string | null) => void;
   onDropOnTrash: (ids: string[]) => void;
+  /** Dropped on another note — merge into it. Confirmed by the caller. */
+  onDropOnNote: (ids: string[], targetId: string) => void;
+  /** Dropped on the editor — merge into the open note. Confirmed by the caller. */
+  onDropOnEditor: (ids: string[]) => void;
+  /**
+   * A plain tap on a row. Reported here rather than left to the row's onClick:
+   * the click is synthesised from the same touch the drag is reading, and
+   * whichever handler happened to win decided whether you got a drag or an
+   * opened note. Now only one of them can fire.
+   */
+  onTap: (id: string) => void;
   enabled?: boolean;
 }
 
@@ -169,22 +265,33 @@ export interface TouchDragOptions {
  */
 export function useTouchDrag(
   container: React.RefObject<HTMLElement | null>,
-  { resolveIds, onDropOnFolder, onDropOnTrash, enabled = true }: TouchDragOptions
+  { resolveIds, onDropOnFolder, onDropOnTrash, onDropOnNote, onDropOnEditor, onTap, enabled = true }: TouchDragOptions
 ): TouchDragState {
   const [state, setState] = useState<TouchDragState>(IDLE);
   // The callbacks are read through a ref so the listeners are attached once:
   // re-attaching them whenever a parent re-renders would drop an in-flight
   // drag, which is exactly when re-renders happen (selection changes).
-  const opts = useRef({ resolveIds, onDropOnFolder, onDropOnTrash });
-  opts.current = { resolveIds, onDropOnFolder, onDropOnTrash };
+  const opts = useRef({ resolveIds, onDropOnFolder, onDropOnTrash, onDropOnNote, onDropOnEditor, onTap });
+  opts.current = { resolveIds, onDropOnFolder, onDropOnTrash, onDropOnNote, onDropOnEditor, onTap };
 
   useEffect(() => {
     const el = container.current;
     if (!el || !enabled) return;
 
     let holdTimer: ReturnType<typeof setTimeout> | null = null;
-    let pending: { id: string; x: number; y: number } | null = null;
+    // The press being considered: where it began, how far it has strayed, and
+    // how many fingers it has picked up (which is what chooses the mode).
+    let pending: { id: string; x: number; y: number; moved: number; fingers: number } | null = null;
+    // The sequence began on a note row, and therefore belongs to this hook for
+    // its whole length — unlike `pending`, which the slop check throws away the
+    // moment the press stops being a candidate for a drag. That distinction is
+    // the bug: a press that travelled 40px in 200ms cleared `pending`, so
+    // touchend did nothing, so the browser synthesised its click on the row —
+    // and a click on a row is what opens a note on a phone. Holding a note and
+    // dragging it "gets interrupted by the note opening" is that click.
+    let owned = false;
     let dragging: string[] | null = null;
+    let mode: TouchDragMode = 'move';
     // The panel being dragged over, and where the finger is on it. Both are
     // needed by the edge-scroll frame loop, which runs between touchmoves.
     let scroller: HTMLElement | null = null;
@@ -206,7 +313,9 @@ export function useTouchDrag(
     const reset = () => {
       clearHold();
       stopEdgeScroll();
+      owned = false;
       dragging = null;
+      mode = 'move';
       scroller = null;
       lastOver = null;
     };
@@ -237,30 +346,58 @@ export function useTouchDrag(
         // Re-render only when the row under the (stationary) finger actually
         // changes. Pushing state every frame would re-render the whole note
         // list sixty times a second to move a highlight that mostly stays put.
-        const over = targetAt(at.x, at.y);
+        const over = targetAt(at.x, at.y, mode, dragging);
         if (scroller.scrollTop !== before && !sameTarget(over, lastOver)) {
           lastOver = over;
-          setState({ ids: dragging, x: at.x, y: at.y, over });
+          setState({ ids: dragging, mode, x: at.x, y: at.y, over });
         }
       }
       frame = requestAnimationFrame(edgeScroll);
     };
 
     const onStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) { clearHold(); return; }
+      // A second finger does not restart anything: it re-aims the gesture that
+      // is already running at the merge targets. That is the whole of how merge
+      // is asked for — one finger files, two combine.
+      if (dragging) {
+        if (e.touches.length > 1 && mode === 'move') {
+          mode = 'merge';
+          lastOver = targetAt(at.x, at.y, mode, dragging);
+          setState({ ids: dragging, mode, x: at.x, y: at.y, over: lastOver });
+          navigator.vibrate?.(8);
+        }
+        return;
+      }
+      if (pending) {
+        pending.fingers = Math.max(pending.fingers, e.touches.length);
+        return;
+      }
       const t = e.touches[0];
-      const row = (e.target instanceof Element) ? e.target.closest('[data-drag-note]') : null;
+      if (!t || !(e.target instanceof Element)) return;
+      // Row actions (bookmark, bin, restore) are buttons inside the row. They
+      // are taps in their own right and keep the browser's own click — pressing
+      // one must not lift the note it sits on, and this listener must not go on
+      // to suppress the click that button is waiting for.
+      if (e.target.closest('button')) return;
+      const row = e.target.closest('[data-drag-note]');
       if (!row) return;
       const id = row.getAttribute('data-drag-note');
       if (!id) return;
-      pending = { id, x: t.clientX, y: t.clientY };
+      owned = true;
+      pending = { id, x: t.clientX, y: t.clientY, moved: 0, fingers: e.touches.length };
       holdTimer = setTimeout(() => {
         if (!pending) return;
         dragging = opts.current.resolveIds(pending.id);
+        mode = pending.fingers > 1 ? 'merge' : 'move';
         scroller = scrollerFor(row);
         at = { x: pending.x, y: pending.y };
-        lastOver = targetAt(at.x, at.y);
-        setState({ ids: dragging, x: at.x, y: at.y, over: lastOver });
+        lastOver = targetAt(at.x, at.y, mode, dragging);
+        setState({ ids: dragging, mode, x: at.x, y: at.y, over: lastOver });
+        // The touch is now this drag's, and nobody else's — in particular the
+        // app root's panel swipe, which would otherwise read the sideways
+        // travel of a note being carried to a folder as "go to the editor" and
+        // navigate away from the list mid-drag.
+        claimTouchGesture();
         // The press has become a drag, so tell the phone — otherwise the lift
         // is silent and reads as the app having missed the gesture.
         navigator.vibrate?.(12);
@@ -273,7 +410,9 @@ export function useTouchDrag(
       if (!t) return;
       if (pending && !dragging) {
         // Still deciding. A finger that has travelled is scrolling, not lifting.
-        if (Math.hypot(t.clientX - pending.x, t.clientY - pending.y) > HOLD_SLOP) clearHold();
+        const d = Math.hypot(t.clientX - pending.x, t.clientY - pending.y);
+        pending.moved = Math.max(pending.moved, d);
+        if (d > HOLD_SLOP) clearHold();
         return;
       }
       if (!dragging) return;
@@ -283,8 +422,8 @@ export function useTouchDrag(
       // guard comes first.
       e.preventDefault();
       at = { x: t.clientX, y: t.clientY };
-      lastOver = targetAt(at.x, at.y);
-      setState({ ids: dragging, x: at.x, y: at.y, over: lastOver });
+      lastOver = targetAt(at.x, at.y, mode, dragging);
+      setState({ ids: dragging, mode, x: at.x, y: at.y, over: lastOver });
     };
 
     // A long press is also how Android starts a text selection, and the browser
@@ -305,23 +444,41 @@ export function useTouchDrag(
     const commit = (ids: string[], over: TouchDropTarget | null) => {
       setState(IDLE);
       if (!over) return;                                   // released on nothing
-      if (over.kind === 'trash') opts.current.onDropOnTrash(ids);
-      else opts.current.onDropOnFolder(ids, over.id === 'all' ? null : over.id);
+      const o = opts.current;
+      if (over.kind === 'trash') o.onDropOnTrash(ids);
+      else if (over.kind === 'folder') o.onDropOnFolder(ids, over.id === 'all' ? null : over.id);
+      else if (over.kind === 'note') o.onDropOnNote(ids, over.id);
+      else o.onDropOnEditor(ids);
     };
 
     const onEnd = (e: TouchEvent) => {
       const ids = dragging;
+      const press = pending;
+      const wasOurs = owned;
       reset();
-      if (!ids) return;
+
+      if (!ids) {
+        if (!wasOurs) return;
+        // No drag lifted, but the sequence still started on a row — so the
+        // click the browser is about to synthesise is ours to answer for, and
+        // the answer is always no. Opening a note is reported here instead,
+        // and only for a press that stayed still and short enough to have
+        // meant it. Everything in between — the flicks and the aborted holds —
+        // now does nothing rather than opening whatever it was dragged from.
+        e.preventDefault();
+        if (press && press.fingers === 1 && press.moved <= TAP_SLOP) opts.current.onTap(press.id);
+        return;
+      }
+
       // A touch sequence still produces a click when it ends, and the element
       // under it is the row the drag started on — so dropping a note into a
       // folder would also *open* that note. preventDefault on touchend is what
       // suppresses the synthesised click, and it is why this listener is not
-      // passive. Only reached once a drag was actually in flight, so an
-      // ordinary tap is untouched.
+      // passive.
       e.preventDefault();
+      releaseTouchGesture();
       const t = e.changedTouches[0];
-      commit(ids, t ? targetAt(t.clientX, t.clientY) : null);
+      commit(ids, t ? targetAt(t.clientX, t.clientY, mode, ids) : null);
     };
 
     /**
@@ -345,6 +502,7 @@ export function useTouchDrag(
       const ids = dragging;
       const over = lastOver;
       reset();
+      releaseTouchGesture();
       if (ids) commit(ids, over);
       else setState(IDLE);
     };
@@ -357,6 +515,7 @@ export function useTouchDrag(
     el.addEventListener('selectstart', onSelectStart);
     return () => {
       reset();
+      releaseTouchGesture();
       el.removeEventListener('touchstart', onStart);
       el.removeEventListener('touchmove', onMove);
       el.removeEventListener('touchend', onEnd);

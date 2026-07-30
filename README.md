@@ -166,119 +166,18 @@ sliders to change the finer visual details of the text editor's typeface.
 
 The app is the same everywhere; the window it lives in is not.
 
-| | Windows | macOS | Android |
-|---|---|---|---|
-| Window | Frameless, app-drawn caption buttons | Native decorations and traffic lights | Full screen, edge to edge |
-| Menus | In-window menu bar | In-window menu bar plus the system menu bar | One `⋯` sheet, iOS-style |
-| Shortcuts | `Ctrl` | `⌘`, shown with proper glyphs | None — labels hidden |
-| Closing | Closing the window quits | `⌘W` hides, `⌘Q` quits, Dock icon restores | The OS owns it |
-| Distraction-free | Chrome fades away | Chrome and traffic lights fade; hover the top edge | Focus mode; tap the top edge |
-| Moving between notes | Click the list | Click the list | Swipe, as well |
+| | Windows | macOS |
+|---|---|---|
+| Window | Frameless, app-drawn caption buttons | Native decorations and traffic lights |
+| Menus | In-window menu bar | In-window menu bar plus the system menu bar |
+| Shortcuts | `Ctrl` | `⌘`, shown with proper glyphs |
+| Closing | Closing the window quits | `⌘W` hides, `⌘Q` quits, Dock icon restores |
+| Distraction-free | Chrome fades away | Chrome and traffic lights fade; hover the top edge |
 
 Everything that differs lives in
-[`src-tauri/tauri.macos.conf.json`](src-tauri/tauri.macos.conf.json) and
-[`src-tauri/tauri.android.conf.json`](src-tauri/tauri.android.conf.json), which
+[`src-tauri/tauri.macos.conf.json`](src-tauri/tauri.macos.conf.json), which
 Tauri merges over the base config only on that host. The base config stays the
-Windows one, so a Windows build is unaffected by either overlay.
-
-### Android
-
-The phone build is the same app, reshaped for a thumb rather than ported to a
-different one — same notes, same files, same `.md` on disk.
-
-**What is different**
-
-- **Focus mode.** The `⤢` button in the navigation bar drops everything but the
-  page and the caret. Tap the top edge of the screen to bring the bar back; it
-  retreats again a few seconds later.
-- **Three panels, moved between by swiping.** The note list, the editor and the
-  menu sit side by side, and each enters from the side it lives on:
-
-  ```
-  NOTE LIST  ◀──────  EDITOR  ──────▶  MENU PANEL
-             swipe →          swipe ←
-  ```
-
-  The menu panel holds everything the desktop's five menus hold, grouped the
-  same way — both are rendered from the same code, so neither can quietly lose
-  a command the other has. It also has a grip on the right edge, for anyone who
-  would rather tap than swipe.
-- **Share** is the one permanent button in the navigation bar, and it opens the
-  system share sheet rather than the desktop's list of web targets. The phone
-  already knows which apps can take a note.
-- **Print** goes through Android's print dialog, which is also where "Save as
-  PDF" lives.
-- **Long-press to drag.** HTML5 drag and drop is a mouse API a touchscreen
-  never triggers, so filing notes into folders and dragging them to the bin was
-  drawn but unreachable. Press and hold a note to lift it, then drop it on a
-  folder or on Trash. Holding the note near the top or bottom of the list
-  scrolls it, so a folder below the fold is still a target — the finger holding
-  the note is not free to scroll with.
-- **Installed as "Valx Writer."** The launcher ellipsises a longer label, and
-  the desktop bundle's full name did not survive it.
-- **Import media** (in the menu panel) and clipboard paste both take images,
-  video, audio, GIFs and PDFs into the workspace's `.attachments` folder.
-
-**What is missing, and why**
-
-- **OneDrive sync.** The OAuth redirect is a loopback listener on `127.0.0.1`,
-  which a phone browser hand-off never returns to. The module isn't compiled
-  into the Android binary at all.
-- **Valx's own spellchecker.** Five bundled dictionaries are 8 MB of text *per
-  ABI* inside the APK, to duplicate what the keyboard already does. The phone
-  uses the keyboard's checker instead.
-- **Provenance marking (the Creators menu).** Every label it defines is applied
-  through the right-click "Mark as" menu, and a finger has no right-click.
-
-**Where the notes live**
-
-First launch adopts `Android/data/com.valx.prose_writer/files/Documents/Valx` —
-the app's own external storage, which needs no permission. **File > Open
-Folder…** moves the workspace anywhere on the device.
-
-That second part needs *All files access*. The app keeps notes as ordinary
-`.md` files and scans the folder with `std::fs` from Rust — real paths, not
-`content://` URIs — and reading real paths outside its own storage is exactly
-what scoped storage withholds on Android 11+. So the first attempt sends the
-user to the Settings screen where the grant is made; after that the system
-folder picker opens directly. **This rules out a Play Store listing without a
-declared exemption**, which is why the app ships as an APK.
-
-Exports land in an `Exports` subfolder of the workspace, and the app says so in
-a toast — Android has no save dialog to ask with.
-
-**Building it**
-
-Needs the Android SDK, the NDK, a JDK 17+, and the Rust Android targets:
-
-```bash
-rustup target add aarch64-linux-android armv7-linux-androideabi
-```
-
-With `ANDROID_HOME`, `NDK_HOME` and `JAVA_HOME` set:
-
-```bash
-npx tauri android build --apk --target aarch64 --target armv7
-```
-
-Release builds are signed from `src-tauri/gen/android/keystore.properties`,
-which points at a keystore beside it. **Neither is in the repository** — both
-are gitignored, and a clone builds unsigned until you drop in your own:
-
-```bash
-keytool -genkeypair -v -keystore src-tauri/gen/android/valx-release.jks \
-  -alias valx -keyalg RSA -keysize 2048 -validity 10000
-```
-
-```properties
-# src-tauri/gen/android/keystore.properties
-storeFile=valx-release.jks
-storePassword=…
-keyAlias=valx
-keyPassword=…
-```
-
-`minSdk` is 24 and `targetSdk` 36, so anything from Android 7.0 up will install.
+Windows one, so a Windows build is unaffected by the overlay.
 
 ## Build from source
 

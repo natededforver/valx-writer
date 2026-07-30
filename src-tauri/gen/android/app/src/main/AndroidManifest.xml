@@ -18,6 +18,14 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
 
+    <!-- The one buzz in the app: the moment a long press on a note becomes a
+         drag (lib/touchDrag.ts). Without this the WebView refuses the call —
+         "Failed to use vibrate API, requires VIBRATE permission" — and the lift
+         is silent, which is most of why the gesture read as not working: there
+         was nothing to tell you the press had been taken. Not a runtime
+         permission; declaring it is granting it. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 

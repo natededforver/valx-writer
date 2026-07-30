@@ -19,10 +19,19 @@
 // A long press is also how Android begins a text selection, and the browser
 // claiming the gesture fires touchcancel — which killed the drag a fraction of
 // a second after the row lifted; the rows carry `.vx-drag-source` (index.css)
-// so there is no text to select, and the callout menu is preventDefaulted here.
-// And a drag that travels sideways looks exactly like the panel-navigation
-// swipe on the app root, so the drop's own preventDefault is what tells that
-// listener to stand down (lib/swipe.ts reads defaultPrevented).
+// so there is no text to select, and the callout menu and selectstart are both
+// preventDefaulted here. And a drag that travels sideways looks exactly like the
+// panel-navigation swipe on the app root, so the drop's own preventDefault is
+// what tells that listener to stand down (lib/swipe.ts reads defaultPrevented).
+//
+// None of that makes the cancel impossible — Android still takes a touch it
+// decides is its own — so a cancel mid-drag completes the drop rather than
+// discarding it (see onCancel). Losing the drag there was worse than it sounds:
+// it also un-suppressed the click, so a note carried onto a folder *opened*.
+//
+// The gesture's two thresholds were measured on a phone, not guessed, and both
+// were wrong in the first cut: see HOLD_SLOP (the press cancelled itself before
+// it could become a drag) and DROP_TOLERANCE (a thumb cannot hit a 32dp row).
 //
 // Targets and sources are declared in the markup with data attributes rather
 // than registered through a context, so a row only has to say what it is and
@@ -41,9 +50,33 @@ import { useEffect, useRef, useState } from 'react';
 /** Hold before a press becomes a drag. Long enough not to fire while the user
  *  is starting a scroll, short enough not to feel broken — and short of the
  *  ~500ms at which Chrome's own long press would otherwise fire. */
-const HOLD_MS = 380;
-/** Movement during the hold that cancels it — that finger is scrolling. */
-const HOLD_SLOP = 12;
+const HOLD_MS = 300;
+/**
+ * Movement during the hold that cancels it — that finger is scrolling.
+ *
+ * In CSS px, which on a phone is a dp: 1080 device px / 2.75 dpr = 393 CSS px
+ * across, and the viewport is 393dp wide. So this is a physical distance, and
+ * the old value of 12 was about 1.9mm at 440dpi — tighter than a thumb can hold
+ * still for a third of a second. Measured on the emulator, the lift survived 8
+ * CSS px of wander and died at 12, which is why the gesture read as broken: the
+ * press cancelled itself before it ever became a drag.
+ *
+ * 22 is roughly 3.5mm, past a resting thumb's wobble and still well short of
+ * the deliberate travel that means "I am scrolling this list".
+ */
+const HOLD_SLOP = 22;
+/**
+ * How far from a drop target a release still counts as landing on it.
+ *
+ * A folder row is 32dp tall; a thumb's contact patch is bigger than that, and
+ * the point Android reports is its centroid rather than where the user thinks
+ * they are pointing. Releasing "on" a folder therefore lands in the gap between
+ * rows a good part of the time, and an exact hit test answers "nothing here" —
+ * a drop that silently does nothing, which is indistinguishable from the whole
+ * feature being broken. So a miss looks for the nearest target within this many
+ * px vertically before giving up.
+ */
+const DROP_TOLERANCE = 26;
 /** Distance from a scroller's edge at which a held note starts scrolling it. */
 const EDGE = 56;
 /** Fastest edge scroll, px per frame, reached at the very edge. */
@@ -67,13 +100,42 @@ export interface TouchDragState {
 
 const IDLE: TouchDragState = { ids: null, x: 0, y: 0, over: null };
 
-function targetAt(x: number, y: number): TouchDropTarget | null {
-  const el = document.elementFromPoint(x, y);
-  if (!(el instanceof Element)) return null;
+/** The target an element belongs to, if any. */
+function targetOf(el: Element | null): TouchDropTarget | null {
+  if (!el) return null;
   if (el.closest('[data-drop-trash]')) return { kind: 'trash', id: '' };
   const folder = el.closest('[data-drop-folder]');
   if (folder) return { kind: 'folder', id: folder.getAttribute('data-drop-folder') || '' };
   return null;
+}
+
+/**
+ * The nearest target to a point that the point itself missed.
+ *
+ * Only vertical distance is measured: these rows span the panel, so a release
+ * that is off is off up or down, and the horizontal position carries no
+ * information about which row was meant. Returns null past DROP_TOLERANCE
+ * rather than snapping to whatever is closest — dropping a note into a folder
+ * the user was nowhere near is worse than the drop not registering.
+ */
+function nearestTarget(x: number, y: number): TouchDropTarget | null {
+  let best: TouchDropTarget | null = null;
+  let bestGap = DROP_TOLERANCE;
+  for (const el of document.querySelectorAll('[data-drop-folder],[data-drop-trash]')) {
+    const r = el.getBoundingClientRect();
+    if (r.height === 0 || x < r.left || x > r.right) continue;   // hidden, or a different column
+    const gap = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = targetOf(el);
+    }
+  }
+  return best;
+}
+
+function targetAt(x: number, y: number): TouchDropTarget | null {
+  const el = document.elementFromPoint(x, y);
+  return targetOf(el instanceof Element ? el : null) ?? nearestTarget(x, y);
 }
 
 const sameTarget = (a: TouchDropTarget | null, b: TouchDropTarget | null): boolean =>
@@ -228,10 +290,23 @@ export function useTouchDrag(
     // A long press is also how Android starts a text selection, and the browser
     // taking that gesture cancels the touch sequence out from under the drag —
     // the row would lift, buzz, and die about 100ms later. `.vx-drag-source`
-    // (index.css) turns selection off on the rows so it never begins; this
-    // covers the callout menu, which is a separate decision the browser makes.
+    // (index.css) turns selection off on the rows so it never begins; these
+    // cover the two separate decisions the browser makes on top of that — the
+    // callout menu, and starting a selection at all. `-webkit-touch-callout`
+    // does nothing in Chrome, so this listener is the mechanism, not the CSS.
     const onContextMenu = (e: Event) => {
       if (pending || dragging) e.preventDefault();
+    };
+    const onSelectStart = (e: Event) => {
+      if (pending || dragging) e.preventDefault();
+    };
+
+    /** Hand `ids` to whichever target the finger was last over. */
+    const commit = (ids: string[], over: TouchDropTarget | null) => {
+      setState(IDLE);
+      if (!over) return;                                   // released on nothing
+      if (over.kind === 'trash') opts.current.onDropOnTrash(ids);
+      else opts.current.onDropOnFolder(ids, over.id === 'all' ? null : over.id);
     };
 
     const onEnd = (e: TouchEvent) => {
@@ -246,20 +321,40 @@ export function useTouchDrag(
       // ordinary tap is untouched.
       e.preventDefault();
       const t = e.changedTouches[0];
-      const over = t ? targetAt(t.clientX, t.clientY) : null;
-      setState(IDLE);
-      if (!over) return;                                   // released on nothing
-      if (over.kind === 'trash') opts.current.onDropOnTrash(ids);
-      else opts.current.onDropOnFolder(ids, over.id === 'all' ? null : over.id);
+      commit(ids, t ? targetAt(t.clientX, t.clientY) : null);
     };
 
-    const onCancel = () => { reset(); setState(IDLE); };
+    /**
+     * The browser took the gesture away mid-drag.
+     *
+     * Android does this to a touch it decides belongs to it — a long press it
+     * wants for text selection, a system gesture starting at the edge — and it
+     * happens intermittently *after* the row has already lifted. Throwing the
+     * drag away here was the worst of the failure modes seen on the phone: the
+     * row lifted, the note was carried onto a folder, the WebView cancelled,
+     * and because `dragging` was then null the touchend below no longer
+     * suppressed the click — so instead of being filed, the note *opened*. A
+     * drag that visibly worked did the one thing the user did not ask for.
+     *
+     * A cancel is not the user changing their mind: the finger is still where it
+     * was, over a target the highlight has been promising to accept. So the drop
+     * is completed at the last tracked position, and only truly discarded when
+     * the finger was over nothing.
+     */
+    const onCancel = () => {
+      const ids = dragging;
+      const over = lastOver;
+      reset();
+      if (ids) commit(ids, over);
+      else setState(IDLE);
+    };
 
     el.addEventListener('touchstart', onStart, { passive: true });
     el.addEventListener('touchmove', onMove, { passive: false });
     el.addEventListener('touchend', onEnd, { passive: false });
     el.addEventListener('touchcancel', onCancel, { passive: true });
     el.addEventListener('contextmenu', onContextMenu);
+    el.addEventListener('selectstart', onSelectStart);
     return () => {
       reset();
       el.removeEventListener('touchstart', onStart);
@@ -267,6 +362,7 @@ export function useTouchDrag(
       el.removeEventListener('touchend', onEnd);
       el.removeEventListener('touchcancel', onCancel);
       el.removeEventListener('contextmenu', onContextMenu);
+      el.removeEventListener('selectstart', onSelectStart);
     };
   }, [container, enabled]);
 

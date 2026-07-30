@@ -5,7 +5,7 @@ import { BinIcon } from './BinIcon';
 import { sessionGreeting } from '../lib/greeting';
 import { useTouchDrag } from '../lib/touchDrag';
 import { isTouchUI } from '../lib/platform';
-import { filterNotesForContainer, NoteDropdownList, BookmarkedNotesPanel } from './NoteList';
+import { filterNotesForContainer, NoteDropdownList, BookmarkedNotesPanel, ROW_ACTION_REVEAL } from './NoteList';
 import { NoteSort, NOTE_SORTS, SORT_LABELS, IS_DATE_SORT, normalizeSort, compareTitles } from '../lib/noteSort';
 
 const LS_NOTE_SORT = 'valx-note-sort';
@@ -170,6 +170,11 @@ export function Sidebar({
   };
 
   const [greet] = useState(() => sessionGreeting());
+
+  // The bin on a single note row. Every list here moves notes in batches
+  // (that is what a multi-select drag does), so the one-note case goes through
+  // the same call rather than a second code path.
+  const moveOneToTrash = (id: string) => onMoveNotesToTrash([id]);
 
   // Touch drag and drop. The desktop rows are HTML5-draggable, an API a
   // touchscreen never triggers — so on a phone every one of these targets was
@@ -392,6 +397,7 @@ export function Sidebar({
                     onOpenNote={onOpenNote}
                     emptyLabel="No notes yet"
                     sort={sort}
+                    onMoveToTrash={moveOneToTrash}
                   />
                 </div>
               )}
@@ -409,6 +415,7 @@ export function Sidebar({
                 expanded={expandedKeys.has('bookmarks')}
                 onToggleExpanded={() => toggleExpanded('bookmarks')}
                 sort={sort}
+                onMoveToTrash={moveOneToTrash}
               />
             )}
 
@@ -455,10 +462,10 @@ export function Sidebar({
                         </button>
                         <button
                           onClick={() => onDeleteFolder(folder.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 mr-1 text-slate-400 hover:text-[#32CD32] transition-all"
+                          className={`${ROW_ACTION_REVEAL} ${isTouchUI ? 'p-2' : 'p-1'} mr-1 text-slate-400 hover:text-[#32CD32] transition-opacity`}
                           title="Delete folder"
                         >
-                          <BinIcon size={14} />
+                          <BinIcon size={isTouchUI ? 16 : 14} />
                         </button>
                       </div>
                       {isExpanded && (
@@ -473,6 +480,7 @@ export function Sidebar({
                             onOpenNote={onOpenNote}
                             emptyLabel="No notes in this folder"
                             sort={sort}
+                            onMoveToTrash={moveOneToTrash}
                           />
                         </div>
                       )}
@@ -537,6 +545,7 @@ export function Sidebar({
                               onOpenNote={onOpenNote}
                               emptyLabel="No notes with this tag"
                               sort={sort}
+                              onMoveToTrash={moveOneToTrash}
                             />
                           </div>
                         )}
@@ -574,9 +583,9 @@ export function Sidebar({
                   <button
                     onClick={(e) => { e.stopPropagation(); handleEmptyTrash(); }}
                     title={`Empty bin — permanently delete ${trashedNotes.length} note${trashedNotes.length === 1 ? '' : 's'}`}
-                    className="mr-1 px-1.5 py-1 rounded text-[13px] leading-none hover:bg-red-500/10 transition-colors shrink-0"
+                    className={`mr-1 ${isTouchUI ? 'p-2' : 'px-1.5 py-1'} rounded leading-none hover:bg-red-500/10 transition-colors shrink-0`}
                   >
-                    <BinIcon size={13} />
+                    <BinIcon size={isTouchUI ? 16 : 13} />
                   </button>
                 )}
               </div>

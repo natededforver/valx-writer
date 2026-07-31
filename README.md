@@ -32,8 +32,9 @@ WebView2 on Windows, WKWebView on macOS. The Windows installer is under 7 MB.
 > choose *More info → Run anyway*. On macOS, right-click Valx in Applications and
 > choose *Open* once. Both go away once the builds are signed.
 
-## Run instruction:
-
+## Run instruction (IMPORTANT FOR MAC USERS!!!):
+<img src="site/step-1.png" alt="macOS settings instructions" width="420" />
+<img src="site/step-2.png" alt="macOS settings instructions" width="620" />
 <img src="site/run-anyway-macOS.png" alt="macOS settings instructions" width="620" />
 
 ## Why Valx

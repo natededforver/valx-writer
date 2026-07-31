@@ -3,7 +3,7 @@
 // Contract: md -> html -> md must reproduce the markdown.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToMarkdown, markdownToHtml, wordCount } from './format';
+import { htmlToMarkdown, markdownToHtml, wordCount, contentFromDisk, rewriteMediaToDisk } from './format';
 
 const roundTrip = (md: string) => htmlToMarkdown(markdownToHtml(md));
 
@@ -162,4 +162,71 @@ test('nothing invisible counts as a word', () => {
   // reading as a word of its own.
   assert.equal(wordCount('&nbsp;'), 0);
   assert.equal(wordCount('<p>a&nbsp;b</p>'), 2);
+});
+
+// ---------------------------------------------------------------------------
+// Media through the .md round trip. A workspace folder named `Backup (writing)`
+// put real parens in every media URL (encodeURIComponent leaves them alone),
+// the destination parser stopped at the first one, and every attachment in that
+// workspace was cut in half on the next load — permanently, because the
+// truncated form re-serialized to the same bytes.
+// ---------------------------------------------------------------------------
+
+test('a link destination keeps its balanced parens', () => {
+  const md = '![image.png](http://asset.localhost/E%3A%2FBackup%20(writing)%2F.attachments%2Fimage-e4mseh.png)';
+  const html = markdownToHtml(md);
+  assert.match(html, /src="http:\/\/asset\.localhost\/E%3A%2FBackup%20\(writing\)%2F\.attachments%2Fimage-e4mseh\.png"/);
+  // Nothing spilled out of the tag as leftover literal text.
+  assert.ok(!html.includes('%2F.attachments%2Fimage-e4mseh.png)'));
+});
+
+test('a destination with unbalanced parens is written in <> and reads back whole', () => {
+  const html = '<img src="/x/od)d.png" alt="a" />';
+  const md = htmlToMarkdown(html);
+  assert.equal(md, '![a](</x/od)d.png>)');
+  assert.match(markdownToHtml(md), /src="\/x\/od\)d\.png"/);
+});
+
+test('a destination with a space survives the .md round trip', () => {
+  const md = htmlToMarkdown('<a href="/notes/my file.md">see</a>');
+  assert.equal(md, '[see](</notes/my file.md>)');
+  assert.match(markdownToHtml(md), /href="\/notes\/my file\.md"/);
+});
+
+test('attachment chips survive the Markdown-source toggle intact', () => {
+  const chip =
+    '<br><a href="/__media/.attachments/report-a1b2c3.pdf" class="vx-attach" data-name="report.pdf" contenteditable="false" style="display:inline-flex;">📎 <span>report.pdf</span></a><br>';
+  const md = htmlToMarkdown(chip);
+  assert.match(md, /class="vx-attach"/);
+  assert.match(md, /data-name="report\.pdf"/);
+  const back = markdownToHtml(md);
+  assert.match(back, /class="vx-attach"/);
+  assert.match(back, /contenteditable="false"/);
+  assert.match(back, /data-name="report\.pdf"/);
+});
+
+test('toggling Markdown source is idempotent for media blocks', () => {
+  const rt = (h: string) => markdownToHtml(htmlToMarkdown(h));
+  for (const start of [
+    '<br><audio controls src="/__media/.attachments/s.mp3"></audio><br>',
+    '<br><a href="/__media/.attachments/r.pdf" class="vx-attach" data-name="r.pdf" contenteditable="false">📎 <span>r.pdf</span></a><br>',
+  ]) {
+    const once = rt(start);
+    assert.equal(rt(once), once, `not idempotent: ${start}`);
+    assert.equal(once, start, `first toggle changed the block: ${start}`);
+  }
+});
+
+test('an image rebuilt from markdown carries the editor styling', () => {
+  const html = markdownToHtml('![i.png](.attachments/i.png)');
+  assert.match(html, /style="display: inline-block; max-width: 100%;/);
+});
+
+test('a hand-placed attachment whose name has a space survives the disk round trip', () => {
+  // listAttachments hands out the URL-encoded canonical form, which is what
+  // keeps a space out of a markdown destination in the first place.
+  const html = '<img src="/__media/.attachments/my%20pic.png" alt="my pic.png" />';
+  const onDisk = rewriteMediaToDisk(htmlToMarkdown(html), 0);
+  assert.equal(onDisk, '![my pic.png](.attachments/my%20pic.png)');
+  assert.match(contentFromDisk('n.md', onDisk), /src="\/__media\/\.attachments\/my%20pic\.png"/);
 });

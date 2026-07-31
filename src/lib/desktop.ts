@@ -18,7 +18,7 @@ import { exists, mkdir, readDir, remove, writeFile, writeTextFile, readFile, rea
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { writeText as clipboardWriteText, readText as clipboardReadText, readImage as clipboardReadImage } from '@tauri-apps/plugin-clipboard-manager';
 import { ATTACH_DIR, MEDIA_URL_PREFIX } from './format';
-import { canonicalMediaHtml, displayMediaHtml, displayMediaSrc } from './mediaUrl';
+import { canonicalMediaHtml, displayMediaHtml, displayMediaSrc, decodeMediaRel, encodeMediaRel } from './mediaUrl';
 import { KNOWN_EXT, serializeNote } from './exports';
 import { isAndroid } from './platform';
 import { hasStorageAccess, requestStorageAccess, pickWorkspaceFolder } from './android';
@@ -203,7 +203,7 @@ async function importMedia(payload: { name?: string; dataBase64?: string; root?:
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   await writeFile(joinPath(dir, [fileName]), bytes);
-  return `${MEDIA_URL_PREFIX}${ATTACH_DIR}/${fileName}`;
+  return `${MEDIA_URL_PREFIX}${ATTACH_DIR}/${encodeMediaRel(fileName)}`;
 }
 
 // Everything ever imported into the workspace lives flat in .attachments —
@@ -216,9 +216,13 @@ async function listAttachments(root?: string): Promise<{ name: string; src: stri
   try {
     if (!(await exists(dir))) return [];
     const entries = await readDir(dir);
+    // The src is URL-encoded: importMedia sanitizes the names it writes, but a
+    // file the user dropped into .attachments by hand can hold a space or a
+    // paren, and those end a URL early once the name is inside an <img src> or
+    // a markdown destination.
     return entries
       .filter((e: any) => e.isFile !== false && !String(e.name).startsWith('.'))
-      .map((e: any) => ({ name: String(e.name), src: `${MEDIA_URL_PREFIX}${ATTACH_DIR}/${e.name}` }));
+      .map((e: any) => ({ name: String(e.name), src: `${MEDIA_URL_PREFIX}${ATTACH_DIR}/${encodeMediaRel(String(e.name))}` }));
   } catch {
     return [];
   }
@@ -232,7 +236,7 @@ async function openMedia(src: string): Promise<{ success: boolean; error?: strin
   if (!root || !src) return { success: false };
   let rel = canonicalMediaHtml(String(src), root);
   if (rel.startsWith(MEDIA_URL_PREFIX)) rel = rel.slice(MEDIA_URL_PREFIX.length);
-  rel = rel.replace(/^(\.\.\/)+/, '');
+  rel = decodeMediaRel(rel.replace(/^(\.\.\/)+/, ''));
   if (rel.split('/').includes('..')) return { success: false };
   try {
     await openPath(joinPath(root, rel.split('/').filter(Boolean)));
@@ -305,10 +309,13 @@ export async function inlineMediaAsDataUrls(html: string): Promise<string> {
   const rels = new Set([...html.matchAll(/\/__media\/([^"')\s]+)/g)].map((m) => m[1]));
   let out = html;
   for (const rel of rels) {
-    if (rel.split('/').includes('..')) continue;
+    // `rel` is the URL-encoded canonical form (it has to stay that way for the
+    // split/join below to find it in the html); the disk path is the decode.
+    const disk = decodeMediaRel(rel);
+    if (disk.split('/').includes('..')) continue;
     try {
-      const bytes = await readFile(joinPath(root, rel.split('/').filter(Boolean)));
-      const ext = rel.slice(rel.lastIndexOf('.') + 1).toLowerCase();
+      const bytes = await readFile(joinPath(root, disk.split('/').filter(Boolean)));
+      const ext = disk.slice(disk.lastIndexOf('.') + 1).toLowerCase();
       const mime = EXT_MIME[ext] || 'application/octet-stream';
       out = out.split(`${MEDIA_URL_PREFIX}${rel}`).join(`data:${mime};base64,${bytesToBase64(bytes)}`);
     } catch {

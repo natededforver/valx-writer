@@ -47,16 +47,17 @@ export const ATTACH_DIR = '.attachments';
 export function rewriteMediaToDisk(text: string, depth = 0): string {
   if (!text) return text;
   const up = '../'.repeat(Math.max(0, depth));
-  return text.replace(/\/__media\/(\.?attachments\/[^"')\s]+)/g, (_m, rel) => `${up}${rel}`);
+  return text.replace(/\/__media\/(\.?attachments\/[^"'()<>\s]+)/g, (_m, rel) => `${up}${rel}`);
 }
 
 /** Disk relative media path (as stored in a saved file) -> app URL for the
- *  editor. The leading `"`, `'` or `(` delimiter anchors the match so external
- *  URLs that merely contain "attachments/" are never rewritten. */
+ *  editor. The leading `"`, `'`, `(` or `<` delimiter anchors the match so
+ *  external URLs that merely contain "attachments/" are never rewritten (`<` is
+ *  mdDest's angle-bracket destination form). */
 export function rewriteMediaFromDisk(text: string): string {
   if (!text) return text;
   return text.replace(
-    /(["'(])((?:\.\.\/)*)(\.?attachments\/[^"')\s]+)/g,
+    /(["'(<])((?:\.\.\/)*)(\.?attachments\/[^"'()<>\s]+)/g,
     (_m, delim, _up, rel) => `${delim}${MEDIA_URL_PREFIX}${rel.replace(/^attachments\//, `${ATTACH_DIR}/`)}`
   );
 }
@@ -75,9 +76,100 @@ const MEDIA_EXT_KIND: Record<string, MediaKind> = {
 export const mediaKindFromName = (name: string): MediaKind =>
   MEDIA_EXT_KIND[(name.split('.').pop() || '').toLowerCase()] ?? 'file';
 
-// Matches the style RichTextEditor applies when media is dropped in.
-const IMG_STYLE =
-  'max-width: 100%; max-height: 500px; border-radius: 0.375rem; margin-top: 1rem; margin-bottom: 1rem; object-fit: contain;';
+// The style RichTextEditor applies when media is dropped in — imported by
+// buildMediaHtml rather than duplicated, because markdown has nowhere to keep a
+// style attribute: an <img> that survives a Markdown-source toggle is rebuilt
+// from this constant, so any drift between the two spellings silently restyled
+// every image the moment the toggle was used.
+export const IMG_STYLE =
+  'display: inline-block; max-width: 100%; max-height: 500px; border-radius: 0.375rem; margin-top: 1rem; margin-bottom: 1rem; object-fit: contain;';
+
+// ---------------------------------------------------------------------------
+// Link / image destinations.
+//
+// `\(([^)\s]+)\)` reads as "the URL between the parens", and is not: it stops
+// at the FIRST `)`, including one that is part of the URL. Under Tauri a media
+// src is an asset-protocol URL built with encodeURIComponent, which leaves
+// parens alone, so a workspace folder called `Backup (writing)` wrote
+//   ![x](http://asset.localhost/E%3A%2FBackup%20(writing)%2F.attachments%2Fx.png)
+// and read back `…%2FBackup%20(writing` plus a line of leftover literal text.
+// Every attachment in that workspace broke on the first save/load round trip
+// and stayed broken — the truncated form re-serializes to the same bytes, so
+// no later save could undo it.
+//
+// CommonMark already answers this: a destination is either `<…>` or a bare run
+// whose parens BALANCE. Reading both means files written by the broken build
+// parse correctly on load and repair themselves on the next save.
+// ---------------------------------------------------------------------------
+
+/** Scan the destination of a link whose `(` sits at `open`. Returns the raw
+ *  destination and the index just past its `)`, or null when it does not close
+ *  (leave the text alone — it isn't a link). */
+function scanMdDest(text: string, open: number): { src: string; end: number } | null {
+  let i = open + 1;
+  if (text[i] === '<') {
+    const close = text.indexOf('>', i + 1);
+    if (close < 0 || text[close + 1] !== ')') return null;
+    const src = text.slice(i + 1, close);
+    return src.includes('\n') ? null : { src, end: close + 2 };
+  }
+  let depth = 0;
+  for (; i < text.length; i++) {
+    const ch = text[i];
+    // Whitespace ends a bare destination (a link title, or just prose) — the
+    // same shape the old character class refused, kept deliberately.
+    if (/\s/.test(ch)) return null;
+    if (ch === '(') depth++;
+    else if (ch === ')') {
+      if (depth === 0) return i > open + 1 ? { src: text.slice(open + 1, i), end: i + 1 } : null;
+      depth--;
+    }
+  }
+  return null;
+}
+
+/** Every `![alt](dest)` / `[label](dest)` -> a stash token, in one pass (`!` is
+ *  what tells them apart). Replaces two regexes that could not scan a
+ *  destination on their own. */
+function stashMdLinks(text: string, stash: ReturnType<typeof makeStash>): string {
+  const head = /(!?)\[([^\]]*)\]\(/g;
+  let out = '';
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = head.exec(text))) {
+    const dest = scanMdDest(text, m.index + m[0].length - 1);
+    if (!dest) continue;
+    const isImg = m[1] === '!';
+    if (!isImg && !m[2]) continue; // `[](x)` is not a link
+    out +=
+      text.slice(last, m.index) +
+      (isImg
+        ? stash.put('I', JSON.stringify({ alt: m[2], src: dest.src }))
+        : stash.put('L', JSON.stringify({ label: m[2], src: dest.src })));
+    last = dest.end;
+    head.lastIndex = dest.end;
+  }
+  return out + text.slice(last);
+}
+
+/** Write a destination that scanMdDest reads back as itself: bare when the
+ *  parens balance, CommonMark's `<…>` form otherwise (unbalanced parens, or
+ *  whitespace, which a bare destination cannot carry at all).
+ *
+ *  The angle form is stashed rather than returned inline, because htmlToMarkdown
+ *  runs stripTags over the finished text and `</x/od)d.png>` looks exactly like
+ *  a closing tag to it. Restored verbatim after that pass — percent-encoding the
+ *  URL instead would change the hrefs the note-link resolver matches on. */
+function mdDest(src: string, stash: ReturnType<typeof makeStash>): string {
+  let depth = 0;
+  let unbalanced = false;
+  for (const ch of src) {
+    if (ch === '(') depth++;
+    else if (ch === ')' && --depth < 0) { unbalanced = true; break; }
+  }
+  if (!unbalanced && depth === 0 && !/[\s<>]/.test(src)) return src;
+  return stash.put('D', `<${src.replace(/</g, '%3C').replace(/>/g, '%3E').replace(/\n/g, '%0A')}>`);
+}
 
 // Stash sentinels for content lifted out before transforms run. The token is
 // re-randomized per call, so note text can never collide with a live token.
@@ -94,11 +186,28 @@ const makeStash = () => {
         render(items[Number(i)], Number(i))
       );
     },
+    /** Restore onto a line of its own, ABSORBING the line breaks already around
+     *  the token rather than adding to them. Padding unconditionally meant every
+     *  Markdown-source toggle grew another blank line above and below each
+     *  image, attachment chip and audio/video block. */
+    restoreBlock(text: string, tag: string, render: (value: string, i: number) => string): string {
+      return text.replace(new RegExp(`\\n*@@${key}:${tag}(\\d+)@@\\n*`, 'g'), (_m, i) =>
+        `\n${render(items[Number(i)], Number(i))}\n`
+      );
+    },
   };
 };
 
 // audio/video elements (paired or self-closing) that must survive verbatim
 const mediaTagRe = () => /<(audio|video)[^>]*>[\s\S]*?<\/\1>|<(?:audio|video)[^>]*\/?>/gi;
+
+// The generic-file attachment chip (buildMediaHtml's last branch): an anchor
+// carrying a class, data-name, contenteditable=false and its own styling, none
+// of which markdown can spell. `[label](href)` threw all of it away, so turning
+// Markdown source on and back off downgraded every attachment to a bare link —
+// no chip, no file name, no non-editable guard. It rides through verbatim now,
+// exactly like the audio/video tags above.
+const attachTagRe = () => /<a\b[^>]*\bclass=["'][^"']*\bvx-attach\b[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
 
 // Any other HTML tag inside a .md file marks it as a legacy raw-HTML note.
 const LEGACY_HTML_RE = /<\s*(br|div|p|span|img|h[1-6]|b|strong|i|em|u|s|del|strike|ul|ol|li|a|blockquote|code|pre)\b[^>]*\/?>/i;
@@ -214,6 +323,8 @@ export function htmlToMarkdown(html: string): string {
   if (!html) return '';
   const stash = makeStash();
   let md = html.replace(mediaTagRe(), (m) => stash.put('P', m));
+  // Attachment chips before the <a> rule below would ever see them.
+  md = md.replace(attachTagRe(), (m) => stash.put('P', m));
   // Slop provenance marks ride through .md verbatim as inline HTML (like the
   // media tags above), but restore INLINE ('S') — the 'P' restore's newline
   // padding would put every marked word on its own line.
@@ -234,11 +345,11 @@ export function htmlToMarkdown(html: string): string {
   md = md.replace(/<hr[^>]*\/?>/gi, '\n---\n');
   md = md.replace(/<img[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, (m, src) => {
     const alt = (/alt=["']([^"']*)["']/i.exec(m)?.[1] || 'image').replace(/[[\]]/g, '');
-    return `![${alt}](${src})`;
+    return `![${alt}](${mdDest(src, stash)})`;
   });
   md = md.replace(new RegExp(`<a${NAME_END}[^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>`, 'gi'), (_m, href, inner) => {
     const label = stripTags(inner).trim() || href;
-    return `[${label.replace(/[[\]]/g, '')}](${href})`;
+    return `[${label.replace(/[[\]]/g, '')}](${mdDest(href, stash)})`;
   });
   md = md.replace(new RegExp(`<(b|strong)${NAME_END}[^>]*>([\\s\\S]*?)<\\/\\1>`, 'gi'), '**$2**');
   md = md.replace(new RegExp(`<(i|em)${NAME_END}[^>]*>([\\s\\S]*?)<\\/\\1>`, 'gi'), '*$2*');
@@ -265,10 +376,13 @@ export function htmlToMarkdown(html: string): string {
   md = md.replace(new RegExp(`<(?:div|p|ul|ol|blockquote)${NAME_END}[^>]*>`, 'gi'), '\n');
   md = md.replace(/<\/(?:p|div|li|ul|ol|blockquote)>/gi, '');
   md = stripTags(md);
+  // Angle-bracket destinations restore AFTER stripTags — that pass cannot tell
+  // `</notes/my file.md>` from a closing tag, and used to delete it.
+  md = stash.restore(md, 'D', (v) => v);
   md = decodeEntities(md);
   md = md.replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '');
   md = stash.restore(md, 'S', (tag) => tag);
-  md = stash.restore(md, 'P', (tag) => `\n${tag}\n`);
+  md = stash.restoreBlock(md, 'P', (tag) => tag);
   return md;
 }
 
@@ -277,6 +391,10 @@ export function markdownToHtml(raw: string): string {
   if (!raw) return '';
   const stash = makeStash();
   let text = raw.replace(mediaTagRe(), (m) => stash.put('P', m));
+  // Attachment chips stash BEFORE the legacy sniff for the same reason the
+  // byline does below: a bare <a> in a .md file would otherwise read as a
+  // pre-conversion raw-HTML note and short-circuit the whole parse.
+  text = text.replace(attachTagRe(), (m) => stash.put('P', m));
   // Fenced code blocks stash BEFORE the legacy sniff — a fence documenting
   // "<div>" is markdown quoting HTML, not a legacy raw-HTML file.
   text = text.replace(/^```[^\n]*\n([\s\S]*?)^```[ \t]*$/gm, (_m, body) =>
@@ -314,12 +432,7 @@ export function markdownToHtml(raw: string): string {
   // stays literal; restored (escaped) after every other transform has run.
   text = text.replace(/`([^`\n]+)`/g, (_m, body) => stash.put('C', body));
 
-  text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, src) =>
-    stash.put('I', JSON.stringify({ alt, src }))
-  );
-  text = text.replace(/(^|[^!])\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, pre, label, src) =>
-    `${pre}${stash.put('L', JSON.stringify({ label, src }))}`
-  );
+  text = stashMdLinks(text, stash);
   text = escapeText(text);
   text = text.replace(/^(#{1,6})[ \t]+(.+)$/gm, (_m, hashes, body) => {
     const level = hashes.length;
@@ -417,8 +530,14 @@ export function extractFirstMedia(content: string): MediaAttachment | null {
     const name = /data-name=["']([^"']*)["']/i.exec(attach[0])?.[1] || 'file';
     return { kind: 'file', src, name };
   }
-  const mdImg = /!\[[^\]]*\]\(([^)\s]+)\)/.exec(content);
-  if (mdImg) return { kind: 'image', src: mdImg[1] };
+  // Markdown source (or a .md note that never made it through markdownToHtml) —
+  // scanned, not regex-matched, so a destination holding parens gives the note
+  // list a whole URL rather than a truncated one that renders as a broken thumb.
+  const mdImg = /!\[[^\]]*\]\(/.exec(content);
+  if (mdImg) {
+    const dest = scanMdDest(content, mdImg.index + mdImg[0].length - 1);
+    if (dest) return { kind: 'image', src: dest.src };
+  }
   return null;
 }
 

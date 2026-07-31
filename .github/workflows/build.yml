@@ -7,9 +7,14 @@
 # onedrive.rs, and no check would have caught it.
 #
 # Split by target rather than one job: the frontend is platform-agnostic and
-# cheapest on Linux, while the Rust side is checked on Windows because that is
-# what ships. Checking it on Linux would drag in the GTK/webkit2gtk stack that
-# only exists for a platform this app does not build for.
+# cheapest on Linux, while the Rust side is checked on the platforms that ship.
+# Checking it on Linux would drag in the GTK/webkit2gtk stack that only exists
+# for a platform this app does not build for.
+#
+# Both shipping platforms, not just Windows: macOS compiles code Windows never
+# sees — the #[cfg(target_os = "macos")] menu-bar and WKWebView setup in lib.rs
+# — and it was the gap that left the 1.1.0 macOS build's dependency majors to be
+# proved by hand on a laptop. The frontend job stays single-platform.
 name: Build
 
 on:
@@ -51,9 +56,15 @@ jobs:
         run: npm run build
 
   rust:
-    name: Rust (cargo check)
-    runs-on: windows-latest
+    name: Rust (cargo check, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      # One failing platform should not cancel the other's result — which of
+      # the two broke is the useful part of the answer.
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v7
 

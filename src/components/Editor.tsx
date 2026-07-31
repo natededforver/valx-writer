@@ -15,10 +15,10 @@ import { codeLangFromExt, highlightCode, buildPreviewDoc, PREVIEWABLE } from '..
 import { mediaDisplayHtml, previewMediaBase, readClipboardText } from '../lib/desktop';
 import {
   LS_LINE_COUNTER, LINE_COUNTER_EVENT, LS_WORDCOUNT, WORDCOUNT_EVENT,
-  LS_AUTOCAP, AUTOCAP_EVENT,
+  LS_AUTOCAP, AUTOCAP_EVENT, LS_TRANSPARENCY, LS_TYPEWRITER, TYPEWRITER_EVENT,
   LS_SPELLCHECK_ON, SPELLCHECK_EVENT,
   HISTORY_INTERVAL_EVENT, historyInterval, wordGoal, prefOn, setPref,
-  emitWordCount,
+  emitWordCount, applyTransparency,
 } from '../lib/prefs';
 import { LANGUAGES, spellLang, setSpellLang } from '../lib/spellcheck';
 import { Creator, CREATORS_EVENT, creatorMeName, setCreatorMeName, loadCreators, saveCreators, newCreatorId } from '../lib/creators';
@@ -123,10 +123,12 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
 
   // Menu-bar toggles. Each is mirrored in React state (so the menu shows a
   // checkmark) and in localStorage (so the modules that actually read it —
-  // RichTextEditor's auto-capitalize, the spellchecker —
+  // RichTextEditor's auto-capitalize, the typewriter synth, the spellchecker —
   // pick it up without being wired through props). setToggle keeps the three
   // steps in one place instead of five near-identical handlers.
   const [autoCap, setAutoCap] = useState(() => prefOn(LS_AUTOCAP));
+  const [transparency, setTransparency] = useState(() => prefOn(LS_TRANSPARENCY));
+  const [typewriter, setTypewriter] = useState(() => prefOn(LS_TYPEWRITER));
   const [spellOn, setSpellOn] = useState(() => prefOn(LS_SPELLCHECK_ON));
   // Spellcheck language. Not a setToggle case — it's a pick-one, and
   // setSpellLang already persists it and tells open editors to re-check.
@@ -608,6 +610,20 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       <button onClick={() => setToggle(LS_LINE_COUNTER, LINE_COUNTER_EVENT, !lineCounter, setLineCounter)} className={itemCls}>
         <Check size={14} className={lineCounter ? 'text-[#32CD32]' : 'opacity-0'} /> Line numbers
       </button>
+      {/* Desktop only. Transparency is a property of a window a phone doesn't
+          have, and the typewriter synth answers a physical keyboard — neither
+          has anything to toggle on Android. */}
+      {!isAndroid && (
+        <>
+          <div className={dividerCls} />
+          <button onClick={() => setToggle(LS_TRANSPARENCY, '', !transparency, setTransparency, applyTransparency)} className={itemCls}>
+            <Check size={14} className={transparency ? 'text-[#32CD32]' : 'opacity-0'} /> Transparency
+          </button>
+          <button onClick={() => setToggle(LS_TYPEWRITER, TYPEWRITER_EVENT, !typewriter, setTypewriter)} className={itemCls}>
+            <Check size={14} className={typewriter ? 'text-[#32CD32]' : 'opacity-0'} /> Typewriter sounds
+          </button>
+        </>
+      )}
     </>
   );
 

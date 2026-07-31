@@ -132,7 +132,7 @@ mark in the document itself, which words are **yours** and which words came from
 ### The window itself
 
 - Distraction-free mode fades the chrome away until you reach for the top edge.
-- Dark mode, transparency, word count and line numbers are all one click in View.
+- Dark mode, transparency, typewriter sounds, word count and line numbers are all one click in View.
 - Frameless with app-drawn caption buttons on Windows; native decorations and traffic lights on macOS.
 
 <img src="site/feature-settings.svg" alt="The Preferences drawer beside the same note shown in the light and dark themes" width="820" />

@@ -94,6 +94,21 @@
   backdrop-filter: blur(20px) saturate(1.6);
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
 }
+/* View > Transparency toggle: forces glass surfaces fully opaque. */
+.vx-opaque .vx-glass,
+.vx-opaque .vx-glass-soft,
+.vx-opaque .vx-glass-strong {
+  background: var(--vx-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* The panel drops the blur too, but keeps its own background: that tint is not
+   transparency, it is the grouped-background shade the cards sit on, and
+   flattening it to --vx-surface would make white cards vanish into it. */
+.vx-opaque .vx-sheet {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 .vx-glass-strong {
   background: var(--vx-surface);
   background: color-mix(in srgb, var(--vx-surface) 90%, transparent);

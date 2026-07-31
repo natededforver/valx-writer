@@ -7,6 +7,7 @@ import { Plus, Minus, BookPlus, EyeOff, Scissors, Copy, ClipboardPaste, Tag } fr
 import { BinIcon } from './BinIcon';
 import { JumpTarget } from '../types';
 import { parseTrailingMdLink } from '../lib/noteLinks';
+import { IMG_STYLE } from '../lib/format';
 import { slopWrapText, wordSpans, SlopType } from '../lib/slop';
 import { mediaDisplaySrc, mediaDisplayHtml, mediaCanonicalHtml, readClipboardText } from '../lib/desktop';
 import { isAndroid } from '../lib/platform';
@@ -80,7 +81,9 @@ export const buildMediaHtml = (kind: string, src: string, name: string): string 
   // replaces the old `width: 100%`, which always filled the row and made
   // alignment invisible no matter what the note was set to.
   if (kind === 'image') {
-    return `<br><img src="${src}" alt="${escAttr(name)}" style="display: inline-block; max-width: 100%; max-height: 500px; border-radius: 0.375rem; margin-top: 1rem; margin-bottom: 1rem; object-fit: contain;" /><br>`;
+    // IMG_STYLE, not a literal: markdown has no style attribute, so an image
+    // that survives a Markdown-source toggle is rebuilt from that constant.
+    return `<br><img src="${src}" alt="${escAttr(name)}" style="${IMG_STYLE}" /><br>`;
   }
   if (kind === 'audio') {
     return `<br><audio controls src="${src}" style="display: inline-block; width: 320px; max-width: 100%; margin-top: 1rem; margin-bottom: 1rem;"></audio><br>`;

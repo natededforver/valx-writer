@@ -16,7 +16,7 @@ import { toggleBookmark as toggleBookmarkId, pruneBookmarks } from '../lib/bookm
 import { dropHistory } from '../lib/history';
 import mammoth from 'mammoth';
 import { generateDocx } from '../lib/exportDocs.js';
-import { inlineMediaAsDataUrls } from '../lib/desktop';
+import { inlineMediaAsDataUrls, mediaCanonicalHtml } from '../lib/desktop';
 import { stripTags } from '../lib/htmlText';
 
 function base64ToArrayBuffer(b64: string): ArrayBuffer {
@@ -39,14 +39,23 @@ function bytesToBase64(bytes: Uint8Array): string {
 // `binary`, so this stays a no-op there. Falls back to an empty note body on
 // a corrupt/unreadable package rather than failing the whole workspace scan.
 async function decodeDiskContent(fileName: string, raw: string, binary?: boolean): Promise<string> {
-  if (!binary) return contentFromDisk(fileName, raw);
+  if (!binary) return loadedContent(contentFromDisk(fileName, raw));
   try {
     const { value } = await mammoth.convertToHtml({ arrayBuffer: base64ToArrayBuffer(raw) });
-    return value;
+    return loadedContent(value);
   } catch {
     return '';
   }
 }
+
+// Every path out of disk goes through here. A note must arrive holding the
+// canonical /__media/… form: files written by the build whose canonical rewrite
+// could not match a workspace path containing parens hold the absolute
+// asset-protocol URL instead, which pins the note to one machine and one folder
+// name. Repairing on load is what un-breaks those, and it is what keeps the
+// Markdown-source view showing a portable path rather than a local one.
+// Identity outside Tauri, and for content that is already canonical.
+const loadedContent = (html: string): string => mediaCanonicalHtml(html);
 
 // ---------------------------------------------------------------------------
 // Identity model
@@ -152,23 +161,29 @@ export function useNotes() {
   // references its `.attachments/…` media instead of embedding base64.
   const contentForDisk = async (note: Note, ext: string, depth: number): Promise<string> => {
     const kind = formatKind(ext);
+    // The last gate before disk. The editor canonicalizes media on every change,
+    // but anything that got past it — content from an older build, a paste
+    // carrying display URLs — must not be written as a workspace-absolute asset
+    // URL. rewriteMediaToDisk only knows how to relativize the canonical form,
+    // so an absolute one goes to disk verbatim and the file stops being portable.
+    const content = mediaCanonicalHtml(note.content);
     if (kind === 'docx') {
       // A docx package embeds real image bytes, like an export — not the
       // lightweight .attachments/ path reference the other formats store.
-      const html = await inlineMediaAsDataUrls(note.content);
+      const html = await inlineMediaAsDataUrls(content);
       return bytesToBase64(await generateDocx(note.title || 'Untitled', html));
     }
     let out: string;
-    if (kind === 'md') out = htmlToMarkdown(note.content);
+    if (kind === 'md') out = htmlToMarkdown(content);
     else if (kind === 'txt') {
       const stash: string[] = [];
-      let temp = note.content.replace(/<mark class="vx-slop[^"]*"[^>]*>[\s\S]*?<\/mark>/gi, (m) => {
+      let temp = content.replace(/<mark class="vx-slop[^"]*"[^>]*>[\s\S]*?<\/mark>/gi, (m) => {
         stash.push(m);
         return `@@VXSLOP${stash.length - 1}@@`;
       });
       temp = stripTags(temp.replace(/<br\s*\/?>/gi, '\n')).replace(/&nbsp;/g, ' ');
       out = temp.replace(/@@VXSLOP(\d+)@@/g, (_, i) => stash[Number(i)]);
-    } else out = note.content;
+    } else out = content;
     return rewriteMediaToDisk(out, depth);
   };
 
@@ -450,7 +465,7 @@ export function useNotes() {
       const { base } = splitExt(f.name);
       const title = base.replace(/__[^_]{1,14}(-\d+)?$/, '');
       const m = meta[id];
-      const trashHtml = contentFromDisk(f.name, f.content);
+      const trashHtml = loadedContent(contentFromDisk(f.name, f.content));
       trashNotes.push({
         id, title, content: trashHtml,
         tags: parseTags(title, trashHtml),

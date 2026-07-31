@@ -3,7 +3,7 @@
 // Contract: md -> html -> md must reproduce the markdown.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToMarkdown, markdownToHtml } from './format';
+import { htmlToMarkdown, markdownToHtml, wordCount } from './format';
 
 const roundTrip = (md: string) => htmlToMarkdown(markdownToHtml(md));
 
@@ -131,4 +131,35 @@ test('a blockquote above a bold word does not eat the bold', () => {
 test('formatting inside a heading survives — headings convert after inline', () => {
   assert.equal(htmlToMarkdown('<h1>A <b>bold</b> title</h1>'), '# A **bold** title\n');
   assert.equal(htmlToMarkdown('<h2>See <a href="http://x">this</a></h2>'), '## See [this](http://x)\n');
+});
+
+// --- word count -------------------------------------------------------------
+
+test('the byline is not counted — an empty note reads zero words', () => {
+  const byline =
+    '<aside class="vx-byline" data-vx-byline="1" contenteditable="false">' +
+    '<span class="vx-byline-by">By Nate</span></aside>';
+  // What an untouched note with a creator name set actually holds on disk.
+  assert.equal(wordCount(byline), 0);
+  assert.equal(wordCount(''), 0);
+  // …and the prose under one still counts as itself.
+  assert.equal(wordCount(byline + '<div>three words here</div>'), 3);
+});
+
+test('word count ignores tags and every part of a full byline', () => {
+  const byline =
+    '<aside data-vx-byline="1"><span>By Nate</span><span>with Ada · AI-assisted</span>' +
+    '<span>Source: <a href="http://x">example.com</a></span></aside>';
+  assert.equal(wordCount(byline), 0);
+  assert.equal(wordCount('<p>one <b>two</b><i>three</i></p>'), 3);
+});
+
+test('nothing invisible counts as a word', () => {
+  // The zero-width space shift+Enter leaves behind to anchor the caret.
+  assert.equal(wordCount('​'), 0);
+  assert.equal(wordCount('one<br>​'), 1);
+  // Entities are decoded first, so a non-breaking space separates rather than
+  // reading as a word of its own.
+  assert.equal(wordCount('&nbsp;'), 0);
+  assert.equal(wordCount('<p>a&nbsp;b</p>'), 2);
 });

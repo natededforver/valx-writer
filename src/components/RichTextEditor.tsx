@@ -13,6 +13,7 @@ import { mediaDisplaySrc, mediaDisplayHtml, mediaCanonicalHtml, readClipboardTex
 import { isAndroid } from '../lib/platform';
 import { SlashMenu, SlashItem, SlashSyntaxItem, SlashMediaItem } from './SlashMenu';
 import { AttachmentItem } from '../hooks/useFileSystem';
+import { typewriterEnabled, playKey, playReturn } from '../lib/typewriter';
 import {
   paintMisspellings, suggest, wordAtPoint, addWord, ignoreWord, DICTIONARY_EVENT,
 } from '../lib/spellcheck';
@@ -1285,6 +1286,18 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Any keyboard activity dismisses the media remove button.
     hideMediaTool();
+    // Typewriter sounds (View menu toggle). Shift+Enter is the carriage-return
+    // bell + slide; every other actual typing key is a clack. Pure modifier /
+    // navigation keys stay silent. Read straight from localStorage like
+    // auto-capitalize does — no re-render needed to pick up the toggle. Off on
+    // Android, where the toggle isn't offered.
+    if (!isAndroid && typewriterEnabled()) {
+      if (e.key === 'Enter' && e.shiftKey) playReturn();
+      else if (
+        (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) ||
+        e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Tab'
+      ) playKey();
+    }
     // '/' menu owns navigation keys while open.
     if (slashPos) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {

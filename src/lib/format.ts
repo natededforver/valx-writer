@@ -8,7 +8,7 @@
 
 import { SLOP_MARK_RE } from './slop';
 import { BYLINE_RE } from './byline';
-import { stripTags } from './htmlText';
+import { stripTags, decodeHtmlEntities } from './htmlText';
 
 export type MediaKind = 'image' | 'audio' | 'video' | 'file';
 export interface MediaAttachment {
@@ -474,10 +474,27 @@ export function markdownToHtml(raw: string): string {
 
 const MARKDOWN_EXT_RE = /\.(md|markdown|mdown|mkd)$/i;
 
+// Characters that occupy no space and spell no word: the zero-width space the
+// editor parks a caret on after shift+Enter (RichTextEditor's soft-break
+// handling), its ZWNJ/ZWJ relatives, and a stray BOM. None of them match \s, so
+// without this each one counts as a whole word of its own.
+const INVISIBLE_RE = /[\u200B-\u200D\uFEFF]/g;
+
 /** Word count of a note's HTML content (tags stripped). Shared by the editor's
- *  toolbar count and the note-list row so both agree. */
+ *  toolbar count and the note-list row so both agree.
+ *
+ *  Everything that isn't prose comes out first, because an empty note has to
+ *  count zero and each of these made it count more:
+ *   • the byline block — stored inside the note (byline.ts) but chrome, not
+ *     writing, so "By Nate · Source: …" was reading as words the user never
+ *     typed. A fresh note with a creator name set said "2 words".
+ *   • &nbsp; and friends — an entity is one token to a split on whitespace, so
+ *     a note holding only "&nbsp;" counted as a word and "a&nbsp;b" as one.
+ *   • zero-width characters — see INVISIBLE_RE. One shift+Enter was +1 word. */
 export function wordCount(html: string): number {
-  return stripTags(html, ' ').trim().split(/\s+/).filter(w => w.length > 0).length;
+  const body = (html || '').replace(BYLINE_RE, ' ');
+  const text = decodeHtmlEntities(stripTags(body, ' ')).replace(INVISIBLE_RE, '');
+  return text.trim().split(/\s+/).filter(w => w.length > 0).length;
 }
 
 /** Which on-disk serialization an extension implies. */

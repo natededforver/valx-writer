@@ -32,8 +32,9 @@ WebView2 on Windows, WKWebView on macOS. The Windows installer is under 7 MB.
 > choose *More info → Run anyway*. On macOS, right-click Valx in Applications and
 > choose *Open* once. Both go away once the builds are signed.
 
-## Run instruction:
-
+## Run instruction (IMPORTANT FOR MAC USERS!!!):
+<img src="site/step-1.png" alt="macOS settings instructions" width="420" />
+<img src="site/step-2.png" alt="macOS settings instructions" width="620" />
 <img src="site/run-anyway-macOS.png" alt="macOS settings instructions" width="620" />
 
 ## Why Valx
@@ -132,7 +133,7 @@ mark in the document itself, which words are **yours** and which words came from
 ### The window itself
 
 - Distraction-free mode fades the chrome away until you reach for the top edge.
-- Dark mode, transparency, word count and line numbers are all one click in View.
+- Dark mode, transparency, typewriter sounds, word count and line numbers are all one click in View.
 - Frameless with app-drawn caption buttons on Windows; native decorations and traffic lights on macOS.
 
 <img src="site/feature-settings.svg" alt="The Preferences drawer beside the same note shown in the light and dark themes" width="820" />

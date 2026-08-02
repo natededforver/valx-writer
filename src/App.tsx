@@ -15,7 +15,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { DictionaryModal } from './components/DictionaryModal';
 import { ForbiddenModal } from './components/ForbiddenModal';
 import { SpacingModal } from './components/SpacingModal';
-import { applySpacing } from './lib/prefs';
+import { LS_TRANSPARENCY, applyTransparency, applySpacing, prefOn } from './lib/prefs';
 import { FilterState, JumpTarget } from './types';
 import { SearchHit } from './lib/search';
 import { linkHrefForNote } from './lib/noteLinks';
@@ -139,8 +139,13 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  // Re-apply the saved writing-surface spacing before the first paint.
-  useEffect(() => { applySpacing(); }, []);
+  // Re-apply saved appearance preferences on launch: transparency (ships off,
+  // so an unset key means opaque — prefOn handles the ship-defaults) and the
+  // writing-surface spacing, both before the first paint.
+  useEffect(() => {
+    applyTransparency(prefOn(LS_TRANSPARENCY));
+    applySpacing();
+  }, []);
 
   // Sync active note logic
   const activeNoteId = selectedNoteIds.length === 1 ? selectedNoteIds[0] : null;

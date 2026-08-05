@@ -1290,7 +1290,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           so the menu is never empty. */}
       {!isCodeNote && !mdSource && (
         <>
-          {([['bold', 'Bold', 'Ctrl B'], ['italic', 'Italic', 'Ctrl I'], ['strikeThrough', 'Strikethrough', 'Ctrl Shift X'], ['checkbox', 'Insert checkbox', '']] as const).map(([cmd, label, sc]) => (
+          {([['bold', 'Bold', 'Ctrl B'], ['italic', 'Italic', 'Ctrl I'], ['strikeThrough', 'Strikethrough', 'Ctrl Shift X'], ['checkbox', 'Insert checkbox', ''], ['timestamp', 'Insert timestamp', '']] as const).map(([cmd, label, sc]) => (
             <button key={cmd} onMouseDown={(e) => e.preventDefault()} onClick={() => window.dispatchEvent(new CustomEvent('valx-format', { detail: cmd }))} className={itemCls}>{label}{sc && <span className={shortcutCls}>{accel(sc)}</span>}</button>
           ))}
           <div className={dividerCls} />

@@ -1131,6 +1131,30 @@ export function RichTextEditor({ value, onChange, disabled, placeholder, onTextF
       const cmd = (e as CustomEvent).detail as string;
       editorRef.current?.focus();
       if (cmd === 'checkbox') { insertHtmlAtCaret('<input type="checkbox">&nbsp;'); handleInput(); return; }
+      if (cmd === 'timestamp') {
+        const now = new Date();
+        const dateStr = String(now.getDate()).padStart(2, '0');
+        const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+        const yearStr = String(now.getFullYear()).slice(-2);
+        let hours = now.getHours();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const mins = String(now.getMinutes()).padStart(2, '0');
+        const ts = `${dateStr}-${monthStr}-${yearStr} ${hours}:${mins} ${ampm}`;
+        
+        const sel = window.getSelection();
+        if (sel && editorRef.current) {
+          sel.removeAllRanges();
+          const range = document.createRange();
+          range.selectNodeContents(editorRef.current);
+          range.collapse(true);
+          sel.addRange(range);
+          insertHtmlAtCaret(`<div>${ts}</div>`);
+          handleInput();
+        }
+        return;
+      }
       if (!applyToMultiRanges(() => document.execCommand(cmd, false))) document.execCommand(cmd, false);
       handleInput();
     };

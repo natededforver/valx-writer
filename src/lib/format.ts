@@ -492,7 +492,9 @@ const INVISIBLE_RE = /[\u200B-\u200D\uFEFF]/g;
  *     a note holding only "&nbsp;" counted as a word and "a&nbsp;b" as one.
  *   • zero-width characters — see INVISIBLE_RE. One shift+Enter was +1 word. */
 export function wordCount(html: string): number {
-  const body = (html || '').replace(BYLINE_RE, ' ');
+  let body = (html || '').replace(BYLINE_RE, ' ');
+  // Exclude timestamps (DD-MM-YY HH:MM AM/PM) from word count
+  body = body.replace(/\b\d{2}-\d{2}-\d{2} \d{1,2}:\d{2} (AM|PM)\b/gi, ' ');
   const text = decodeHtmlEntities(stripTags(body, ' ')).replace(INVISIBLE_RE, '');
   return text.trim().split(/\s+/).filter(w => w.length > 0).length;
 }

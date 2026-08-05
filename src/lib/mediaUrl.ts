@@ -73,14 +73,14 @@ export function displayMediaHtml(html: string, root: string | null, convert: Con
 }
 
 // convertFileSrc yields http(s)://asset.localhost/<encoded path> on
-// Windows/Android and asset://localhost/<encoded path> elsewhere. Invert by
+// Windows, http(s)://tauri.localhost/... on Android and asset://localhost/<encoded path> elsewhere. Invert by
 // decoding the path and stripping the workspace root (case-insensitively:
 // Windows paths). URLs outside the workspace are left untouched.
 //
 // The class excludes only the quote characters, NOT `)` — notes written by the
 // build that shipped this bug hold asset URLs with real parens in them, and
 // this is what turns those back into canonical form (see balancedPrefix).
-const ASSET_URL_RE = /(?:https?:\/\/asset\.localhost|asset:\/\/localhost)\/([^"'\s]+)/g;
+const ASSET_URL_RE = /(?:https?:\/\/(?:asset|tauri)\.localhost|asset:\/\/localhost)\/([^"'\s]+)/g;
 
 /** The leading run whose parens balance. A `)` with no `(` before it belongs to
  *  whatever wraps the URL — markdown's `](…)` — not to the URL. */

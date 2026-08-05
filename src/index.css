@@ -79,6 +79,7 @@
 .dark {
   --vx-surface: #0a0a0a;
   --vx-hair: #262626;
+  color-scheme: dark;
 }
 
 /* --- Glass design language ---

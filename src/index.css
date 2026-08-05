@@ -62,6 +62,11 @@
    stick: the app root has the `font-sans` utility, which would otherwise pin
    every descendant to Tailwind's default stack regardless of what `body` says. */
 :root {
+  /* Prevent Android WebView from auto-inflating text for "readability". Without
+     this, text sizes drift larger in narrow columns — the random enlargement
+     that only a restart fixes. 100 % means "use the size I declared". */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'SF Pro', system-ui, 'Segoe UI', 'Valx Helvetica', Helvetica, Arial, Roboto, sans-serif;
   /* The writing surface. Kept separate from --font-sans so UI chrome and prose
      never drift onto the same typeface. */

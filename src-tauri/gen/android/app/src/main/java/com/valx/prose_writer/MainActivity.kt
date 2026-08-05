@@ -60,6 +60,43 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+    hideSystemBars()
+  }
+
+  /**
+   * Hide status bar and navigation bar for full-screen writing immersion.
+   *
+   * Uses WindowInsetsController on API 30+ with a deprecated-flag fallback for
+   * 24–29 (the app's minSdk). BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE lets the
+   * user peek the bars with an edge swipe — they slide back out after a moment.
+   */
+  private fun hideSystemBars() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      window.insetsController?.let {
+        it.hide(
+          android.view.WindowInsets.Type.statusBars()
+            or android.view.WindowInsets.Type.navigationBars()
+        )
+        it.systemBarsBehavior =
+          android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+      }
+    } else {
+      @Suppress("DEPRECATION")
+      window.decorView.systemUiVisibility = (
+        android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+          or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+          or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+          or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+          or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+          or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+      )
+    }
+  }
+
+  /** Android resets immersive mode after dialogs and focus changes. */
+  override fun onWindowFocusChanged(hasFocus: Boolean) {
+    super.onWindowFocusChanged(hasFocus)
+    if (hasFocus) hideSystemBars()
   }
 
   /**
@@ -109,6 +146,16 @@ class MainActivity : TauriActivity() {
 
   override fun onWebViewCreate(webView: WebView) {
     webViewForEvents = webView
+
+    // Lock text size to 100 % regardless of the system "Font size" slider:
+    // without this the WebView inherits the OS setting and inflates all text.
+    webView.settings.textZoom = 100
+    // Disable built-in pinch zoom so accidental two-finger touches during
+    // editing cannot scale the page (viewport meta user-scalable=no handles
+    // the web side; this covers the native side).
+    webView.settings.setSupportZoom(false)
+    webView.settings.builtInZoomControls = false
+
     webView.addJavascriptInterface(InsetBridge(), "__valxInsets")
     webView.addJavascriptInterface(AndroidBridge(), "__valxAndroid")
     ViewCompat.setOnApplyWindowInsetsListener(webView) { view, windowInsets ->

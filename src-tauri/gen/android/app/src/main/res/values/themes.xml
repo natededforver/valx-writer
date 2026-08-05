@@ -1,6 +1,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.valx_prose_writer" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <!-- Immersive writing: let the app draw into the display cutout and
+             behind translucent system bars. The runtime code in MainActivity
+             hides them entirely; these flags ensure the layout extends to the
+             edges when a bar is transiently visible. -->
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">shortEdges</item>
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentNavigation">true</item>
     </style>
 </resources>

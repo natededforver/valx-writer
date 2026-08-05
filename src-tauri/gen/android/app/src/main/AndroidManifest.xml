@@ -35,7 +35,7 @@
         android:theme="@style/Theme.valx_prose_writer"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
         <activity
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|fontScale"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
             android:label="@string/main_activity_title"

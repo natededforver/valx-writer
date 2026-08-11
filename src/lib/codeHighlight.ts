@@ -84,21 +84,16 @@ const RULES: Record<CodeLang, Rule[]> = {
   // caret stays aligned. ponytail: truly *smaller* marks need per-font
   // letter-spacing compensation (or a real editor widget) — fade-only for now.
   md: [
-    [/<mark class="vx-slop"[^>]*data-slop="([^"]+)"[^>]*>([\s\S]*?)<\/mark>/gi, (m) => `<span class="tok-slop tok-slop-${esc(m[1])}">${esc(m[2])}</span>`],
-    [/<a class="vx-attach"[^>]*data-name="([^"]+)"[^>]*>[\s\S]*?<\/a>/gi, (m) => `<span class="tok-media">📎 ${esc(m[1])}</span>`],
-    [/<audio[^>]*data-name="([^"]+)"[^>]*>[\s\S]*?<\/audio>/gi, (m) => `<span class="tok-media">🎵 ${esc(m[1])}</span>`],
-    [/<video[^>]*data-name="([^"]+)"[^>]*>[\s\S]*?<\/video>/gi, (m) => `<span class="tok-media">🎞️ ${esc(m[1])}</span>`],
-    [/<img[^>]*data-name="([^"]+)"[^>]*>/gi, (m) => `<span class="tok-media">🖼️ ${esc(m[1])}</span>`],
     [/^`{3,}[^\n]*/gm, 'mdsyn'],
-    [/^(#{1,6})([ \t]+)(.*)$/gm, (m) => syn(m[1] + m[2]) + `<span class="tok-mdhead tok-mdhead-${m[1].length}">${esc(m[3])}</span>`],
+    [/^(#{1,6}[ \t]+)(.*)$/gm, (m) => syn(m[1]) + `<span class="tok-mdhead">${esc(m[2])}</span>`],
     [/^[ \t]*[-+*][ \t]+\[[ xX]\]/gm, 'mdsyn'],
     [/^[ \t]*(?:[-+*]|\d+\.)[ \t]+/gm, 'mdsyn'],
-    [/^([ \t]*>[ \t]?)(.*)$/gm, (m) => syn(m[1]) + `<span class="tok-mdquote">${esc(m[2])}</span>`],
+    [/^[ \t]*>[ \t]?/gm, 'mdsyn'],
     [/^(?:-{3,}|\*{3,}|_{3,})[ \t]*$/gm, 'mdsyn'],
     [/`([^`\n]+)`/g, (m) => syn('`') + `<span class="tok-mdcode">${esc(m[1])}</span>` + syn('`')],
-    [/\*\*([^*\n]+)\*\*/g, (m) => syn('**') + `<b class="tok-mdbold">${esc(m[1])}</b>` + syn('**')],
-    [/\*([^*\n]+)\*/g, (m) => syn('*') + `<i class="tok-mditalic">${esc(m[1])}</i>` + syn('*')],
-    [/~~([^~\n]+)~~/g, (m) => syn('~~') + `<s class="tok-mdstrike">${esc(m[1])}</s>` + syn('~~')],
+    [/\*\*([^*\n]+)\*\*/g, (m) => syn('**') + `<b>${esc(m[1])}</b>` + syn('**')],
+    [/\*([^*\n]+)\*/g, (m) => syn('*') + `<i>${esc(m[1])}</i>` + syn('*')],
+    [/~~([^~\n]+)~~/g, (m) => syn('~~') + `<s>${esc(m[1])}</s>` + syn('~~')],
     [/(!?\[)([^\]\n]*)(\]\()([^)\s]+)(\))/g, (m) =>
       syn(m[1]) + `<span class="tok-mdlink">${esc(m[2])}</span>` + syn(m[3]) + `<span class="tok-mdurl">${esc(m[4])}</span>` + syn(m[5])],
     [/\|/g, 'mdsyn'],

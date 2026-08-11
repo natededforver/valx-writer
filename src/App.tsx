@@ -15,7 +15,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { DictionaryModal } from './components/DictionaryModal';
 import { ForbiddenModal } from './components/ForbiddenModal';
 import { SpacingModal } from './components/SpacingModal';
-import { LS_TRANSPARENCY, applyTransparency, applySpacing, applyEditorFont, prefOn } from './lib/prefs';
+import { LS_TRANSPARENCY, applyTransparency, applySpacing, prefOn } from './lib/prefs';
 import { FilterState, JumpTarget } from './types';
 import { SearchHit } from './lib/search';
 import { linkHrefForNote } from './lib/noteLinks';
@@ -145,7 +145,6 @@ export default function App() {
   useEffect(() => {
     applyTransparency(prefOn(LS_TRANSPARENCY));
     applySpacing();
-    applyEditorFont();
   }, []);
 
   // Sync active note logic

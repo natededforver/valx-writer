@@ -1,12 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Note, JumpTarget, Folder } from '../types';
-import { SearchHit } from '../lib/search';
 import { plainText } from '../lib/search';
 import { compareTitles } from '../lib/noteSort';
-import { Type, Eye, EyeOff } from 'lucide-react';
-import { FontPickerModal } from './FontPickerModal';
-import { linkHrefForNote } from '../lib/noteLinks';
-import { RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, ChevronLeft, Share, ImagePlus, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, FolderInput, SlidersHorizontal, BookA, SpellCheck, Languages, Ban } from 'lucide-react';
+import { RotateCcw, XCircle, Maximize2, Minimize2, Download, Printer, Search, X, Check, ChevronDown, ChevronUp, Eye, EyeOff, Copy, Send, Table, Smartphone, Monitor, History, ArrowLeft, ArrowRight, Minus, Square, Play, ChevronRight, ChevronLeft, Share, Type, ImagePlus, Plus, Undo2, Redo2, Scissors, ClipboardPaste, ClipboardType, TextSelect, FileUp, FolderOpen, FolderInput, SlidersHorizontal, BookA, SpellCheck, Languages, Ban } from 'lucide-react';
 import { BinIcon } from './BinIcon';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '../lib/desktop';
@@ -268,21 +264,9 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const [mdSource, setMdSource] = useState(false);
   const [syntaxViewer, setSyntaxViewer] = useState(true);
   const [mdText, setMdText] = useState('');
-  const [fontMenu, setFontMenu] = useState(false);
-  
-  const [isTyping, setIsTyping] = useState(false);
-  const typingTimeoutRef = useRef<number | null>(null);
-
-  const markTyping = () => {
-    setIsTyping(true);
-    if (typingTimeoutRef.current !== null) window.clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = window.setTimeout(() => setIsTyping(false), 2000);
-  };
-
   // The last HTML this surface committed — external content changes (history
   // revert, workspace rescan) are anything different, and re-derive the text.
   const lastMdCommitRef = useRef<string | null>(null);
-  const mdTextareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { setMdSource(false); lastMdCommitRef.current = null; }, [note?.id]);
   useEffect(() => {
     if (!mdSource || !note) return;
@@ -295,79 +279,10 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const handleMdChange = (text: string) => {
     if (!note) return;
     setMdText(text);
-    markTyping();
     const stored = syncByline(markdownToHtml(text));
     lastMdCommitRef.current = stored;
     updateNote(note.id, { content: stored });
   };
-
-  useEffect(() => {
-    if (!mdSource) return;
-    const onFormat = (e: CustomEvent<string>) => {
-      const el = mdTextareaRef.current;
-      if (!el) return;
-      const start = el.selectionStart;
-      const end = el.selectionEnd;
-      const sel = mdText.substring(start, end);
-      let before = mdText.substring(0, start);
-      let after = mdText.substring(end);
-      let ins = sel;
-      let newStart = start;
-      let newEnd = end;
-      
-      const cmd = e.detail;
-      if (cmd === 'bold') {
-        ins = `**${sel}**`; newEnd += 4; if (!sel) newStart += 2;
-      } else if (cmd === 'italic') {
-        ins = `*${sel}*`; newEnd += 2; if (!sel) newStart += 1;
-      } else if (cmd === 'strikeThrough') {
-        ins = `~~${sel}~~`; newEnd += 4; if (!sel) newStart += 2;
-      } else if (cmd === 'checkbox') {
-        ins = `- [ ] ${sel}`; newEnd += 6; if (!sel) newStart += 6;
-      } else if (cmd === 'timestamp') {
-        const ts = new Date().toLocaleString();
-        ins = ts; newEnd += ts.length; newStart += ts.length;
-      } else {
-        return;
-      }
-      
-      const newText = before + ins + after;
-      handleMdChange(newText);
-      setTimeout(() => {
-        el.focus();
-        el.setSelectionRange(newStart, newStart === newEnd && sel ? newStart : newEnd);
-      }, 0);
-    };
-
-    const onInsertTable = (e: CustomEvent<{ rows: number; cols: number }>) => {
-      const el = mdTextareaRef.current;
-      if (!el) return;
-      const { rows, cols } = e.detail;
-      
-      let table = '\n|' + Array(cols).fill('   ').join('|') + '|\n';
-      table += '|' + Array(cols).fill('---').join('|') + '|\n';
-      for (let r = 1; r < rows; r++) {
-        table += '|' + Array(cols).fill('   ').join('|') + '|\n';
-      }
-      
-      const start = el.selectionStart;
-      const end = el.selectionEnd;
-      const before = mdText.substring(0, start);
-      const after = mdText.substring(end);
-      handleMdChange(before + table + after);
-      setTimeout(() => {
-        el.focus();
-        el.setSelectionRange(start + table.length, start + table.length);
-      }, 0);
-    };
-
-    window.addEventListener('valx-format', onFormat as EventListener);
-    window.addEventListener('valx-insert-table', onInsertTable as EventListener);
-    return () => {
-      window.removeEventListener('valx-format', onFormat as EventListener);
-      window.removeEventListener('valx-insert-table', onInsertTable as EventListener);
-    };
-  }, [mdSource, mdText]);
   const toggleMdSource = () => {
     if (!mdSource && note) {
       setMdText(htmlToMarkdown(stripByline(note.content)));
@@ -897,6 +812,12 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        {/* Chrome strip so the window stays draggable/closable with no note
+            open — and a menu bar, so the settings that aren't about a note
+            (open a file, spacing, spelling, the window itself) stay reachable
+            before anything is selected. Menus that need a note to act on —
+            Edit and Creators, plus File's save/export/print/trash rows — are
+            simply absent rather than present-but-dead. */}
         <div className="hidden md:flex absolute top-0 inset-x-0 h-10 items-center px-1.5 gap-0.5 z-40 vx-glass-strong border-b border-black/[0.06] dark:border-white/[0.08]" style={{ paddingLeft: trafficLightInset || undefined }}>
           {onToggleSidebar && (
             <button
@@ -908,6 +829,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             </button>
           )}
 
+          {/* FILE — only the rows that don't need a note. */}
           <div className="relative z-50 h-full flex items-center">
             <button onClick={() => setOpenMenu((m) => (m === 'file' ? null : 'file'))} onMouseEnter={() => openMenu && setOpenMenu('file')} className={`${menuBtnCls('file')} h-7`}>File</button>
             {openMenu === 'file' && (
@@ -924,6 +846,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
             )}
           </div>
 
+          {/* FORMAT — just the spacing sliders; the rest needs a selection. */}
           <div className="relative z-50 h-full flex items-center">
             <button onClick={() => setOpenMenu((m) => (m === 'format' ? null : 'format'))} onMouseEnter={() => openMenu && setOpenMenu('format')} className={`${menuBtnCls('format')} h-7`}>Format</button>
             {openMenu === 'format' && <div className={menuPopCls}>{spacingItem}</div>}
@@ -988,6 +911,12 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   const handlePrint = async () => {
     setIsShareOpen(false);
 
+    // note.content stores the canonical /__media/… form (see desktop.ts) —
+    // without mediaDisplayHtml's rewrite to the real asset:// URL, images
+    // never had a resolvable src in the print iframe at all. <audio>/<video>
+    // have no print-time visual representation (a native player just draws
+    // blank or clipped controls), so they're swapped for a plain text badge
+    // instead of shipping a broken player to the page.
     const printDiv = document.createElement('div');
     printDiv.innerHTML = mediaDisplayHtml(note.content);
     const badgeFor = (kind: string, src: string) => {
@@ -999,6 +928,8 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     };
     printDiv.querySelectorAll('audio').forEach((el) => el.replaceWith(badgeFor('audio', el.getAttribute('src') || '')));
     printDiv.querySelectorAll('video').forEach((el) => el.replaceWith(badgeFor('video', el.getAttribute('src') || '')));
+    // Android's print WebView can't resolve the app's asset URLs, so the
+    // pictures have to travel with the document. No-op elsewhere.
     if (isAndroid) await inlineImages(printDiv);
     const printableContent = printDiv.innerHTML;
 
@@ -1007,14 +938,49 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         <head>
           <title>${note.title || 'Note'}</title>
           <style>
-            @page { size: auto; margin: 0mm; }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20mm; line-height: 1.6; color: #000; }
-            h1 { font-size: 2.5em; margin-bottom: 0.5em; font-weight: 700; letter-spacing: -0.02em; }
-            .content { font-size: 1.1em; }
-            br { display: block; margin-top: 0.5em; }
-            img { max-width: 100%; height: auto; object-fit: contain; }
-            ul { margin-top: 0.5em; margin-bottom: 0.5em; }
-            .vx-print-media-badge { display: block; margin: 0.75em 0; padding: 0.5em 0.9em; border: 1px solid #999; border-radius: 6px; font-style: italic; color: #444; width: fit-content; }
+            @page {
+              size: auto;
+              margin: 0mm; /* This removes the header and footer metadata */
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              padding: 20mm;
+              line-height: 1.6;
+              color: #000;
+            }
+            h1 {
+              font-size: 2.5em;
+              margin-bottom: 0.5em;
+              font-weight: 700;
+              letter-spacing: -0.02em;
+            }
+            .content {
+              font-size: 1.1em;
+            }
+            /* Preserve spacing */
+            br {
+              display: block;
+              margin-top: 0.5em;
+            }
+            img {
+              max-width: 100%;
+              height: auto;
+              object-fit: contain;
+            }
+            ul {
+              margin-top: 0.5em;
+              margin-bottom: 0.5em;
+            }
+            .vx-print-media-badge {
+              display: block;
+              margin: 0.75em 0;
+              padding: 0.5em 0.9em;
+              border: 1px solid #999;
+              border-radius: 6px;
+              font-style: italic;
+              color: #444;
+              width: fit-content;
+            }
           </style>
         </head>
         <body>
@@ -1024,8 +990,13 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       </html>
     `;
 
+    // Android's WebView implements no window.print() — it returns silently,
+    // which is exactly what "Print doesn't work" looked like. The platform
+    // prints through PrintManager, which the Kotlin bridge drives.
     if (printHtml(printDoc, note.title || 'Valx note')) return;
 
+    // Everywhere else: an offscreen iframe, so the printed page carries the
+    // note and none of the app chrome or browser headers.
     const iframe = document.createElement('iframe');
     iframe.style.position = 'absolute';
     iframe.style.width = '0px';
@@ -1044,6 +1015,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       iframe.contentWindow?.focus();
       iframe.contentWindow?.print();
 
+      // Cleanup after a delay to ensure printing dialog is opened
       setTimeout(() => {
         document.body.removeChild(iframe);
       }, 500);
@@ -1057,6 +1029,8 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       // @ts-ignore
       const result = await window.electronAPI.exportWithPandoc(content, format, note.title || 'Note');
       if (result && result.success) {
+        // Android chose the destination itself (no save dialog exists there),
+        // so it has to say where the file landed.
         showToast(
           isAndroid && result.path
             ? `Saved to ${String(result.path).split('/').slice(-2).join('/')}`
@@ -1086,6 +1060,9 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     setIsShareOpen(false);
   };
 
+  // Send the note to another app. The full plain text is always copied to the
+  // clipboard first (the target window steals focus and prefill URLs are length
+  // capped), then the destination opens in the system browser / mail client.
   const handleSendTo = async (target: ShareTarget) => {
     setIsShareOpen(false);
     const title = note.title || 'Untitled';
@@ -1102,6 +1079,8 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     openShareUrl(built.url);
   };
 
+  // Android: hand the note to the OS share sheet. No clipboard dance and no
+  // URL length budget — the receiving app gets the whole note as an extra.
   const handleNativeShare = () => {
     setIsShareOpen(false);
     if (!shareText(plainTextOfNote(note), note.title || 'Untitled')) {
@@ -1130,7 +1109,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     element.innerHTML = `<h1>${note.title}</h1><br/>${note.content}`;
     element.style.padding = '40px';
     element.style.fontFamily = 'sans-serif';
-    element.style.color = 'black'; 
+    element.style.color = 'black'; // ensure black text
 
     const opt = {
       margin:       1,
@@ -1151,6 +1130,10 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     setIsShareOpen(false);
   };
 
+
+  // Each file's text -> HTML, joined in drop order with a blank line between
+  // files so a multi-file drop reads as one continuous document, not a wall
+  // of run-together text.
   const mergedHtmlFromFiles = async (files: globalThis.File[]): Promise<string> => {
     const htmlParts = await Promise.all(files.map(async (f) => (await f.text()).replace(/\n/g, '<br>')));
     return htmlParts.join('<br><br>');
@@ -1173,11 +1156,22 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     setDroppedTextFiles(null);
   };
 
+
+  // --- menu bodies -----------------------------------------------------------
+  // Defined once and rendered twice: into the desktop dropdowns below, and into
+  // the mobile sheet. Extracted rather than duplicated because these ARE the
+  // app's commands — two hand-kept copies would drift within a release, and the
+  // phone would quietly be the one missing a command.
   const fileMenuItems = (
     <>
       {!note.isTrash ? (
         <>
           <button onClick={() => { setOpenMenu(null); handleOpenFile(); }} className={itemCls}><FileUp size={15} className="opacity-60" /> Open File…<span className={shortcutCls}>{accel('Ctrl O')}</span></button>
+          {/* Import media. Everything imported lands in the workspace's
+              .attachments folder and is inserted at the caret — an image,
+              audio or video element for the kinds a page can play, a paperclip
+              chip for the rest (PDFs). The picker itself lives in
+              RichTextEditor, next to the function that does the copying. */}
           {!note.isTrash && (
             <button onClick={() => { setOpenMenu(null); window.dispatchEvent(new CustomEvent('valx-import-media')); }} className={itemCls}>
               <ImagePlus size={15} className="opacity-60" /> Import media…
@@ -1187,6 +1181,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           <div className={dividerCls} />
           <button onClick={() => { onSaveNow?.(note.id); setOpenMenu(null); }} className={itemCls}><Check size={15} className="opacity-60" /> Save<span className={shortcutCls}>{accel('Ctrl S')}</span></button>
           <div className={dividerCls} />
+          {/* Export as → flyout */}
           <div className="relative" onMouseEnter={hoverOpen(() => setFileSub('export'))}>
             <button onClick={() => setFileSub((s) => (s === 'export' ? null : 'export'))} className={`${itemCls} ${fileSub === 'export' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><Download size={15} className="opacity-60" /> Export as<ChevronRight size={14} className="ml-auto opacity-50" /></button>
             {fileSub === 'export' && (
@@ -1197,6 +1192,10 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               </div>
             )}
           </div>
+          {/* Send to. On Android the hand-written target list is
+              replaced by the system share sheet — the phone already
+              knows which apps take a note, its list is the user's
+              own, and it needs no clipboard-and-paste workarounds. */}
           {isAndroid ? (
             <button onClick={() => { handleNativeShare(); setOpenMenu(null); }} className={itemCls}><Send size={15} className="opacity-60" /> Share…</button>
           ) : (
@@ -1218,11 +1217,19 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           <div className={dividerCls} />
           {onOpenPreferences && <button onClick={() => { setOpenMenu(null); onOpenPreferences(); }} className={itemCls}><SlidersHorizontal size={15} className="opacity-60" /> Preferences…<span className={shortcutCls}>{accel('Ctrl ,')}</span></button>}
           <div className={dividerCls} />
+          {/* Move to → flyout. Filing a note was drag-only: pick the row up in
+              the sidebar and drop it on a folder. That is a gesture a phone
+              barely has, so the same move is a menu row here — and it sits with
+              Move to Trash because the two are the same decision about where
+              this note should live. */}
           {onMoveNoteToFolder && (
             <div className="relative" onMouseEnter={hoverOpen(() => setFileSub('move'))}>
               <button onClick={() => setFileSub((s) => (s === 'move' ? null : 'move'))} className={`${itemCls} ${fileSub === 'move' ? 'bg-slate-100 dark:bg-neutral-900' : ''}`}><FolderInput size={15} className="opacity-60" /> Move to<ChevronRight size={14} className="ml-auto opacity-50" /></button>
               {fileSub === 'move' && (
                 <div className={subPopCls}>
+                  {/* No folder at all — the workspace root, which the sidebar
+                      calls All Notes. Named the way the sidebar names it, so the
+                      row says where the note will turn up. */}
                   <button
                     onClick={() => { onMoveNoteToFolder(note.id, null); setOpenMenu(null); }}
                     className={itemCls}
@@ -1242,6 +1249,11 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
                       <span className="truncate">{f.name}</span>
                     </button>
                   ))}
+                  {moveTargets.length === 0 && (
+                    <div className="px-4 py-2.5 text-xs text-slate-400 dark:text-slate-500 italic">
+                      No folders yet — add one in the sidebar
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1258,7 +1270,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   );
   const editMenuItems = (
     <>
-      <button onClick={editCmd('undo')} className={itemCls}><Undo2 size={15} className="opacity-60" /> Undo<span className={shortcutCls}>{accel('Ctrl Z')}</span></button>
+                      <button onClick={editCmd('undo')} className={itemCls}><Undo2 size={15} className="opacity-60" /> Undo<span className={shortcutCls}>{accel('Ctrl Z')}</span></button>
       <button onClick={editCmd('redo')} className={itemCls}><Redo2 size={15} className="opacity-60" /> Redo<span className={shortcutCls}>{accel('Ctrl Shift Z')}</span></button>
       <div className={dividerCls} />
       <button onClick={editCmd('cut')} className={itemCls}><Scissors size={15} className="opacity-60" /> Cut<span className={shortcutCls}>{accel('Ctrl X')}</span></button>
@@ -1273,7 +1285,10 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
   );
   const formatMenuItems = (
     <>
-      {!isCodeNote && (
+                        {/* Code files and markdown source have no rich formatting to
+          offer — but the spacing sliders below still apply to them,
+          so the menu is never empty. */}
+      {!isCodeNote && !mdSource && (
         <>
           {([['bold', 'Bold', 'Ctrl B'], ['italic', 'Italic', 'Ctrl I'], ['strikeThrough', 'Strikethrough', 'Ctrl Shift X'], ['checkbox', 'Insert checkbox', ''], ['timestamp', 'Insert timestamp', '']] as const).map(([cmd, label, sc]) => (
             <button key={cmd} onMouseDown={(e) => e.preventDefault()} onClick={() => window.dispatchEvent(new CustomEvent('valx-format', { detail: cmd }))} className={itemCls}>{label}{sc && <span className={shortcutCls}>{accel(sc)}</span>}</button>
@@ -1290,8 +1305,6 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           <div className={dividerCls} />
         </>
       )}
-      <button onMouseDown={(e) => e.preventDefault()} onClick={() => { setFontMenu(true); setOpenMenu(null); }} className={itemCls}><Type size={15} className="opacity-60" /> Font…</button>
-      <div className={dividerCls} />
       {spacingItem}
     </>
   );
@@ -1299,6 +1312,8 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     <>
       {viewWindowItems}
       <div className={dividerCls} />
+      {/* Markdown source moved here from Format: it swaps what the
+          editor SHOWS, it doesn't change the note's formatting. */}
       {isMdNote && !note.isTrash && (
         <button onClick={() => { toggleMdSource(); setOpenMenu(null); }} className={itemCls}>
           <Check size={14} className={mdSource ? 'text-[#32CD32]' : 'opacity-0'} /> Markdown source
@@ -1313,7 +1328,18 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
     </>
   );
 
+  // --- the menu panel --------------------------------------------------------
+  // Every menu, in one grouped list that slides in from the right — the third
+  // of the three panels a swipe moves between (see App's swipe routing).
+  //
+  // Driven off `openMenu === 'sheet'` rather than a state of its own, which is
+  // not a trick but the point: dozens of rows already end in setOpenMenu(null)
+  // to dismiss the dropdown they were written for, and going through the same
+  // state means each of them closes the panel too, with no second code path to
+  // keep in step.
   const panelOpen = openMenu === 'sheet';
+
+
   const panelGroup = (label: string, body: React.ReactNode) => (
     <section className="mb-5">
       <h3 className="px-3 pb-1.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">{label}</h3>
@@ -1325,10 +1351,14 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       <div className="vx-scrim fixed inset-0 z-[70]" onClick={() => setOpenMenu(null)} />
       <div
         className="vx-menu-panel vx-panel-in vx-sheet fixed inset-y-0 right-0 z-[71] w-[86%] max-w-sm overflow-y-auto px-3.5 shadow-[-16px_0_48px_rgba(0,0,0,0.22)]"
+        // The panel spans the screen top to bottom, so it owns both insets:
+        // the status bar above and the gesture pill below.
         style={{
           paddingTop: `calc(0.75rem + var(--vx-inset-top, 0px))`,
           paddingBottom: `calc(1rem + var(--vx-inset-bottom, 0px))`,
         }}
+        // Opens over a focused editor; letting it take the focus would collapse
+        // the selection that Cut/Copy/Bold are about to act on.
         onMouseDown={(e) => e.preventDefault()}
       >
         <div className="flex items-center gap-2 pb-3">
@@ -1354,6 +1384,9 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
 
   return (
     <div
+      // The mouse drops notes here through dataTransfer (handleDrop below); a
+      // finger has no such API, so the touch drag finds this pane by attribute
+      // instead (lib/touchDrag.ts). Both land on the same merge.
       data-drop-editor={note.isTrash ? undefined : ''}
       className={`flex-1 bg-white dark:bg-black vx-editor-opaque flex flex-col h-full overflow-hidden relative ${[...hiddenAuthors].map((a) => 'vx-hide-' + a).join(' ')} ${className}`}
       onDragOver={handleDragOver}
@@ -1361,6 +1394,8 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
       onDrop={handleDrop}
       onMouseMove={bumpWcHover}
     >
+      
+      {/* Toast */}
       {toastMessage && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-lg z-50 text-sm font-medium animate-in fade-in slide-in-from-top-4">
           {toastMessage}
@@ -1376,6 +1411,10 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         </div>
       )}
 
+      {/* Focus-mode reveal sensor (windowed chrome is always shown). Hover on a
+          pointer; a tap on the top edge where there is none — a finger has no
+          hover state, and revealing on any tap would fight the caret. The strip
+          is taller on touch because a thumb is not a mouse cursor. */}
       {isFullscreen && !chromeShown && (
         <div
           className={`absolute top-0 inset-x-0 z-40 ${isTouchUI ? 'block h-8' : 'hidden md:block h-2'}`}
@@ -1384,11 +1423,26 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         />
       )}
 
+      {/* iA-Writer-style chrome: title bar + menu bar. Persistent when windowed,
+          auto-hides in fullscreen (reveal on top-edge hover / while a menu is open). */}
       <div
         onMouseLeave={() => setTopHover(false)}
+        // Bottom hairline only. The bar spans the window, so a border on the
+        // other three sides drew a rectangle around it — the outline the
+        // chrome is meant not to have.
         className={`absolute top-0 inset-x-0 z-50 vx-glass-strong border-b border-black/[0.06] dark:border-white/[0.08] transition-[transform,opacity] ${chromeFadeCls} ease-[cubic-bezier(0.16,1,0.3,1)] ${chromeShown ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}
+        // In native fullscreen the window extends under the system menu bar,
+        // which slides down over the top of it on the same top-edge hover that
+        // reveals this bar. Without the offset the two land on top of each
+        // other and the traffic lights sit over the sidebar toggle. Only while
+        // actually revealed — the hidden bar is translated off-screen anyway.
         style={macChromeTop ? { top: macChromeTop } : undefined}
       >
+        {/* Title bar. On a pointer it is the top half of a Windows-style menu
+            chrome: sidebar toggle · centered doc title (drag region) · caption
+            buttons. On touch it becomes the whole chrome — an iOS navigation
+            bar, taller for thumbs, with the five menus folded into the ⋯ at
+            its trailing edge and the menu-bar row below dropped entirely. */}
         <div className={`${isTouchUI ? 'h-12' : 'h-9'} flex items-center px-1.5 gap-1 text-slate-400 dark:text-slate-500`} style={{ paddingLeft: trafficLightInset || undefined }}>
           {onBack && isTouchUI && (
             <button onClick={onBack} aria-label="Back to notes" className="flex items-center pr-2 py-1.5 rounded-lg text-[#32CD32] active:opacity-60 transition-opacity">
@@ -1406,11 +1460,20 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               {isTouchUI ? (note.title || 'Untitled') : `${note.title || 'Untitled'} — Valx`}
             </span>
           </div>
+          {/* Focus mode's only handle on a phone. Keyboard users have F11/⌘↩
+              and the View menu; a finger needs a button, and it has to be on
+              the bar that the top-edge tap reveals — otherwise focus mode is a
+              room with no door. */}
           {isTouchUI && (
             <>
               <button onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit focus mode' : 'Focus mode'} className="p-2 shrink-0 rounded-lg text-[#32CD32] active:opacity-60 transition-opacity">
                 {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
               </button>
+              {/* Share, in the trailing slot iOS keeps for it — the system
+                  share sheet, straight from the bar. The five menus used to be
+                  here behind a ⋯; they are a swipe left away now (or the
+                  drawer handle on the right edge), which leaves this the one
+                  action worth a permanent button. */}
               <button onClick={handleNativeShare} aria-label="Share" className="p-2 -mr-0.5 shrink-0 rounded-lg text-[#32CD32] active:opacity-60 transition-opacity">
                 <Share size={20} />
               </button>
@@ -1425,31 +1488,115 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
           )}
         </div>
 
+        {/* Menu bar. Pointer only — on touch these five live in the menu panel. */}
         <div className={`h-8 ${isTouchUI ? 'hidden' : 'flex'} items-stretch px-1 gap-0.5 border-t border-black/5 dark:border-white/10 text-slate-600 dark:text-slate-300 relative`}>
           {openMenu && <div className="fixed inset-0 z-40" onMouseDown={() => setOpenMenu(null)} />}
+
+          {/* FILE */}
           <div className="relative z-50">
             <button onClick={() => setOpenMenu((m) => (m === 'file' ? null : 'file'))} onMouseEnter={() => openMenu && setOpenMenu('file')} className={menuBtnCls('file')}>File</button>
-            {openMenu === 'file' && <div className={menuPopCls}>{fileMenuItems}</div>}
+            {openMenu === 'file' && (
+              <div className={menuPopCls}>
+                {fileMenuItems}
+              </div>
+            )}
           </div>
+
+          {/* EDIT */}
           <div className="relative z-50">
             <button onClick={() => setOpenMenu((m) => (m === 'edit' ? null : 'edit'))} onMouseEnter={() => openMenu && setOpenMenu('edit')} className={menuBtnCls('edit')}>Edit</button>
-            {openMenu === 'edit' && <div className={menuPopCls} onMouseDown={(e) => e.preventDefault()}>{editMenuItems}</div>}
+            {openMenu === 'edit' && (
+              /* onMouseDown={preventDefault} on every row: opening a menu would
+                 otherwise blur the editor and collapse the selection, so Cut /
+                 Copy / formatting would act on nothing. */
+              <div className={menuPopCls} onMouseDown={(e) => e.preventDefault()}>
+                {editMenuItems}
+              </div>
+            )}
           </div>
+
+          {/* FORMAT */}
           {!note.isTrash && (
             <div className="relative z-50">
               <button onClick={() => setOpenMenu((m) => (m === 'format' ? null : 'format'))} onMouseEnter={() => openMenu && setOpenMenu('format')} className={menuBtnCls('format')}>Format</button>
-              {openMenu === 'format' && <div className={menuPopCls}>{formatMenuItems}</div>}
+              {openMenu === 'format' && (
+                <div className={menuPopCls}>
+                  {formatMenuItems}
+                </div>
+              )}
             </div>
           )}
+
+          {/* WORDS — everything that judges or corrects the prose itself:
+              spelling, the dictionary it checks against, and the language.
+              These used to trail the Edit menu, which had become a grab bag. */}
           <div className="relative z-50">
             <button onClick={() => setOpenMenu((m) => (m === 'words' ? null : 'words'))} onMouseEnter={() => openMenu && setOpenMenu('words')} className={menuBtnCls('words')}>Words</button>
             {openMenu === 'words' && wordsMenuPop}
           </div>
+
+          {/* VIEW */}
           <div className="relative z-50">
             <button onClick={() => setOpenMenu((m) => (m === 'view' ? null : 'view'))} onMouseEnter={() => openMenu && setOpenMenu('view')} className={menuBtnCls('view')}>View</button>
-            {openMenu === 'view' && <div className={menuPopCls}>{viewMenuItems}</div>}
+            {openMenu === 'view' && (
+              <div className={menuPopCls}>
+                {viewMenuItems}
+              </div>
+            )}
           </div>
+
+          {/* CREATORS — the primary creator name + extra human authors (each
+              becomes a "Mark as" label and a byline credit), plus the
+              provenance-highlight toggles.
+
+              Dropped on touch. Not for width alone (though six menus do overflow
+              a 360px phone and this is the widest): every label it defines is
+              spent through the right-click "Mark as" menu, and a finger has no
+              right-click. Configuring authors you could never then apply is
+              worse than not offering it. */}
+          <div className={`relative z-50 ${isTouchUI ? 'hidden' : ''}`}>
+            <button onClick={() => setOpenMenu((m) => (m === 'creators' ? null : 'creators'))} onMouseEnter={() => openMenu && setOpenMenu('creators')} className={menuBtnCls('creators')}>Creators</button>
+            {openMenu === 'creators' && (
+              <div className={`${menuPopCls} min-w-64`}>
+                <div className="px-3 pb-2 pt-1.5">
+                  <input
+                    value={creatorMe}
+                    onChange={(e) => setCreatorMeName(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="Your name (replaces “Me”)"
+                    className="w-full bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-md px-2 py-1 text-sm text-slate-900 dark:text-white outline-none focus:border-[#32CD32] transition-colors"
+                  />
+                </div>
+                <div className={dividerCls} />
+                <button onClick={(e) => { e.stopPropagation(); addCreator(); }} className={itemCls}><Plus size={15} className="opacity-60" /> Add author</button>
+                {creators.length === 0 ? (
+                  <div className="px-3 pb-1.5 pt-0.5 text-[11px] text-slate-400 dark:text-slate-500 leading-snug">Add co-authors to credit them and mark their words.</div>
+                ) : (
+                  creators.map((c) => (
+                    <div key={c.id} className="px-3 pb-1.5 pt-0.5 flex items-center gap-1.5">
+                      <input
+                        value={c.name}
+                        onChange={(e) => updateCreatorName(c.id, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Author name"
+                        className="flex-1 min-w-0 bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-md px-2 py-1 text-sm text-slate-900 dark:text-white outline-none focus:border-[#32CD32] transition-colors"
+                      />
+                      <button onClick={(e) => { e.stopPropagation(); removeCreator(c.id); }} title="Remove author" className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-400 hover:text-red-500 transition-colors shrink-0"><X size={14} /></button>
+                    </div>
+                  ))
+                )}
+                <div className={dividerCls} />
+                {([['human', 'Human authors'], ['ai', 'AI'], ['web', 'Reference'], ['paste', 'Pasted']] as const).map(([a, label]) => (
+                  <button key={a} onClick={() => toggleAuthor(a)} className={itemCls}><Check size={14} className={!hiddenAuthors.has(a) ? 'text-[#32CD32]' : 'opacity-0'} /> {label}</button>
+                ))}
+                <div className={dividerCls} />
+                <div className="px-3 py-1 text-[11px] text-slate-400 dark:text-slate-500 leading-snug max-w-64">Your own writing is never marked. Select text and use “Mark as” (right-click) to credit an author, AI, or a website.</div>
+              </div>
+            )}
+          </div>
+
           <div data-tauri-drag-region className="flex-1 h-full" />
+
           {canPreview && (
             <button onClick={() => setShowPreview((v) => !v)} title={showPreview ? 'Hide preview' : 'Preview'} className={`px-2.5 flex items-center rounded transition-colors ${showPreview ? 'text-[#32CD32]' : 'hover:bg-black/5 dark:hover:bg-white/10'}`}>
               {showPreview ? <EyeOff size={16} /> : <Play size={16} />}
@@ -1458,6 +1605,8 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
         </div>
       </div>
 
+      {/* The touch menu panel. A sibling of the chrome, not a child of it, so
+          it still presents while the chrome is hidden in focus mode. */}
       {menuPanel}
 
       {/* Drawer handle for the menu panel. The panel's real gesture is a swipe
@@ -1646,14 +1795,13 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               </div>
             )}
             {isMdNote && mdSource ? (
-              <div className={`relative vx-mdsrc h-full ${alignClass}`}>
+              <div className="relative vx-mdsrc">
                 <pre
                   aria-hidden
                   className="vx-code vx-code--wrap vx-mdsrc-hl"
                   dangerouslySetInnerHTML={{ __html: mdHl + '\n' }}
                 />
                 <textarea
-                  ref={mdTextareaRef}
                   value={mdText}
                   onChange={(e) => handleMdChange(e.target.value)}
                   disabled={note.isTrash}
@@ -1666,10 +1814,7 @@ export function Editor({ note, updateNote, moveToTrash, restoreFromTrash, delete
               <RichTextEditor
                 className={alignClass}
                 value={editorBody}
-                onChange={content => {
-                  markTyping();
-                  updateNote(note.id, { content: bylineEligible ? syncByline(content) : content });
-                }}
+                onChange={content => updateNote(note.id, { content: bylineEligible ? syncByline(content) : content })}
                 onTextFileDrop={setDroppedTextFiles}
                 placeholder="Start writing... (Drag & drop text, images, audio, video here)"
                 disabled={note.isTrash}

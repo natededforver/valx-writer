@@ -135,23 +135,6 @@
   -webkit-backdrop-filter: none;
 }
 
-/* Sidebar: solid by default, glass when transparency is on */
-.vx-sidebar-bg {
-  background: var(--vx-surface);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-:not(.vx-opaque) .vx-sidebar-bg {
-  background: color-mix(in srgb, var(--vx-surface) 35%, transparent);
-  backdrop-filter: blur(28px) saturate(1.8);
-  -webkit-backdrop-filter: blur(28px) saturate(1.8);
-}
-.vx-opaque .vx-sidebar-bg {
-  background: var(--vx-surface);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
 /* The frame the glass classes used to carry. Wanted on anything that floats
    over the page and needs an edge to end at — popovers, dropdowns, dialogs —
    and specifically NOT wanted on a bar or a panel that already ends at the
@@ -260,7 +243,7 @@ body {
    host would leave those at their own colours. */
 .rich-editor,
 .vx-editor-title {
-  font-family: var(--vx-editor-font-user, var(--vx-editor-font));
+  font-family: var(--vx-editor-font);
   color: #000;
 }
 .dark .rich-editor,
@@ -844,7 +827,7 @@ button:not([class*='translate-']):not([class*='rotate-']):not([class*='scale-'])
    the caret off the text. Change them together.
 --------------------------------------------------------------------------- */
 .vx-code {
-  font-family: var(--vx-editor-font-user, var(--vx-editor-font));
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 13px;
   line-height: 20px;
   tab-size: 2;
@@ -907,38 +890,12 @@ button:not([class*='translate-']):not([class*='rotate-']):not([class*='scale-'])
 }
 /* Markdown tokens: syntax marks fade, content keeps meaning. Color/weight
    only — glyph metrics must match the base font (caret alignment). */
-.tok-mdsyn  { color: rgba(120, 120, 120, 0.48); font-size: 0.85em; }
-.dark .tok-mdsyn { color: #555; }
+.tok-mdsyn  { color: rgba(120, 120, 120, 0.48); }
 .tok-mdhead { font-weight: 700; }
-.vx-mdsrc-hl .tok-mdhead-1 { font-size: 2.2em; line-height: 1.2; font-weight: 700; }
-.vx-mdsrc-hl .tok-mdhead-2 { font-size: 1.6em; line-height: 1.25; font-weight: 700; }
-.vx-mdsrc-hl .tok-mdhead-3 { font-size: 1.3em; line-height: 1.3; font-weight: 700; }
-.vx-mdsrc-hl .tok-mdhead-4 { font-size: 1.1em; line-height: 1.3; font-weight: 700; }
-.vx-mdsrc-hl .tok-mdhead-5 { font-size: 1em; font-weight: 700; }
-.vx-mdsrc-hl .tok-mdhead-6 { font-size: 0.9em; font-weight: 700; color: #666; }
-
-.vx-mdsrc-hl .tok-mdbold { font-weight: 700; }
-.vx-mdsrc-hl .tok-mditalic { font-style: italic; }
-.vx-mdsrc-hl .tok-mdstrike { text-decoration: line-through; }
-.vx-mdsrc-hl .tok-mdquote { border-left: 3px solid rgba(120, 120, 120, 0.3); padding-left: 8px; color: rgba(120, 120, 120, 0.8); }
-
 .tok-mdcode { color: #032f62; }
 .tok-mdlink { color: #32cd32; font-weight: 700; }
 .tok-mdurl  { color: rgba(120, 120, 120, 0.48); }
 .dark .tok-mdcode { color: #ce9178; }
-
-.tok-slop-human { color: #60a5fa; text-decoration: underline 1px #60a5fa40; text-underline-offset: 3px; }
-.tok-slop-ai { color: #c084fc; text-decoration: underline 1px #c084fc40; text-underline-offset: 3px; }
-.tok-slop-web { color: #f472b6; text-decoration: underline 1px #f472b640; text-underline-offset: 3px; }
-.tok-slop-paste { color: #fb923c; text-decoration: underline 1px #fb923c40; text-underline-offset: 3px; }
-
-.tok-media {
-  background: rgba(120, 120, 120, 0.1);
-  border-radius: 4px;
-  padding: 0 4px;
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 0.9em;
-}
 
 /* VSCode-ish token palette (light default, dark override). */
 .tok-comment { color: #6a737d; font-style: italic; }
@@ -1133,7 +1090,7 @@ button:not([class*='translate-']):not([class*='rotate-']):not([class*='scale-'])
    — tuning letter spacing against a preview in the UI typeface would be
    measuring a different font than the one the setting applies to. */
 .vx-spacing-sample {
-  font-family: var(--vx-editor-font-user, var(--vx-editor-font));
+  font-family: var(--vx-editor-font);
   letter-spacing: 0;
   word-spacing: 0;
 }

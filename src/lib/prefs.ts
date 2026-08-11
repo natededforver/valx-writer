@@ -127,32 +127,3 @@ export function setSpacing(key: string, px: number): number {
 export function applyTransparency(enabled: boolean): void {
   document.documentElement.classList.toggle('vx-opaque', !enabled);
 }
-
-// ---------------------------------------------------------------------------
-// Editor Font Override
-// ---------------------------------------------------------------------------
-export const LS_EDITOR_FONT = 'valx-editor-font-override';
-export const EDITOR_FONT_EVENT = 'valx-editor-font-changed';
-
-export function editorFont(): string {
-  return localStorage.getItem(LS_EDITOR_FONT) || '';
-}
-
-export function setEditorFont(font: string): void {
-  if (font) {
-    localStorage.setItem(LS_EDITOR_FONT, font);
-  } else {
-    localStorage.removeItem(LS_EDITOR_FONT);
-  }
-  applyEditorFont();
-  window.dispatchEvent(new CustomEvent(EDITOR_FONT_EVENT, { detail: font }));
-}
-
-export function applyEditorFont(): void {
-  const font = editorFont();
-  if (font) {
-    document.documentElement.style.setProperty('--vx-editor-font-user', font);
-  } else {
-    document.documentElement.style.removeProperty('--vx-editor-font-user');
-  }
-}

@@ -110,7 +110,7 @@ fn accept_callback(listener: &TcpListener, expected_state: &str) -> Result<Strin
                 let req = String::from_utf8_lossy(&buf[..n]).into_owned();
                 let first_line = req.lines().next().unwrap_or("");
                 let path = first_line.split_whitespace().nth(1).unwrap_or("");
-                let query = path.splitn(2, '?').nth(1).unwrap_or("");
+                let query = path.split_once('?').map(|x| x.1).unwrap_or("");
                 let params: HashMap<String, String> =
                     url::form_urlencoded::parse(query.as_bytes()).into_owned().collect();
 

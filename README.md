@@ -264,5 +264,5 @@ The landing and download pages are in https://natededforver.github.io/valx-write
 
 ## License
 
-Polyform Noncommercial 1.0.0 — see [LICENSE](LICENSE). The Blue Screen typeface
+MIT License — see [LICENSE](LICENSE). The Blue Screen typeface
 is licensed separately for personal use only; see [Typography](#typography).
